@@ -28,7 +28,7 @@ fun PanelScreen(
     onMisProyectos: () -> Unit = {},
     onRankings: () -> Unit = {},
 ) {
-    val verde = Color(0xFF16A34A)     // parecido a la captura
+    val verde = Color(0xFF16A34A)
     val grisTexto = Color(0xFF6B7280)
     val bordeSuave = Color(0xFFE5E7EB)
     val fondo = Color(0xFFF6F7F9)
@@ -41,7 +41,7 @@ fun PanelScreen(
                 title = {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Icono cuadrado verde con casa
+
                             Box(
                                 modifier = Modifier
                                     .size(28.dp)
@@ -63,7 +63,7 @@ fun PanelScreen(
                     }
                 },
                 actions = {
-                    // Notificaciones con punto rojo
+
                     Box {
                         IconButton(onClick = onNotificaciones) {
                             Icon(Icons.Default.Place, contentDescription = "Notificaciones", tint = Color(0xFF111827))
@@ -93,7 +93,7 @@ fun PanelScreen(
                 .padding(pv)
                 .fillMaxSize()
         ) {
-            // Contenido scrollable (para que se vea como en la captura)
+
             Column(
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
@@ -101,13 +101,13 @@ fun PanelScreen(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Bienvenida
+
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Bienvenido, Usuario", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF111827))
                     Text("Gestiona la eficiencia energética de tu hogar", color = grisTexto, fontSize = 12.sp)
                 }
 
-                // Tarjeta verde vivienda
+
                 Card(
                     colors = CardDefaults.cardColors(containerColor = verde),
                     shape = RoundedCornerShape(16.dp),
@@ -124,7 +124,7 @@ fun PanelScreen(
                         ) {
                             Text("Mi vivienda principal", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
-                            // Pastilla etiqueta energética "D"
+
                             Box(
                                 modifier = Modifier
                                     .size(width = 46.dp, height = 42.dp)
@@ -154,7 +154,7 @@ fun PanelScreen(
 
                         Spacer(Modifier.height(14.dp))
 
-                        // Botón interior "Ver último informe →"
+
                         Button(
                             onClick = onVerUltimoInforme,
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f)),
@@ -167,13 +167,12 @@ fun PanelScreen(
                     }
                 }
 
-                // Acciones rápidas
+
                 Text("Acciones rápidas", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF111827))
 
-                // Cards (como en la captura: 2 visibles en izquierda, más abajo el resto; aquí las ponemos en columna)
-                AccionRapidaCard(
+                     AccionRapidaCard(
                     icono = Icons.Default.Lock,
-                    colorFondoIcono = Color(0xFFD1FAE5),   // verdoso claro
+                    colorFondoIcono = Color(0xFFD1FAE5),
                     colorIcono = Color(0xFF059669),
                     titulo = "Nuevo preestudio",
                     subtitulo = "Analiza tu vivienda",
@@ -183,7 +182,7 @@ fun PanelScreen(
 
                 AccionRapidaCard(
                     icono = Icons.Default.ThumbUp,
-                    colorFondoIcono = Color(0xFFDBEAFE),   // azul claro
+                    colorFondoIcono = Color(0xFFDBEAFE),
                     colorIcono = Color(0xFF2563EB),
                     titulo = "Buscar técnicos",
                     subtitulo = "Encuentra profesionales",
@@ -191,10 +190,10 @@ fun PanelScreen(
                     onClick = onBuscarTecnicos
                 )
 
-                // Estas dos aparecen en la segunda captura (derecha)
+
                 AccionRapidaCard(
                     icono = Icons.Default.Star,
-                    colorFondoIcono = Color(0xFFEDE9FE),   // morado claro
+                    colorFondoIcono = Color(0xFFEDE9FE),
                     colorIcono = Color(0xFF7C3AED),
                     titulo = "Mis proyectos",
                     subtitulo = "Gestiona reformas",
@@ -204,7 +203,7 @@ fun PanelScreen(
 
                 AccionRapidaCard(
                     icono = Icons.Default.AddCircle,
-                    colorFondoIcono = Color(0xFFFFEDD5),   // naranja claro
+                    colorFondoIcono = Color(0xFFFFEDD5),
                     colorIcono = Color(0xFFEA580C),
                     titulo = "Rankings",
                     subtitulo = "Mejores técnicos",
@@ -212,7 +211,7 @@ fun PanelScreen(
                     onClick = onRankings
                 )
 
-                // Consejo (caja con borde azul claro)
+
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),

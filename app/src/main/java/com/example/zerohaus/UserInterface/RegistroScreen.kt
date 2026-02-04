@@ -39,7 +39,7 @@ fun RegistroScreen(
         ) {
             Spacer(Modifier.height(26.dp))
 
-            // Icono + marca
+
             Surface(
                 modifier = Modifier.size(56.dp),
                 shape = RoundedCornerShape(14.dp),

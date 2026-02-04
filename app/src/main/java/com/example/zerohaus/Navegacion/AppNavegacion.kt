@@ -26,7 +26,7 @@ fun AppNavegacion() {
                     navController.navigate("registro")
                 },
                 onOlvideContrasena = {
-                    // Demo: sin acción
+
                 }
             )
         }
@@ -39,40 +39,24 @@ fun AppNavegacion() {
                     }
                 },
                 onIniciarSesion = {
-                    navController.popBackStack() // vuelve a login
+                    navController.popBackStack()
                 }
             )
         }
-
         composable("dashboard") {
             PanelScreen(
                 onNotificaciones = {
-                    // Si aún no tienes esa pantalla, déjalo vacío o navega cuando la crees
-                    // navController.navigate("notificaciones")
+
                 },
                 onAjustes = {
-                    // navController.navigate("ajustes")
+
                 },
                 onCerrarSesion = {
                     navController.navigate("login") {
                         popUpTo("dashboard") { inclusive = true }
                     }
                 },
-                onVerUltimoInforme = {
-                    // navController.navigate("informe")
-                },
-                onNuevoPreestudio = {
-                    // navController.navigate("preestudio")
-                },
-                onBuscarTecnicos = {
-                    // navController.navigate("tecnicos")
-                },
-                onMisProyectos = {
-                    // navController.navigate("mis_proyectos")
-                },
-                onRankings = {
-                    // navController.navigate("rankings")
-                }
+
             )
         }
     }

@@ -23,9 +23,9 @@ fun LoginScreen(
     onRegistrarse: () -> Unit = {},
     onOlvideContrasena: () -> Unit = {}
 ) {
-    // Colores (muy parecidos a la maqueta)
-    val verde = Color(0xFF16A34A) // verde intenso similar
-    val fondo = Color(0xFFEEF8F5) // fondo verdoso claro
+
+    val verde = Color(0xFF16A34A)
+    val fondo = Color(0xFFEEF8F5)
 
     var email by remember { mutableStateOf("") }
     var contrasena by remember { mutableStateOf("") }
@@ -67,7 +67,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
 
-            // Tarjeta central
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -123,7 +123,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Botón iniciar sesión
+
                     Button(
                         onClick = onIniciarSesion,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
@@ -136,7 +136,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Botón registrarse (outline)
+
                     OutlinedButton(
                         onClick = onRegistrarse,
                         border = ButtonDefaults.outlinedButtonBorder.copy(
