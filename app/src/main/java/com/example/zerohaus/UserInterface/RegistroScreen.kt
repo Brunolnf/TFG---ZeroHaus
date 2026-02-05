@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -79,7 +80,11 @@ fun RegistroScreen(
                         onValueChange = { nombre = it },
                         placeholder = { Text("Tu nombre", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -101,7 +106,11 @@ fun RegistroScreen(
                         onValueChange = { email = it },
                         placeholder = { Text("tu@email.com", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.MailOutline, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.MailOutline,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -125,7 +134,11 @@ fun RegistroScreen(
                             readOnly = true,
                             trailingIcon = {
                                 IconButton(onClick = { expandirTipo = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color(0xFF6B7280))
+                                    Icon(
+                                        Icons.Default.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = Color(0xFF6B7280)
+                                    )
                                 }
                             },
                             singleLine = true,
@@ -163,7 +176,11 @@ fun RegistroScreen(
                         onValueChange = { contrasena = it },
                         placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -186,7 +203,11 @@ fun RegistroScreen(
                         onValueChange = { confirmarContrasena = it },
                         placeholder = { Text("Repite tu contraseña", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
@@ -223,7 +244,12 @@ fun RegistroScreen(
                             onClick = onIniciarSesion,
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("Inicia sesión", color = verde, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Inicia sesión",
+                                color = verde,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -232,4 +258,11 @@ fun RegistroScreen(
             Spacer(Modifier.weight(1f))
         }
     }
+}
+
+
+@Preview
+@Composable
+fun RegistroPrevew() {
+    RegistroScreen()
 }

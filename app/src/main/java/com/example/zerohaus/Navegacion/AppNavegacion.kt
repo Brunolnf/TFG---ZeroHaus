@@ -4,7 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.zerohaus.UserInterface.LoginScreen
 import com.example.zerohaus.UserInterface.*
+import com.zerohaus.ui.pantallas.home.PanelScreen
+
 
 @Composable
 fun AppNavegacion() {
@@ -25,9 +28,7 @@ fun AppNavegacion() {
                 onRegistrarse = {
                     navController.navigate("registro")
                 },
-                onOlvideContrasena = {
-
-                }
+                onOlvideContrasena = {}
             )
         }
 
@@ -43,20 +44,19 @@ fun AppNavegacion() {
                 }
             )
         }
+
         composable("dashboard") {
             PanelScreen(
-                onNotificaciones = {
-
-                },
-                onAjustes = {
-
-                },
                 onCerrarSesion = {
                     navController.navigate("login") {
                         popUpTo("dashboard") { inclusive = true }
                     }
                 },
-
+                onNuevoPreestudio = {},
+                onBuscarTecnicos = {},
+                onMisProyectos = {},
+                onRankings = {},
+                onVerUltimoInforme = {}
             )
         }
     }
