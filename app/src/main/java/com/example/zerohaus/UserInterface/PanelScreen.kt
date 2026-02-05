@@ -62,24 +62,9 @@ fun PanelScreen(
 
     val notificaciones = remember {
         mutableStateListOf(
-            NotificacionUi(
-                "Nuevo presupuesto recibido",
-                "EcoReformas Madrid ha enviado un presupuesto.",
-                "Hoy",
-                true
-            ),
-            NotificacionUi(
-                "Actualización de proyecto",
-                "El proyecto 'Aerotermia' pasó a 'En curso'.",
-                "Ayer",
-                false
-            ),
-            NotificacionUi(
-                "Nueva valoración",
-                "Has recibido una respuesta a tu reseña.",
-                "Hace 3 días",
-                false
-            )
+            NotificacionUi("Nuevo presupuesto recibido","EcoReformas Madrid ha enviado un presupuesto.","Hoy",true),
+            NotificacionUi("Actualización de proyecto","El proyecto 'Aerotermia' pasó a 'En curso'.","Ayer",false),
+            NotificacionUi("Nueva valoración","Has recibido una respuesta a tu reseña.","Hace 3 días",false)
         )
     }
     val hayNoLeidas = notificaciones.any { it.noLeida }
@@ -90,12 +75,12 @@ fun PanelScreen(
             CenterAlignedTopAppBar(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
                 title = {
-                    Column {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(28.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(verde),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -103,279 +88,154 @@ fun PanelScreen(
                                     Icons.Default.Home,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "ZeroHaus",
-                                color = verde,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 18.sp
-                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text("ZeroHaus", color = verde, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         }
-                        Text("Usuario Demo", color = grisTexto, fontSize = 12.sp)
+                        Text("Usuario Demo", color = grisTexto, fontSize = 16.sp)
                     }
                 },
                 actions = {
                     IconButton(onClick = { mostrarSubirCertificado = true }) {
-                        Icon(
-                            Icons.Default.AddCircle,
-                            contentDescription = "Subir certificado",
-                            tint = Color(0xFF111827)
-                        )
+                        Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
-
                     Box {
                         IconButton(onClick = { mostrarNotificaciones = true }) {
-                            Icon(
-                                Icons.Default.Notifications,
-                                contentDescription = "Notificaciones",
-                                tint = Color(0xFF111827)
-                            )
+                            Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(28.dp))
                         }
                         if (hayNoLeidas) {
                             Box(
                                 Modifier
-                                    .size(8.dp)
+                                    .size(10.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFFEF4444))
                                     .align(Alignment.TopEnd)
-                                    .offset(x = (-10).dp, y = 10.dp)
+                                    .offset(x = (-8).dp, y = 8.dp)
                             )
                         }
                     }
-
                     IconButton(onClick = { mostrarConfig = true }) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Configuración",
-                            tint = Color(0xFF111827)
-                        )
+                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
-
                     IconButton(onClick = onCerrarSesion) {
-                        Icon(
-                            Icons.Default.Home,
-                            contentDescription = "Cerrar sesión",
-                            tint = Color(0xFF111827)
-                        )
+                        Icon(Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
-
-                    Spacer(Modifier.width(4.dp))
                 }
             )
         }
     ) { pv ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .padding(pv)
                 .fillMaxSize()
+                .padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 12.dp)
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "Bienvenido, Usuario",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = Color(0xFF111827)
-                    )
-                    Text(
-                        "Gestiona la eficiencia energética de tu hogar",
-                        color = grisTexto,
-                        fontSize = 12.sp
-                    )
-                }
 
+            item {
+                Spacer(Modifier.height(10.dp))
+                Text("Bienvenido, Usuario", fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                Text("Gestiona la eficiencia energética de tu hogar", color = grisTexto, fontSize = 16.sp)
+            }
+
+            item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = verde),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(22.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(
-                            "Tu vivienda",
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 12.sp
-                        )
-                        Spacer(Modifier.height(2.dp))
+                    Column(Modifier.padding(22.dp)) {
+                        Text("Tu vivienda", color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp)
+                        Spacer(Modifier.height(8.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
                                 "Mi vivienda principal",
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
+                                fontSize = 18.sp
                             )
                             Box(
                                 modifier = Modifier
-                                    .size(width = 46.dp, height = 42.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(16.dp))
                                     .background(Color.White),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("D", fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                Text("D", fontWeight = FontWeight.Bold, fontSize = 20.sp)
                             }
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(18.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(
-                                    "Consumo estimado",
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    "145 kWh/año",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp
-                                )
+                                Text("Consumo estimado", color = Color.White.copy(0.85f), fontSize = 15.sp)
+                                Text("145 kWh/año", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "Emisiones",
-                                    color = Color.White.copy(alpha = 0.85f),
-                                    fontSize = 11.sp
-                                )
-                                Text(
-                                    "32 kg CO₂/año",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 12.sp
-                                )
+                                Text("Emisiones", color = Color.White.copy(0.85f), fontSize = 15.sp)
+                                Text("32 kg CO₂/año", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                             }
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(18.dp))
 
                         Button(
                             onClick = onVerUltimoInforme,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White.copy(
-                                    alpha = 0.18f
-                                )
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 10.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f)),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 16.dp)
                         ) {
                             Text(
-                                "Ver último informe  →",
+                                "Ver último informe →",
                                 color = Color.White,
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp
+                                fontSize = 16.sp
                             )
                         }
                     }
                 }
-
-                Text(
-                    "Acciones",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = Color(0xFF111827)
-                )
-
-                Tarjeta(
-                    icono = Icons.Default.Add,
-                    colorFondoIcono = Color(0xFFD1FAE5),
-                    colorIcono = Color(0xFF059669),
-                    titulo = "Nuevo preestudio",
-                    subtitulo = "Analiza tu vivienda",
-                    borde = bordeSuave,
-                    onClick = onNuevoPreestudio
-                )
-
-                Tarjeta(
-                    icono = Icons.Default.Place,
-                    colorFondoIcono = Color(0xFFDBEAFE),
-                    colorIcono = Color(0xFF2563EB),
-                    titulo = "Buscar técnicos",
-                    subtitulo = "Encuentra profesionales",
-                    borde = bordeSuave,
-                    onClick = onBuscarTecnicos
-                )
-
-                Tarjeta(
-                    icono = Icons.Default.Menu,
-                    colorFondoIcono = Color(0xFFEDE9FE),
-                    colorIcono = Color(0xFF7C3AED),
-                    titulo = "Mis proyectos",
-                    subtitulo = "Gestiona reformas",
-                    borde = bordeSuave,
-                    onClick = onMisProyectos
-                )
-
-                Tarjeta(
-                    icono = Icons.Default.Star,
-                    colorFondoIcono = Color(0xFFFFEDD5),
-                    colorIcono = Color(0xFFEA580C),
-                    titulo = "Rankings",
-                    subtitulo = "Mejores técnicos",
-                    borde = bordeSuave,
-                    onClick = onRankings
-                )
-
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = null,
-                                tint = Color(0xFF2563EB)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Consejo de eficiencia energética",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                color = Color(0xFF1E3A8A)
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Mejorar el aislamiento de ventanas puede reducir el\nconsumo energético hasta un 25%. Consulta con un\ntécnico certificado para evaluar tu vivienda.",
-                            color = Color(0xFF1D4ED8),
-                            fontSize = 12.sp,
-                            lineHeight = 16.sp
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
             }
+
+            item {
+                Text("Acciones", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            }
+
+            item {
+                Tarjeta(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF059669), "Nuevo preestudio", "Analiza tu vivienda", bordeSuave, onNuevoPreestudio)
+            }
+            item {
+                Tarjeta(Icons.Default.Place, Color(0xFFDBEAFE), Color(0xFF2563EB), "Buscar técnicos", "Encuentra profesionales", bordeSuave, onBuscarTecnicos)
+            }
+            item {
+                Tarjeta(Icons.Default.Menu, Color(0xFFEDE9FE), Color(0xFF7C3AED), "Mis proyectos", "Gestiona reformas", bordeSuave, onMisProyectos)
+            }
+            item {
+                Tarjeta(Icons.Default.Star, Color(0xFFFFEDD5), Color(0xFFEA580C), "Rankings", "Mejores técnicos", bordeSuave, onRankings)
+            }
+
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 
     if (mostrarConfig) {
         AlertDialog(
             onDismissRequest = { mostrarConfig = false },
-            title = { Text("Configuración") },
+            title = { Text("Configuración", fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Modo oscuro", modifier = Modifier.weight(1f))
+                        Text("Modo oscuro", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = modoOscuro, onCheckedChange = { modoOscuro = it })
                     }
 
@@ -383,65 +243,54 @@ fun PanelScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
                                 .clickable { abrirIdioma = true }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                                .padding(horizontal = 14.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Idioma", modifier = Modifier.weight(1f))
-                            Text(idioma, color = Color(0xFF111827), fontWeight = FontWeight.Medium)
+                            Text("Idioma", modifier = Modifier.weight(1f), fontSize = 16.sp)
+                            Text(idioma, color = Color(0xFF111827), fontWeight = FontWeight.Medium, fontSize = 16.sp)
                             Spacer(Modifier.width(8.dp))
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = Color(0xFF6B7280)
-                            )
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color(0xFF6B7280))
                         }
 
-                        DropdownMenu(
-                            expanded = abrirIdioma,
-                            onDismissRequest = { abrirIdioma = false }) {
-                            listOf(
-                                "Español",
-                                "Inglés"
-                            ).forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt) },
-                                    onClick = { idioma = opt; abrirIdioma = false }
-                                )
+                        DropdownMenu(expanded = abrirIdioma, onDismissRequest = { abrirIdioma = false }) {
+                            listOf("Español", "Inglés").forEach { opt ->
+                                DropdownMenuItem(text = { Text(opt, fontSize = 16.sp) }, onClick = { idioma = opt; abrirIdioma = false })
                             }
                         }
                     }
 
-                    Text("Notificaciones", fontWeight = FontWeight.SemiBold)
+                    Text("Notificaciones", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Sonidos", modifier = Modifier.weight(1f))
+                        Text("Sonidos", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = sonidos, onCheckedChange = { sonidos = it })
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Push", modifier = Modifier.weight(1f))
+                        Text("Push", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = push, onCheckedChange = { push = it })
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Email", modifier = Modifier.weight(1f))
+                        Text("Email", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = email, onCheckedChange = { email = it })
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Generales", modifier = Modifier.weight(1f))
+                        Text("Generales", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = generales, onCheckedChange = { generales = it })
                     }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { mostrarConfig = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) { Text("Guardar", color = Color.White) }
+                Button(onClick = { mostrarConfig = false }, colors = ButtonDefaults.buttonColors(containerColor = verde)) {
+                    Text("Guardar", color = Color.White, fontSize = 16.sp)
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { mostrarConfig = false }) { Text("Cerrar") }
+                OutlinedButton(onClick = { mostrarConfig = false }) {
+                    Text("Cerrar", fontSize = 16.sp)
+                }
             }
         )
     }
@@ -449,47 +298,38 @@ fun PanelScreen(
     if (mostrarNotificaciones) {
         AlertDialog(
             onDismissRequest = { mostrarNotificaciones = false },
-            title = { Text("Notificaciones") },
+            title = { Text("Notificaciones", fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 420.dp)
+                        .heightIn(max = 460.dp)
                 ) {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(notificaciones) { n ->
                             Card(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color.White),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(Modifier.padding(12.dp)) {
+                                Column(Modifier.padding(14.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            n.titulo,
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                        Text(n.titulo, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), fontSize = 16.sp)
                                         if (n.noLeida) {
-                                            Box(
-                                                Modifier
-                                                    .size(9.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFFEF4444))
-                                            )
+                                            Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFEF4444)))
                                         }
                                     }
                                     Spacer(Modifier.height(6.dp))
-                                    Text(n.detalle, color = Color(0xFF6B7280), fontSize = 12.sp)
+                                    Text(n.detalle, color = Color(0xFF6B7280), fontSize = 14.sp)
                                     Spacer(Modifier.height(8.dp))
-                                    Text(n.fecha, color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                                    Text(n.fecha, color = Color(0xFF9CA3AF), fontSize = 13.sp)
                                 }
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
 
                     OutlinedButton(
                         onClick = {
@@ -498,17 +338,16 @@ fun PanelScreen(
                             notificaciones.addAll(nuevas)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Marcar todas como leídas")
+                        Text("Marcar todas como leídas", fontSize = 16.sp)
                     }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = { mostrarNotificaciones = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) { Text("Cerrar", color = Color.White) }
+                Button(onClick = { mostrarNotificaciones = false }, colors = ButtonDefaults.buttonColors(containerColor = verde)) {
+                    Text("Cerrar", color = Color.White, fontSize = 16.sp)
+                }
             }
         )
     }
@@ -516,16 +355,16 @@ fun PanelScreen(
     if (mostrarSubirCertificado) {
         AlertDialog(
             onDismissRequest = { mostrarSubirCertificado = false },
-            title = { Text("Subir certificado") },
+            title = { Text("Subir certificado", fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OutlinedTextField(
                         value = nombreCert,
                         onValueChange = { nombreCert = it },
-                        label = { Text("Nombre del certificado") },
-                        placeholder = { Text("Ej: Certificado de instalador") },
+                        label = { Text("Nombre del certificado", fontSize = 16.sp) },
+                        placeholder = { Text("Ej: Certificado de instalador", fontSize = 14.sp) },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -534,28 +373,18 @@ fun PanelScreen(
                             value = tipoCert,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Tipo de certificado") },
+                            label = { Text("Tipo de certificado", fontSize = 16.sp) },
                             trailingIcon = {
                                 IconButton(onClick = { abrirTipoCert = true }) {
                                     Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                                 }
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
-                        DropdownMenu(
-                            expanded = abrirTipoCert,
-                            onDismissRequest = { abrirTipoCert = false }) {
-                            listOf(
-                                "Instalación",
-                                "Auditoría",
-                                "Energías renovables",
-                                "Certificación"
-                            ).forEach { opt ->
-                                DropdownMenuItem(
-                                    text = { Text(opt) },
-                                    onClick = { tipoCert = opt; abrirTipoCert = false }
-                                )
+                        DropdownMenu(expanded = abrirTipoCert, onDismissRequest = { abrirTipoCert = false }) {
+                            listOf("Instalación","Auditoría","Energías renovables","Certificación").forEach { opt ->
+                                DropdownMenuItem(text = { Text(opt, fontSize = 16.sp) }, onClick = { tipoCert = opt; abrirTipoCert = false })
                             }
                         }
                     }
@@ -563,29 +392,17 @@ fun PanelScreen(
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .background(Color(0xFFF1F1F1))
-                            .border(1.dp, Color(0xFFBDBDBD), RoundedCornerShape(14.dp))
-                            .padding(14.dp),
+                            .border(1.dp, Color(0xFFBDBDBD), RoundedCornerShape(16.dp))
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = null,
-                            tint = Color(0xFF6B7280)
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Pulsa para seleccionar el archivo",
-                            color = Color(0xFF6B7280),
-                            fontSize = 12.sp
-                        )
+                        Icon(Icons.Default.Add, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(26.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Pulsa para seleccionar el archivo", color = Color(0xFF6B7280), fontSize = 14.sp)
                         Spacer(Modifier.height(4.dp))
-                        Text(
-                            "PDF, JPG, PNG · Máx. 10MB",
-                            color = Color(0xFF9CA3AF),
-                            fontSize = 11.sp
-                        )
+                        Text("PDF, JPG, PNG · Máx. 10MB", color = Color(0xFF9CA3AF), fontSize = 13.sp)
                     }
                 }
             },
@@ -596,11 +413,15 @@ fun PanelScreen(
                         tipoCert = "Selecciona un tipo"
                         mostrarSubirCertificado = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) { Text("Subir", color = Color.White) }
+                    colors = ButtonDefaults.buttonColors(containerColor = verde)
+                ) {
+                    Text("Subir", color = Color.White, fontSize = 16.sp)
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { mostrarSubirCertificado = false }) { Text("Cancelar") }
+                OutlinedButton(onClick = { mostrarSubirCertificado = false }) {
+                    Text("Cancelar", fontSize = 16.sp)
+                }
             }
         )
     }
@@ -609,10 +430,8 @@ fun PanelScreen(
 @Preview
 @Composable
 fun PanelPreview() {
-
     PanelScreen()
 }
-
 
 @Composable
 private fun Tarjeta(
@@ -626,7 +445,7 @@ private fun Tarjeta(
 ) {
     Card(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
@@ -635,30 +454,25 @@ private fun Tarjeta(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(colorFondoIcono),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icono, contentDescription = null, tint = colorIcono)
+                Icon(icono, contentDescription = null, tint = colorIcono, modifier = Modifier.size(28.dp))
             }
 
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(16.dp))
 
             Column(Modifier.weight(1f)) {
-                Text(
-                    titulo,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    color = Color(0xFF111827)
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(subtitulo, color = Color(0xFF6B7280), fontSize = 12.sp)
+                Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = Color(0xFF111827))
+                Spacer(Modifier.height(4.dp))
+                Text(subtitulo, color = Color(0xFF6B7280), fontSize = 15.sp)
             }
         }
     }

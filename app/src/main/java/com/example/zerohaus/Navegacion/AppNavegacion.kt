@@ -90,7 +90,9 @@ fun AppNavegacion() {
 
         composable("informe") {
             InformeScreen(
-                onVolver = { navController.popBackStack() }
+                onVolver = { navController.popBackStack() },
+                onDescargar = { navController.navigate("informe") },
+                onCompartir = { navController.navigate("informe") }
             )
         }
     }
