@@ -8,9 +8,9 @@ import com.example.zerohaus.UserInterface.LoginScreen
 import com.example.zerohaus.UserInterface.RegistroScreen
 import com.example.zerohaus.UserInterface.PreestudioScreen
 import com.example.zerohaus.UserInterface.TecnicosScreen
-import com.example.zerohaus.UserInterface.MisProyectosScreen
+import com.example.zerohaus.UserInterface.*
 import com.example.zerohaus.UserInterface.RankingsScreen
-import com.example.zerohaus.UserInterface.InformeScreen
+import com.example.zerohaus.UserInterface.*
 import com.zerohaus.ui.pantallas.home.PanelScreen
 
 @Composable

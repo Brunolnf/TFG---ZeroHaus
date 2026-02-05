@@ -570,13 +570,13 @@ fun PanelScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            Icons.Default.Home,
+                            Icons.Default.Add,
                             contentDescription = null,
                             tint = Color(0xFF6B7280)
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            "Pulsa para seleccionar o arrastra el archivo",
+                            "Pulsa para seleccionar el archivo",
                             color = Color(0xFF6B7280),
                             fontSize = 12.sp
                         )
