@@ -19,14 +19,19 @@ import androidx.compose.ui.unit.sp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreestudioScreen(
+    // Acción para volver atrás
     onVolver: () -> Unit = {},
+
+    // Acción que al pulsar el botón se generara el informe en un futuro
     onGenerarInforme: () -> Unit = {}
 ) {
+    // Colores base para mantener el estilo del resto de pantallas
     val verde = Color(0xFF16A34A)
     val gris = Color(0xFF6B7280)
     val fondo = Color(0xFFF6F7F9)
     val borde = Color(0xFFE5E7EB)
 
+    // Estados del formulario (por ahora están en memoriaes decir, si sales de pantalla se pierden)
     var nombreVivienda by remember { mutableStateOf("Mi vivienda principal") }
     var superficie by remember { mutableStateOf("100") }
     var anio by remember { mutableStateOf("2000") }
@@ -40,35 +45,43 @@ fun PreestudioScreen(
     var direccion by remember { mutableStateOf("") }
     var orientacion by remember { mutableStateOf("Sur") }
 
+    // Estados para abrir/cerrar cada desplegable
     var expandVentanas by remember { mutableStateOf(false) }
     var expandAislamiento by remember { mutableStateOf(false) }
     var expandCalefaccion by remember { mutableStateOf(false) }
     var expandAcs by remember { mutableStateOf(false) }
     var expandOrientacion by remember { mutableStateOf(false) }
 
+    // Scaffold: TopAppBar junto al contenido
     Scaffold(
         containerColor = fondo,
         topBar = {
             TopAppBar(
+                // Título y subtítulo
                 title = {
                     Column {
                         Text("Preestudio energético", fontWeight = FontWeight.SemiBold)
                         Text("Completa los datos de tu vivienda", color = gris, fontSize = 12.sp)
                     }
                 },
+                // Botón de volver
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = null)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
                     }
                 }
             )
         }
     ) { ps ->
+
+        // Contenedor general del formulario
         Column(
             modifier = Modifier
                 .padding(ps)
                 .fillMaxSize()
         ) {
+
+            // Contenido scrollable: así el formulario no se corta en pantallas pequeñas
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -77,12 +90,17 @@ fun PreestudioScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 
+
+                // Card de los Datos básicos
+
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(14.dp)) {
+
+                        // Cabecera con icono y título
                         CabeceraSeccion(
                             iconoColorFondo = Color(0xFFD1FAE5),
                             iconoTint = Color(0xFF059669),
@@ -92,6 +110,7 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Nombre de la vivienda
                         EtiquetaCampo("Nombre de la vivienda")
                         CampoTexto(
                             valor = nombreVivienda,
@@ -102,7 +121,11 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        // Superficie y año en la misma fila
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 EtiquetaCampo("Superficie (m²)")
                                 CampoTexto(
@@ -125,12 +148,16 @@ fun PreestudioScreen(
                     }
                 }
 
+
+                // Card de Envolvente térmica
+
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(14.dp)) {
+
                         CabeceraSeccion(
                             iconoColorFondo = Color(0xFFDBEAFE),
                             iconoTint = Color(0xFF2563EB),
@@ -140,6 +167,7 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Selector de ventanas
                         SelectorCompacto(
                             etiqueta = "Tipo de ventanas",
                             valor = ventanas,
@@ -152,10 +180,15 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Selector de aislamiento
                         SelectorCompacto(
                             etiqueta = "Aislamiento",
                             valor = aislamiento,
-                            opciones = listOf("Sin aislamiento", "Aislamiento parcial", "Aislamiento completo"),
+                            opciones = listOf(
+                                "Sin aislamiento",
+                                "Aislamiento parcial",
+                                "Aislamiento completo"
+                            ),
                             expandido = expandAislamiento,
                             onExpandido = { expandAislamiento = it },
                             onSeleccion = { aislamiento = it },
@@ -164,12 +197,13 @@ fun PreestudioScreen(
                     }
                 }
 
+                // Card de Sistemas energéticos
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(14.dp)) {
+
                         CabeceraSeccion(
                             iconoColorFondo = Color(0xFFEDE9FE),
                             iconoTint = Color(0xFF7C3AED),
@@ -179,10 +213,16 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Selector de calefacción
                         SelectorCompacto(
                             etiqueta = "Calefacción",
                             valor = calefaccion,
-                            opciones = listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa"),
+                            opciones = listOf(
+                                "Caldera de gas",
+                                "Eléctrica",
+                                "Aerotermia",
+                                "Biomasa"
+                            ),
                             expandido = expandCalefaccion,
                             onExpandido = { expandCalefaccion = it },
                             onSeleccion = { calefaccion = it },
@@ -191,6 +231,7 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Selector de ACS
                         SelectorCompacto(
                             etiqueta = "ACS",
                             valor = acs,
@@ -203,12 +244,14 @@ fun PreestudioScreen(
                     }
                 }
 
+                //Card de ubicacion
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(14.dp)) {
+
                         CabeceraSeccion(
                             iconoColorFondo = Color(0xFFFFEDD5),
                             iconoTint = Color(0xFFEA580C),
@@ -218,6 +261,7 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Dirección
                         EtiquetaCampo("Dirección")
                         CampoTexto(
                             valor = direccion,
@@ -228,6 +272,7 @@ fun PreestudioScreen(
 
                         Spacer(Modifier.height(10.dp))
 
+                        // Orientación
                         SelectorCompacto(
                             etiqueta = "Orientación",
                             valor = orientacion,
@@ -240,6 +285,7 @@ fun PreestudioScreen(
                     }
                 }
 
+                // Botón principal para terminar el preestudio
                 Button(
                     onClick = onGenerarInforme,
                     colors = ButtonDefaults.buttonColors(containerColor = verde),
@@ -247,7 +293,11 @@ fun PreestudioScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 14.dp)
                 ) {
-                    Text("Generar informe energético", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Generar informe energético",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
 
                 Spacer(Modifier.height(6.dp))
@@ -256,6 +306,9 @@ fun PreestudioScreen(
     }
 }
 
+/* Cabecera de cada sección:
+ * un icono pequeño con fondo junto a el título de la sección
+ */
 @Composable
 private fun CabeceraSeccion(
     iconoColorFondo: Color,
@@ -270,19 +323,27 @@ private fun CabeceraSeccion(
                 .background(iconoColorFondo, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icono, contentDescription = null, tint = iconoTint, modifier = Modifier.size(18.dp))
+            Icon(
+                icono,
+                contentDescription = null,
+                tint = iconoTint,
+                modifier = Modifier.size(18.dp)
+            )
         }
         Spacer(Modifier.width(10.dp))
         Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
 }
 
+// Etiqueta pequeña encima de cada campo de texto
+// ya que la uso en cada una de las cards
 @Composable
 private fun EtiquetaCampo(texto: String) {
     Text(texto, fontSize = 12.sp, color = Color(0xFF111827))
     Spacer(Modifier.height(6.dp))
 }
 
+// Campo de texto reutilizable con estilo consistente
 @Composable
 private fun CampoTexto(
     valor: String,
@@ -306,6 +367,9 @@ private fun CampoTexto(
     )
 }
 
+/* Selector compacto  es como un dropdown pero queda mejor visualmente
+y concuerda mas con la vista de mi analisis funcional
+ */
 @Composable
 private fun SelectorCompacto(
     etiqueta: String,
@@ -319,6 +383,8 @@ private fun SelectorCompacto(
     EtiquetaCampo(etiqueta)
 
     Box(Modifier.fillMaxWidth()) {
+
+        // Campo que muestra el valor actual
         OutlinedTextField(
             value = valor,
             onValueChange = {},
@@ -326,7 +392,11 @@ private fun SelectorCompacto(
             singleLine = true,
             trailingIcon = {
                 IconButton(onClick = { onExpandido(true) }) {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Color(0xFF6B7280))
+                    Icon(
+                        Icons.Default.ArrowDropDown,
+                        contentDescription = null,
+                        tint = Color(0xFF6B7280)
+                    )
                 }
             },
             shape = RoundedCornerShape(12.dp),
@@ -339,6 +409,7 @@ private fun SelectorCompacto(
             modifier = Modifier.fillMaxWidth()
         )
 
+        // Menú con las opciones
         DropdownMenu(
             expanded = expandido,
             onDismissRequest = { onExpandido(false) }
@@ -355,9 +426,9 @@ private fun SelectorCompacto(
         }
     }
 }
+
 @Preview
 @Composable
-fun PreestudioPreview(){
-
+fun PreestudioPreview() {
     PreestudioScreen()
 }

@@ -16,17 +16,21 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun LoginScreen(
+    //Lambdas para navegar a otras pantallas
     onIniciarSesion: () -> Unit = {},
     onRegistrarse: () -> Unit = {},
     onOlvideContrasena: () -> Unit = {}
 ) {
 
+    // Colores principales de la pantalla para no repetirlos
     val verde = Color(0xFF16A34A)
     val fondo = Color(0xFFEEF8F5)
 
+    // Estados locales del formulario
     var email by remember { mutableStateOf("") }
     var contrasena by remember { mutableStateOf("") }
 
+    //Scaffold estructura de la pantalla
     Scaffold(containerColor = fondo) { pv ->
         Column(
             modifier = Modifier
@@ -37,6 +41,8 @@ fun LoginScreen(
         ) {
             Spacer(Modifier.height(26.dp))
 
+            // Icono superior dentro de un contenedor verde
+            // con esquinas redondeadas que en un futuro sera el logo de ZeroHaus
             Surface(
                 modifier = Modifier.size(56.dp),
                 shape = RoundedCornerShape(14.dp),
@@ -53,8 +59,13 @@ fun LoginScreen(
             }
 
             Spacer(Modifier.height(10.dp))
+
+            // Nombre de la applicacion
             Text("ZeroHaus", color = verde, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+
             Spacer(Modifier.height(4.dp))
+
+            // Descripción
             Text(
                 "Mejora la eficiencia energética de tu hogar",
                 color = Color(0xFF2F3A3A),
@@ -63,27 +74,36 @@ fun LoginScreen(
 
             Spacer(Modifier.height(18.dp))
 
-
+            // Card del formulario de login
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(Modifier.padding(18.dp)) {
+
+                    // Título del formulario
                     Text("Iniciar sesión", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
                     Spacer(Modifier.height(14.dp))
 
+                    // Etiqueta del campo email
                     Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
+
+                    // Campo de texto para email
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { email = it },// actualiza  al escribir
                         placeholder = { Text("tu@email.com", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.MailOutline, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.MailOutline,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
-                        singleLine = true,
+                        singleLine = true,              // obliga que sea una sola línea
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -96,17 +116,24 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // Etiqueta del campo contraseña
                     Text("Contraseña", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
+
+                    // Campo de texto para contraseña
                     OutlinedTextField(
                         value = contrasena,
-                        onValueChange = { contrasena = it },
+                        onValueChange = { contrasena = it },     // actualiza al escribir
                         placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
+                        visualTransformation = PasswordVisualTransformation(), // oculta el texto con asteriscos ***
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -119,9 +146,9 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(16.dp))
 
-
+                    // Botón para iniciar sesión
                     Button(
-                        onClick = onIniciarSesion,
+                        onClick = onIniciarSesion, // ejecuta la acción de ir a la pantalla del panel
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(vertical = 12.dp),
@@ -132,13 +159,9 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(10.dp))
 
-
+                    // Botón ir a registro
                     OutlinedButton(
-                        onClick = onRegistrarse,
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            width = 1.dp,
-                            brush = androidx.compose.ui.graphics.SolidColor(verde)
-                        ),
+                        onClick = onRegistrarse, // navega a registro
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(vertical = 12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -148,8 +171,9 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // Enlace olvidé contraseña
                     TextButton(
-                        onClick = onOlvideContrasena,
+                        onClick = onOlvideContrasena, // futura acción (API)
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         contentPadding = PaddingValues(0.dp)
                     ) {
@@ -158,8 +182,8 @@ fun LoginScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
 
+            // Texto informativo
             Text(
                 "Al continuar, aceptas nuestros términos y condiciones",
                 color = Color(0xFF6B7280),
@@ -169,10 +193,10 @@ fun LoginScreen(
         }
     }
 }
+
+//Preview de la pantalla
 @Preview
 @Composable
 fun LoginPreview() {
-LoginScreen()
-
-
+    LoginScreen()
 }

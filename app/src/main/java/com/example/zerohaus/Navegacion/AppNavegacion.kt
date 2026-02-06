@@ -4,12 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.zerohaus.UserInterface.LoginScreen
-import com.example.zerohaus.UserInterface.RegistroScreen
-import com.example.zerohaus.UserInterface.PreestudioScreen
-import com.example.zerohaus.UserInterface.TecnicosScreen
-import com.example.zerohaus.UserInterface.*
-import com.example.zerohaus.UserInterface.RankingsScreen
 import com.example.zerohaus.UserInterface.*
 import com.zerohaus.ui.pantallas.home.PanelScreen
 
@@ -22,6 +16,7 @@ fun AppNavegacion() {
         startDestination = "login"
     ) {
 
+        // Pantalla login
         composable("login") {
             LoginScreen(
                 onIniciarSesion = {
@@ -29,13 +24,12 @@ fun AppNavegacion() {
                         popUpTo("login") { inclusive = true }
                     }
                 },
-                onRegistrarse = {
-                    navController.navigate("registro")
-                },
+                onRegistrarse = { navController.navigate("registro") },
                 onOlvideContrasena = {}
             )
         }
 
+        // Pantalla registro
         composable("registro") {
             RegistroScreen(
                 onCrearCuenta = {
@@ -43,12 +37,11 @@ fun AppNavegacion() {
                         popUpTo("registro") { inclusive = true }
                     }
                 },
-                onIniciarSesion = {
-                    navController.popBackStack()
-                }
+                onIniciarSesion = { navController.popBackStack() }
             )
         }
 
+        // Panel principal
         composable("dashboard") {
             PanelScreen(
                 onCerrarSesion = {
@@ -64,35 +57,45 @@ fun AppNavegacion() {
             )
         }
 
+        // Preestudio
         composable("preestudio") {
             PreestudioScreen(
                 onVolver = { navController.popBackStack() }
             )
         }
 
+        // Técnicos
         composable("tecnicos") {
             TecnicosScreen(
                 onVolver = { navController.popBackStack() }
             )
         }
 
+        // Proyectos
         composable("proyectos") {
             MisProyectosScreen(
                 onVolver = { navController.popBackStack() }
             )
         }
 
+        // Rankings
         composable("rankings") {
             RankingsScreen(
                 onVolver = { navController.popBackStack() }
             )
         }
 
+        // Informe
         composable("informe") {
             InformeScreen(
                 onVolver = { navController.popBackStack() },
-                onDescargar = { navController.navigate("informe") },
-                onCompartir = { navController.navigate("informe") }
+
+                // de momento estos dos no navegan, solo ejecutan lo que tú pongas luego
+                onDescargar = { },
+                onCompartir = { },
+
+                // este botón sí manda a técnicos
+                onContactarTecnicos = { navController.navigate("tecnicos") }
             )
         }
     }

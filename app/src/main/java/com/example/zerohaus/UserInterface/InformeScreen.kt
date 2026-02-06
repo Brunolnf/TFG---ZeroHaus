@@ -5,29 +5,32 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InformeScreen(
+    //Lambdas para desplazarme entre las pantallas
     onVolver: () -> Unit = {},
     onDescargar: () -> Unit = {},
-    onCompartir: () -> Unit = {}
+    onCompartir: () -> Unit = {},
+    onContactarTecnicos: () -> Unit = {}
 ) {
+    //Variables de colores
     val verde = Color(0xFF16A34A)
     val gris = Color(0xFF6B7280)
     val fondo = Color(0xFFF6F7F9)
     val borde = Color(0xFFE5E7EB)
 
+    //Estructura de la pantalla
     Scaffold(
         containerColor = fondo,
         topBar = {
@@ -40,20 +43,21 @@ fun InformeScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 actions = {
                     IconButton(onClick = onCompartir) {
-                        Icon(Icons.Default.Share, contentDescription = null)
+                        Icon(Icons.Default.Share, contentDescription = "Compartir")
                     }
                     IconButton(onClick = onDescargar) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Descargar")
                     }
                 }
             )
         }
     ) { pv ->
+
         Column(
             modifier = Modifier
                 .padding(pv)
@@ -61,9 +65,9 @@ fun InformeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
+            // Datos generales sobre la vivienda
             Card(
                 shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 border = BorderStroke(1.dp, borde),
                 modifier = Modifier.fillMaxWidth()
@@ -76,9 +80,9 @@ fun InformeScreen(
                 }
             }
 
+            // Calificación energética segun los campos que rellenes en los formularios
             Card(
                 shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 border = BorderStroke(1.dp, borde),
                 modifier = Modifier.fillMaxWidth()
@@ -86,6 +90,7 @@ fun InformeScreen(
                 Column(Modifier.padding(14.dp)) {
                     Text("Calificación energética", fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -102,9 +107,9 @@ fun InformeScreen(
                 }
             }
 
+            // Indicadores de eficiencia y emisiones
             Card(
                 shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 border = BorderStroke(1.dp, borde),
                 modifier = Modifier.fillMaxWidth()
@@ -128,17 +133,15 @@ fun InformeScreen(
                     }
 
                     Spacer(Modifier.height(10.dp))
-                    Divider()
-                    Spacer(Modifier.height(10.dp))
-
                     Text("Coste anual estimado", color = gris, fontSize = 12.sp)
                     Text("22 €/año", fontWeight = FontWeight.Medium)
                 }
             }
 
+            // Recomendaciones para el usuario sobre la vivienda que no creo que tengan
+            // ninguna funcionalidad nunca es meramente informativa
             Card(
                 shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 border = BorderStroke(1.dp, borde),
                 modifier = Modifier.fillMaxWidth()
@@ -162,26 +165,26 @@ fun InformeScreen(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(
-                    onClick = onCompartir,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, borde)
-                ) {
-                    Text("Compartir", color = Color(0xFF111827), fontWeight = FontWeight.SemiBold)
-                }
-
-                Button(
-                    onClick = onDescargar,
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = verde),
-                    contentPadding = PaddingValues(vertical = 12.dp)
-                ) {
-                    Text("Descargar", color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
+            // Boton para ir a la pantalla tecnicos
+            Button(
+                onClick = onContactarTecnicos,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = verde),
+                contentPadding = PaddingValues(vertical = 12.dp)
+            ) {
+                Icon(Icons.Default.AccountBox, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Contactar técnicos", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         }
     }
+}
+
+@Preview
+@Composable
+fun InformePreview() {
+    InformeScreen()
 }

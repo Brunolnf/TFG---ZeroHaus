@@ -1,9 +1,6 @@
 package com.zerohaus.ui.pantallas.home
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +19,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+
+ // Modelo UI de una notificación.
+
 data class NotificacionUi(
     val titulo: String,
     val detalle: String,
@@ -32,6 +32,7 @@ data class NotificacionUi(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PanelScreen(
+    // Callbacks que te conectan con navegación y otras pantallas
     onCerrarSesion: () -> Unit = {},
     onNuevoPreestudio: () -> Unit = {},
     onBuscarTecnicos: () -> Unit = {},
@@ -39,15 +40,18 @@ fun PanelScreen(
     onRankings: () -> Unit = {},
     onVerUltimoInforme: () -> Unit = {}
 ) {
+    // Paleta de colores local
     val verde = Color(0xFF16A34A)
     val grisTexto = Color(0xFF6B7280)
     val bordeSuave = Color(0xFFE5E7EB)
     val fondo = Color(0xFFF6F7F9)
 
+    // Estados para abrir/cerrar diálogos
     var mostrarConfig by remember { mutableStateOf(false) }
     var mostrarNotificaciones by remember { mutableStateOf(false) }
     var mostrarSubirCertificado by remember { mutableStateOf(false) }
 
+    // Estados de configuración sin funcionalidad
     var modoOscuro by remember { mutableStateOf(false) }
     var idioma by remember { mutableStateOf("Español") }
     var sonidos by remember { mutableStateOf(true) }
@@ -56,10 +60,13 @@ fun PanelScreen(
     var generales by remember { mutableStateOf(true) }
     var abrirIdioma by remember { mutableStateOf(false) }
 
+    // Estados del formulario de subir certificado sin funcionalidad
     var nombreCert by remember { mutableStateOf("") }
     var tipoCert by remember { mutableStateOf("Selecciona un tipo") }
     var abrirTipoCert by remember { mutableStateOf(false) }
 
+
+    // Lista mutable de notificaciones en memoria.
     val notificaciones = remember {
         mutableStateListOf(
             NotificacionUi("Nuevo presupuesto recibido","EcoReformas Madrid ha enviado un presupuesto.","Hoy",true),
@@ -67,16 +74,21 @@ fun PanelScreen(
             NotificacionUi("Nueva valoración","Has recibido una respuesta a tu reseña.","Hace 3 días",false)
         )
     }
+
+    // Si existe al menos una no leída, se pinta el punto rojo en la campana
     val hayNoLeidas = notificaciones.any { it.noLeida }
 
     Scaffold(
         containerColor = fondo,
         topBar = {
             CenterAlignedTopAppBar(
+                // TopBar con fondo blanco
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White),
                 title = {
+                    // Título centrado con logo , nombre y subtítulo
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Logo cuadrado verde con icono Home
                             Box(
                                 modifier = Modifier
                                     .size(38.dp)
@@ -98,14 +110,18 @@ fun PanelScreen(
                     }
                 },
                 actions = {
+                    // Botón icono para abrir diálogo de subir certificado
                     IconButton(onClick = { mostrarSubirCertificado = true }) {
                         Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
+
+                    // Campana de notificaciones con badge si hay no leídas
                     Box {
                         IconButton(onClick = { mostrarNotificaciones = true }) {
                             Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(28.dp))
                         }
                         if (hayNoLeidas) {
+                            // Punto rojo  colocado arriba a la derecha
                             Box(
                                 Modifier
                                     .size(10.dp)
@@ -116,9 +132,13 @@ fun PanelScreen(
                             )
                         }
                     }
+
+                    // Abrir diálogo de configuración
                     IconButton(onClick = { mostrarConfig = true }) {
                         Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
+
+                    // Cerrar sesión
                     IconButton(onClick = onCerrarSesion) {
                         Icon(Icons.Default.ExitToApp, contentDescription = null, modifier = Modifier.size(28.dp))
                     }
@@ -126,6 +146,7 @@ fun PanelScreen(
             )
         }
     ) { pv ->
+      //LazyColumn para poder scrollear
         LazyColumn(
             modifier = Modifier
                 .padding(pv)
@@ -134,22 +155,25 @@ fun PanelScreen(
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
 
+            // Bloque de bienvenida
             item {
                 Spacer(Modifier.height(10.dp))
                 Text("Bienvenido, Usuario", fontWeight = FontWeight.Bold, fontSize = 24.sp)
                 Text("Gestiona la eficiencia energética de tu hogar", color = grisTexto, fontSize = 16.sp)
             }
 
+            // Tarjeta "Tu vivienda" (card en verde)
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = verde),
                     shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(22.dp)) {
                         Text("Tu vivienda", color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp)
                         Spacer(Modifier.height(8.dp))
+
+                        // Fila con nombre vivienda + letra D (calificacion de la vivienda)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -173,6 +197,7 @@ fun PanelScreen(
 
                         Spacer(Modifier.height(18.dp))
 
+                        // Fila con dos columnas: consumo y emisiones
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -189,6 +214,7 @@ fun PanelScreen(
 
                         Spacer(Modifier.height(18.dp))
 
+                        // Botón dentro de la tarjeta: ver informe de la vivienda
                         Button(
                             onClick = onVerUltimoInforme,
                             colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.18f)),
@@ -207,38 +233,76 @@ fun PanelScreen(
                 }
             }
 
+            // Encabezado de sección
             item {
                 Text("Acciones", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
             }
 
+            // Acciones (tarjetas reutilizando el composable Tarjeta)
             item {
-                Tarjeta(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF059669), "Nuevo preestudio", "Analiza tu vivienda", bordeSuave, onNuevoPreestudio)
+                Tarjeta(
+                    Icons.Default.Add,
+                    Color(0xFFD1FAE5),
+                    Color(0xFF059669),
+                    "Nuevo preestudio",
+                    "Analiza tu vivienda",
+                    bordeSuave,
+                    onNuevoPreestudio
+                )
             }
             item {
-                Tarjeta(Icons.Default.Place, Color(0xFFDBEAFE), Color(0xFF2563EB), "Buscar técnicos", "Encuentra profesionales", bordeSuave, onBuscarTecnicos)
+                Tarjeta(
+                    Icons.Default.Place,
+                    Color(0xFFDBEAFE),
+                    Color(0xFF2563EB),
+                    "Buscar técnicos",
+                    "Encuentra profesionales",
+                    bordeSuave,
+                    onBuscarTecnicos
+                )
             }
             item {
-                Tarjeta(Icons.Default.Menu, Color(0xFFEDE9FE), Color(0xFF7C3AED), "Mis proyectos", "Gestiona reformas", bordeSuave, onMisProyectos)
+                Tarjeta(
+                    Icons.Default.Menu,
+                    Color(0xFFEDE9FE),
+                    Color(0xFF7C3AED),
+                    "Mis proyectos",
+                    "Gestiona reformas",
+                    bordeSuave,
+                    onMisProyectos
+                )
             }
             item {
-                Tarjeta(Icons.Default.Star, Color(0xFFFFEDD5), Color(0xFFEA580C), "Rankings", "Mejores técnicos", bordeSuave, onRankings)
+                Tarjeta(
+                    Icons.Default.Star,
+                    Color(0xFFFFEDD5),
+                    Color(0xFFEA580C),
+                    "Rankings",
+                    "Mejores técnicos",
+                    bordeSuave,
+                    onRankings
+                )
             }
 
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
 
+    //dialogo de la configuracion
     if (mostrarConfig) {
         AlertDialog(
             onDismissRequest = { mostrarConfig = false },
             title = { Text("Configuración", fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+
+                    // Switch modo oscuro (solo cambia estado local)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Modo oscuro", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = modoOscuro, onCheckedChange = { modoOscuro = it })
                     }
 
+                    // Selector de idioma con dropdown
                     Box {
                         Row(
                             modifier = Modifier
@@ -257,13 +321,17 @@ fun PanelScreen(
 
                         DropdownMenu(expanded = abrirIdioma, onDismissRequest = { abrirIdioma = false }) {
                             listOf("Español", "Inglés").forEach { opt ->
-                                DropdownMenuItem(text = { Text(opt, fontSize = 16.sp) }, onClick = { idioma = opt; abrirIdioma = false })
+                                DropdownMenuItem(
+                                    text = { Text(opt, fontSize = 16.sp) },
+                                    onClick = { idioma = opt; abrirIdioma = false }
+                                )
                             }
                         }
                     }
 
                     Text("Notificaciones", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
+                    // Switches de notificaciones
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Sonidos", modifier = Modifier.weight(1f), fontSize = 16.sp)
                         Switch(checked = sonidos, onCheckedChange = { sonidos = it })
@@ -283,6 +351,7 @@ fun PanelScreen(
                 }
             },
             confirmButton = {
+                // Guardar: aquí solo cierra el diálogo sin funcionalidad
                 Button(onClick = { mostrarConfig = false }, colors = ButtonDefaults.buttonColors(containerColor = verde)) {
                     Text("Guardar", color = Color.White, fontSize = 16.sp)
                 }
@@ -295,6 +364,7 @@ fun PanelScreen(
         )
     }
 
+   //Dialogo de notificaciones
     if (mostrarNotificaciones) {
         AlertDialog(
             onDismissRequest = { mostrarNotificaciones = false },
@@ -303,19 +373,23 @@ fun PanelScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 460.dp)
                 ) {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(notificaciones) { n ->
                             Card(
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(Modifier.padding(14.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(n.titulo, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), fontSize = 16.sp)
+                                        Text(
+                                            n.titulo,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.weight(1f),
+                                            fontSize = 16.sp
+                                        )
+                                        // Punto rojo si está no leída
                                         if (n.noLeida) {
                                             Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFFEF4444)))
                                         }
@@ -331,6 +405,7 @@ fun PanelScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    // Botón: marca todas como leídas (reemplaza la lista con copias noLeida=false)
                     OutlinedButton(
                         onClick = {
                             val nuevas = notificaciones.map { it.copy(noLeida = false) }
@@ -352,12 +427,15 @@ fun PanelScreen(
         )
     }
 
+    //Dialogo de subir certificado
     if (mostrarSubirCertificado) {
         AlertDialog(
             onDismissRequest = { mostrarSubirCertificado = false },
             title = { Text("Subir certificado", fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+
+                    // Input nombre
                     OutlinedTextField(
                         value = nombreCert,
                         onValueChange = { nombreCert = it },
@@ -368,11 +446,12 @@ fun PanelScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    // Selector tipo con dropdown
                     Box(Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = tipoCert,
                             onValueChange = {},
-                            readOnly = true,
+                            readOnly = true, // evita edición manual; solo selección
                             label = { Text("Tipo de certificado", fontSize = 16.sp) },
                             trailingIcon = {
                                 IconButton(onClick = { abrirTipoCert = true }) {
@@ -384,11 +463,15 @@ fun PanelScreen(
                         )
                         DropdownMenu(expanded = abrirTipoCert, onDismissRequest = { abrirTipoCert = false }) {
                             listOf("Instalación","Auditoría","Energías renovables","Certificación").forEach { opt ->
-                                DropdownMenuItem(text = { Text(opt, fontSize = 16.sp) }, onClick = { tipoCert = opt; abrirTipoCert = false })
+                                DropdownMenuItem(
+                                    text = { Text(opt, fontSize = 16.sp) },
+                                    onClick = { tipoCert = opt; abrirTipoCert = false }
+                                )
                             }
                         }
                     }
 
+                    // Caja para subir el archivo meramente visual
                     Column(
                         Modifier
                             .fillMaxWidth()
@@ -407,12 +490,9 @@ fun PanelScreen(
                 }
             },
             confirmButton = {
+                //Boton sin funcionalidad
                 Button(
-                    onClick = {
-                        nombreCert = ""
-                        tipoCert = "Selecciona un tipo"
-                        mostrarSubirCertificado = false
-                    },
+                    onClick = {},
                     colors = ButtonDefaults.buttonColors(containerColor = verde)
                 ) {
                     Text("Subir", color = Color.White, fontSize = 16.sp)
@@ -432,7 +512,7 @@ fun PanelScreen(
 fun PanelPreview() {
     PanelScreen()
 }
-
+// Composable para cada una de las Acciones en tarheta para no repetir mucho codigo
 @Composable
 private fun Tarjeta(
     icono: androidx.compose.ui.graphics.vector.ImageVector,
@@ -447,7 +527,6 @@ private fun Tarjeta(
         onClick = onClick,
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = Modifier.fillMaxWidth(),
         border = BorderStroke(1.dp, borde)
     ) {
@@ -457,6 +536,7 @@ private fun Tarjeta(
                 .padding(18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Icono dentro de un fondo con bordes redondeados
             Box(
                 modifier = Modifier
                     .size(52.dp)
@@ -469,6 +549,7 @@ private fun Tarjeta(
 
             Spacer(Modifier.width(16.dp))
 
+            // Textos
             Column(Modifier.weight(1f)) {
                 Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = Color(0xFF111827))
                 Spacer(Modifier.height(4.dp))
