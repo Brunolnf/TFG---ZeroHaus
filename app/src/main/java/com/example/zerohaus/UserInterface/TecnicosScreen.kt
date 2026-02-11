@@ -154,8 +154,11 @@ fun TecnicosScreen(
                         modifier = Modifier.weight(1f),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = borde,
-                            focusedBorderColor = borde
+                            focusedBorderColor = borde,
+                            unfocusedContainerColor = Color.White,
+                            focusedContainerColor = Color.White
                         )
+
                     )
 
                     // Botón que abre el menú de filtros
