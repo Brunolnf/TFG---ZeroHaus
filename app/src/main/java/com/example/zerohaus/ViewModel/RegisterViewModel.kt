@@ -1,54 +1,119 @@
-package com.example.zerohaus.ViewModel
+package com.example.zerohaus.viewmodel
 
+import android.util.Patterns
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import com.example.zerohaus.Estados.RegistroEstado
 
 class RegistroViewModel : ViewModel() {
 
-    private val _nombre = MutableStateFlow("")
-    val nombre: StateFlow<String> = _nombre
+    var estado by mutableStateOf(RegistroEstado())
+        private set
 
-    private val _email = MutableStateFlow("")
-    val email: StateFlow<String> = _email
 
-    private val _tipoUsuario = MutableStateFlow("Propietario")
-    val tipoUsuario: StateFlow<String> = _tipoUsuario
+    fun cambiarNombre(nombre: String) {
 
-    private val _password = MutableStateFlow("")
-    val password: StateFlow<String> = _password
+        estado = estado.copy(
+            nombre = nombre
+        )
 
-    private val _confirmarPassword = MutableStateFlow("")
-    val confirmarPassword: StateFlow<String> = _confirmarPassword
-
-    private val _registroCorrecto = MutableStateFlow(false)
-    val registroCorrecto: StateFlow<Boolean> = _registroCorrecto
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
-
-    fun onNombreChange(valor: String) {
-        _nombre.value = valor
+        validarFormulario()
     }
 
-    fun onEmailChange(valor: String) {
-        _email.value = valor
+
+    fun cambiarEmail(email: String) {
+
+        estado = estado.copy(
+            email = email
+        )
+
+        validarFormulario()
     }
 
-    fun onTipoUsuarioChange(valor: String) {
-        _tipoUsuario.value = valor
+
+    fun cambiarTipoUsuario(tipo: String) {
+
+        estado = estado.copy(
+            tipoUsuario = tipo
+        )
     }
 
-    fun onPasswordChange(valor: String) {
-        _password.value = valor
+
+    fun cambiarContrasena(contrasena: String) {
+
+        estado = estado.copy(
+            contrasena = contrasena
+        )
+
+        validarFormulario()
     }
 
-    fun onConfirmarPasswordChange(valor: String) {
-        _confirmarPassword.value = valor
+
+    fun cambiarConfirmarContrasena(confirmar: String) {
+
+        estado = estado.copy(
+            confirmarContrasena = confirmar
+        )
+
+        validarFormulario()
     }
 
-    fun limpiarEstado() {
-        _registroCorrecto.value = false
-        _error.value = null
+
+    private fun validarFormulario() {
+
+        val emailValido =
+            Patterns.EMAIL_ADDRESS.matcher(estado.email).matches()
+
+        val contrasenaValida =
+            estado.contrasena.length >= 8
+
+        val contrasenaNumeroLetra =
+            estado.contrasena.any { it.isDigit() } &&
+                    estado.contrasena.any { it.isLetter() }
+
+        val formularioValido =
+            emailValido &&
+                    contrasenaValida &&
+                    contrasenaNumeroLetra &&
+                    estado.contrasena == estado.confirmarContrasena &&
+                    estado.nombre.isNotEmpty()
+
+        estado = estado.copy(
+            emailValido = emailValido,
+            contrasenaValida = contrasenaValida,
+            contrasenaNumeroLetra = contrasenaNumeroLetra,
+            formularioValido = formularioValido
+        )
     }
+
+
+    fun crearCuenta() {
+
+        // Aquí en el futuro irá la llamada a la API
+
+
+        if (estado.formularioValido) {
+
+            estado = estado.copy(
+                registroCorrecto = true
+            )
+
+        } else {
+
+            estado = estado.copy(
+                error = "Datos incorrectos"
+            )
+        }
+    }
+
+
+    fun limpiarError() {
+
+        estado = estado.copy(
+            error = null
+        )
+    }
+
 }

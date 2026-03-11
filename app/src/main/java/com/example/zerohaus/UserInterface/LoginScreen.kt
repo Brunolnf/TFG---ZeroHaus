@@ -30,6 +30,12 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var contrasena by remember { mutableStateOf("") }
 
+    //Campos de validacion de datos
+    val emailValido = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    val passwordValida =
+        contrasena.length >= 8 && contrasena.any { it.isDigit() } && contrasena.any { it.isLetter() }
+    val formularioValido = emailValido && passwordValida
+
     //Scaffold estructura de la pantalla
     Scaffold(containerColor = fondo) { pv ->
         Column(
@@ -94,7 +100,7 @@ fun LoginScreen(
                     // Campo de texto para email
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },// actualiza  al escribir
+                        onValueChange = { email = it },
                         placeholder = { Text("tu@email.com", fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(
@@ -103,17 +109,23 @@ fun LoginScreen(
                                 tint = Color(0xFF6B7280)
                             )
                         },
-                        singleLine = true,              // obliga que sea una sola línea
+                        singleLine = true,
+                        isError = email.isNotEmpty() && !emailValido,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
-                            focusedBorderColor = Color(0xFF9CA3AF),
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
+                            focusedBorderColor = Color(0xFF9CA3AF)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    if (email.isNotEmpty() && !emailValido) {
+                        Text(
+                            text = "Introduce un email válido",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
                     Spacer(Modifier.height(12.dp))
 
                     // Etiqueta del campo contraseña
@@ -123,7 +135,7 @@ fun LoginScreen(
                     // Campo de texto para contraseña
                     OutlinedTextField(
                         value = contrasena,
-                        onValueChange = { contrasena = it },     // actualiza al escribir
+                        onValueChange = { contrasena = it },
                         placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
                         leadingIcon = {
                             Icon(
@@ -133,7 +145,8 @@ fun LoginScreen(
                             )
                         },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), // oculta el texto con asteriscos ***
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = contrasena.isNotEmpty() && !passwordValida,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -144,17 +157,30 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    if (contrasena.isNotEmpty() && !passwordValida) {
+                        Text(
+                            text = "La contraseña debe tener al menos 8 caracteres",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
+
                     Spacer(Modifier.height(16.dp))
 
                     // Botón para iniciar sesión
                     Button(
                         onClick = onIniciarSesion, // ejecuta la acción de ir a la pantalla del panel
+                        enabled = formularioValido,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(vertical = 12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Iniciar sesión", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Iniciar sesión",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     Spacer(Modifier.height(10.dp))
@@ -177,7 +203,11 @@ fun LoginScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         contentPadding = PaddingValues(0.dp)
                     ) {
-                        Text("¿Olvidaste tu contraseña?", color = Color(0xFF1F2937), fontSize = 12.sp)
+                        Text(
+                            "¿Olvidaste tu contraseña?",
+                            color = Color(0xFF1F2937),
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }

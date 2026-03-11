@@ -36,6 +36,12 @@ fun RegistroScreen(
     // Controla si el menú desplegable del tipo de usuario está abierto o cerrado
     var expandirTipo by remember { mutableStateOf(false) }
 
+    //Campos de validacion de datos
+    val emailValido = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    val contrasenaValida = contrasena.length >= 8
+    val contrasenaNum = contrasena.any { it.isDigit() } && contrasena.any { it.isLetter() }
+    val formularioValido = emailValido && contrasenaValida && contrasena == confirmarContrasena && nombre.isNotEmpty()
+
     // Scaffold estructura base de la pantalla
     Scaffold(containerColor = fondo) { pv ->
         Column(
@@ -121,9 +127,14 @@ fun RegistroScreen(
                         onValueChange = { email = it },
                         placeholder = { Text("tu@email.com", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.MailOutline, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.MailOutline,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
+                        isError = email.isNotEmpty() && !emailValido,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -131,6 +142,14 @@ fun RegistroScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (email.isNotEmpty() && !emailValido) {
+                        Text(
+                            text = "Introduce un email válido",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
 
                     Spacer(Modifier.height(12.dp))
 
@@ -200,10 +219,15 @@ fun RegistroScreen(
                         onValueChange = { contrasena = it },
                         placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
                         singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(), // oculta el texto (••••)
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = contrasena.isNotEmpty() && !contrasenaValida && !contrasenaNum,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -213,6 +237,21 @@ fun RegistroScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+
+                    if (contrasena.isNotEmpty() && !contrasenaValida) {
+                        Text(
+                            text = "La contraseña debe tener al menos 8 caracteres",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
+                    if (contrasena.isNotEmpty() && !contrasenaValida) {
+                        Text(
+                            text = "La contraseña debe contener un numero y una letra",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
 
                     Spacer(Modifier.height(12.dp))
 
@@ -222,12 +261,18 @@ fun RegistroScreen(
                     OutlinedTextField(
                         value = confirmarContrasena,
                         onValueChange = { confirmarContrasena = it },
-                        placeholder = { Text("Repite tu contraseña", fontSize = 13.sp) },
+                        placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6B7280))
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280)
+                            )
                         },
-                        singleLine = true, // solo deja una linea
+                        singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
+                        isError = confirmarContrasena.isNotEmpty() && !contrasenaValida
+                                && confirmarContrasena != contrasena && !contrasenaNum,
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color(0xFFD1D5DB),
@@ -238,11 +283,20 @@ fun RegistroScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    if (confirmarContrasena.isNotEmpty() && confirmarContrasena != contrasena) {
+                        Text(
+                            text = "Las contraseñas deben ser inguales",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.sp
+                        )
+                    }
+
                     Spacer(Modifier.height(16.dp))
 
                     // Botón principal para registrarse y crear cuenta
                     Button(
                         onClick = onCrearCuenta, // luego lo conectarás con ViewModel (validación/registro)
+                        enabled = formularioValido,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(vertical = 12.dp),

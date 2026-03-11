@@ -1,35 +1,88 @@
-package com.zerohaus.app.ui.login
+package com.example.zerohaus.ViewModel
 
+import android.util.Patterns
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-
+import com.example.zerohaus.Estados.LoginEstado
 
 class LoginViewModel : ViewModel() {
 
-    private val _email = MutableStateFlow("")
-    val email: StateFlow<String> = _email
+    // Estado de la pantalla que la UI observará
+    var estado by mutableStateOf(LoginEstado())
+        private set
 
-    private val _password = MutableStateFlow("")
-    val password: StateFlow<String> = _password
 
-    private val _loginCorrecto = MutableStateFlow(false)
-    val loginCorrecto: StateFlow<Boolean> = _loginCorrecto
+    // Cambia el email cuando el usuario escribe
+    fun cambiarEmail(nuevoEmail: String) {
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error
+        estado = estado.copy(
+            email = nuevoEmail
+        )
 
-    fun onEmailChange(valor: String) {
-        _email.value = valor
-    }
-
-    fun onPasswordChange(valor: String) {
-        _password.value = valor
+        validarFormulario()
     }
 
 
-    fun limpiarEstado() {
-        _loginCorrecto.value = false
-        _error.value = null
+    // Cambia la contraseña cuando el usuario escribe
+    fun cambiarContrasena(nuevaContrasena: String) {
+
+        estado = estado.copy(
+            contrasena = nuevaContrasena
+        )
+
+        validarFormulario()
+    }
+
+
+    // Valida el formulario completo
+    private fun validarFormulario() {
+
+        val emailValido =
+            Patterns.EMAIL_ADDRESS.matcher(estado.email).matches()
+
+        val passwordValida =
+            estado.contrasena.length >= 8 &&
+                    estado.contrasena.any { it.isDigit() } &&
+                    estado.contrasena.any { it.isLetter() }
+
+        val formularioValido =
+            emailValido && passwordValida
+
+        estado = estado.copy(
+            emailValido = emailValido,
+            passwordValida = passwordValida,
+            formularioValido = formularioValido
+        )
+    }
+
+
+    // Acción al pulsar iniciar sesión
+    fun iniciarSesion() {
+
+        // Aquí en el futuro irá la llamada a la API o BBDD
+
+
+        if (estado.formularioValido) {
+
+            estado = estado.copy(
+                loginCorrecto = true
+            )
+        } else {
+
+            estado = estado.copy(
+                error = "Datos incorrectos"
+            )
+        }
+    }
+
+
+    // Limpia el estado de error
+    fun limpiarError() {
+
+        estado = estado.copy(
+            error = null
+        )
     }
 }
