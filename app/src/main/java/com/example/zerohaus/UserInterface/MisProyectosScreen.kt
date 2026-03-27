@@ -10,27 +10,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.*
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-data class ProyectoUi(
-    val id: String,
-    val titulo: String,
-    val ubicacion: String,
-    val tecnico: String,
-    val progreso: Int,
-    val estado: String,
-    val tareas: List<Pair<String, Boolean>>
-)
+import com.example.zerohaus.ViewModel.ProyectosViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MisProyectosScreen(
+    viewModel: ProyectosViewModel,
     onVolver: () -> Unit = {}
 ) {
     val verde = Color(0xFF16A34A)
@@ -38,33 +29,7 @@ fun MisProyectosScreen(
     val fondo = Color(0xFFF6F7F9)
     val borde = Color(0xFFE5E7EB)
 
-    val proyectos = listOf(
-        ProyectoUi(
-            id = "1",
-            titulo = "Instalación aerotermia",
-            ubicacion = "Mi vivienda principal",
-            tecnico = "Juan Pérez",
-            progreso = 65,
-            estado = "En curso",
-            tareas = listOf(
-                "Instalación equipo" to true,
-                "Conexiones" to true,
-                "Pruebas" to false
-            )
-        ),
-        ProyectoUi(
-            id = "2",
-            titulo = "Cambio de ventanas",
-            ubicacion = "Mi vivienda principal",
-            tecnico = "EcoReformas Madrid",
-            progreso = 100,
-            estado = "Finalizado",
-            tareas = listOf(
-                "Medición" to true,
-                "Instalación" to true
-            )
-        )
-    )
+    LaunchedEffect(Unit) { viewModel.cargarProyectos() }
 
     Scaffold(
         containerColor = fondo,
@@ -73,64 +38,73 @@ fun MisProyectosScreen(
                 title = {
                     Column {
                         Text("Mis proyectos", fontWeight = FontWeight.SemiBold)
-                        Text("${proyectos.size} proyectos", color = gris, fontSize = 12.sp)
+                        Text("${viewModel.proyectos.size} proyectos", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                    }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 }
             )
         }
     ) { pv ->
-        LazyColumn(
-            modifier = Modifier
-                .padding(pv)
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(proyectos) { p ->
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(1.dp, borde),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(p.titulo, fontWeight = FontWeight.SemiBold)
-                        Text(p.ubicacion, color = gris, fontSize = 12.sp)
-                        Spacer(Modifier.height(6.dp))
-                        Text("Técnico: ${p.tecnico}", color = gris, fontSize = 12.sp)
+        if (viewModel.cargando) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = verde)
+            }
+        } else if (viewModel.proyectos.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
+                Text("No tienes proyectos aún", color = gris)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(pv).fillMaxSize().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(viewModel.proyectos) { p ->
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, borde),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(p.titulo, fontWeight = FontWeight.SemiBold)
+                            Text(p.viviendaNombre, color = gris, fontSize = 12.sp)
+                            Spacer(Modifier.height(6.dp))
+                            Text("Técnico: ${p.tecnicoNombre}", color = gris, fontSize = 12.sp)
+                            Spacer(Modifier.height(6.dp))
 
-                        Spacer(Modifier.height(6.dp))
-                        Text("Progreso: ${p.progreso}% · ${p.estado}", color = gris, fontSize = 12.sp)
-
-                        Spacer(Modifier.height(10.dp))
-                        Text("Tareas", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                        Spacer(Modifier.height(6.dp))
-
-                        p.tareas.forEach { t ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (t.second) Icons.Default.CheckCircle else Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = if (t.second) verde else Color(0xFFBDBDBD)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(t.first, fontSize = 13.sp)
-                            }
+                            // Barra de progreso real
+                            LinearProgressIndicator(
+                                progress = { p.progreso / 100f },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                color = verde,
+                                trackColor = Color(0xFFE5E7EB)
+                            )
                             Spacer(Modifier.height(4.dp))
+                            Text("${p.progreso}% · ${p.estado}", color = gris, fontSize = 12.sp)
+
+                            Spacer(Modifier.height(10.dp))
+                            Text("Tareas", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                            Spacer(Modifier.height(6.dp))
+
+                            p.tareas.forEachIndexed { index, t ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = t.completada,
+                                        onCheckedChange = { checked ->
+                                            viewModel.toggleTarea(p.id, index, checked)
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = verde)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(t.nombre, fontSize = 13.sp)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
-}
-@Preview
-@Composable
-fun MisProyectosPreview() {
-    MisProyectosScreen()
 }

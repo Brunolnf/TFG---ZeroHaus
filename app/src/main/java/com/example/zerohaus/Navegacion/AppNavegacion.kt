@@ -1,102 +1,220 @@
+// RUTA: Navegacion/AppNavegacion.kt
 package com.example.zerohaus.Navegacion
 
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.UserInterface.*
-import com.zerohaus.ui.pantallas.home.PanelScreen
+import com.example.zerohaus.ViewModel.*
 
 @Composable
 fun AppNavegacion() {
-    val navController = rememberNavController()
+    val nav = rememberNavController()
 
-    NavHost(
-        navController = navController,
-        startDestination = "login"
-    ) {
+    // ViewModels
+    val sesionVM: SesionViewModel = viewModel()
+    val loginVM: LoginViewModel = viewModel()
+    val registroVM: RegistroViewModel = viewModel()
+    val panelVM: PanelViewModel = viewModel()
+    val preestudioVM: PreestudioViewModel = viewModel()
+    val informeVM: InformeViewModel = viewModel()
+    val tecnicosVM: TecnicosViewModel = viewModel()
+    val rankingsVM: RankingsViewModel = viewModel()
+    val proyectosVM: ProyectosViewModel = viewModel()
+    val certificadoVM: CertificadoViewModel = viewModel()
+    val perfilVM: PerfilViewModel = viewModel()
+    val perfilTecnicoVM: PerfilTecnicoViewModel = viewModel()
+    val presupuestosVM: PresupuestosViewModel = viewModel()
+    val historialVM: HistorialInformesViewModel = viewModel()
+    val chatVM: ChatViewModel = viewModel()
+    val viviendasVM: ViviendasViewModel = viewModel()
+    val graficasVM: GraficasViewModel = viewModel()
+    val ajustesVM: AjustesViewModel = viewModel()
 
-        // Pantalla login
+    // Estados de flujo inicial
+    var mostrarSplash by remember { mutableStateOf(true) }
+    var mostrarOnboarding by remember { mutableStateOf(false) }
+
+    // Splash
+    if (mostrarSplash) {
+        SplashScreen { mostrarSplash = false }
+        return
+    }
+
+    // Comprobar sesión
+    LaunchedEffect(Unit) { sesionVM.comprobarSesion() }
+    val logueado = sesionVM.logueado.value ?: return
+
+    // Registrar token de notificaciones si hay sesión activa
+    LaunchedEffect(logueado) {
+        if (logueado) ServicioNotificaciones.registrarToken()
+    }
+
+    // Onboarding (solo usuarios nuevos)
+    if (mostrarOnboarding) {
+        OnboardingScreen { mostrarOnboarding = false }
+        return
+    }
+
+    val start = if (logueado) "main" else "login"
+
+    NavHost(navController = nav, startDestination = start) {
+
+        // Auth
         composable("login") {
             LoginScreen(
-                onIniciarSesion = {
-                    navController.navigate("dashboard") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                },
-                onRegistrarse = { navController.navigate("registro") },
-                onOlvideContrasena = {}
+                viewModel = loginVM,
+                onLoginExitoso = { nav.navigate("main") { popUpTo("login") { inclusive = true } } },
+                onIrARegistro = { nav.navigate("registro") },
+                onIrARecuperar = { nav.navigate("recuperar") }
             )
         }
-
-        // Pantalla registro
         composable("registro") {
             RegistroScreen(
-                onCrearCuenta = {
-                    navController.navigate("dashboard") {
-                        popUpTo("registro") { inclusive = true }
-                    }
+                viewModel = registroVM,
+                onRegistroExitoso = {
+                    mostrarOnboarding = true
+                    nav.navigate("main") { popUpTo("login") { inclusive = true } }
                 },
-                onIniciarSesion = { navController.popBackStack() }
+                onIniciarSesion = { nav.popBackStack() }
+            )
+        }
+        composable("recuperar") {
+            RecuperarPasswordScreen(
+                viewModel = loginVM,
+                onVolver = { nav.popBackStack() }
             )
         }
 
-        // Panel principal
-        composable("dashboard") {
-            PanelScreen(
+        // Main (Bottom Nav)
+        composable("main") {
+            MainScaffold(
+                panelViewModel = panelVM,
+                certificadoViewModel = certificadoVM,
+                chatViewModel = chatVM,
                 onCerrarSesion = {
-                    navController.navigate("login") {
-                        popUpTo("dashboard") { inclusive = true }
-                    }
+                    sesionVM.logout()
+                    nav.navigate("login") { popUpTo(0) { inclusive = true } }
                 },
-                onNuevoPreestudio = { navController.navigate("preestudio") },
-                onBuscarTecnicos = { navController.navigate("tecnicos") },
-                onMisProyectos = { navController.navigate("proyectos") },
-                onRankings = { navController.navigate("rankings") },
-                onVerUltimoInforme = { navController.navigate("informe") }
+                onNuevoPreestudio      = { nav.navigate("preestudio") },
+                onBuscarTecnicos       = { nav.navigate("tecnicos") },
+                onMisProyectos         = { nav.navigate("proyectos") },
+                onRankings             = { nav.navigate("rankings") },
+                onVerUltimoInforme     = { nav.navigate("informe") },
+                onPerfil               = { nav.navigate("perfil") },
+                onPresupuestos         = { nav.navigate("presupuestos") },
+                onHistorialInformes    = { nav.navigate("historial_informes") },
+                onMisViviendas         = { nav.navigate("mis_viviendas") },
+                onChats                = { id -> nav.navigate("chat/$id") },
+                onGraficas             = { nav.navigate("graficas") },
+                onMapaTecnicos         = { nav.navigate("mapa_tecnicos") },
+                onSobreApp             = { nav.navigate("sobre_app") },
+                onAjustes              = { nav.navigate("ajustes") }
             )
         }
 
-        // Preestudio
+        // Perfil usuario
+        composable("perfil") {
+            PerfilScreen(
+                viewModel = perfilVM,
+                onVolver = { nav.popBackStack() },
+                onCerrarSesion = {
+                    sesionVM.logout()
+                    nav.navigate("login") { popUpTo(0) { inclusive = true } }
+                }
+            )
+        }
+
+        // Preestudio → Informe
         composable("preestudio") {
             PreestudioScreen(
-                onVolver = { navController.popBackStack() }
-            )
-        }
-
-        // Técnicos
-        composable("tecnicos") {
-            TecnicosScreen(
-                onVolver = { navController.popBackStack() }
-            )
-        }
-
-        // Proyectos
-        composable("proyectos") {
-            MisProyectosScreen(
-                onVolver = { navController.popBackStack() }
-            )
-        }
-
-        // Rankings
-        composable("rankings") {
-            RankingsScreen(
-                onVolver = { navController.popBackStack() }
+                viewModel = preestudioVM,
+                onVolver = { nav.popBackStack() },
+                onInformeGenerado = {
+                    preestudioVM.estado.informeGenerado?.let { informeVM.cargarInforme(it) }
+                    preestudioVM.limpiarInforme()
+                    nav.navigate("informe") { popUpTo("preestudio") { inclusive = true } }
+                }
             )
         }
 
         // Informe
         composable("informe") {
             InformeScreen(
-                onVolver = { navController.popBackStack() },
-
-                // de momento estos dos no navegan, solo ejecutan lo que tú pongas luego
-                onDescargar = { },
-                onCompartir = { },
-
-                // este botón sí manda a técnicos
-                onContactarTecnicos = { navController.navigate("tecnicos") }
+                viewModel = informeVM,
+                onVolver = { nav.popBackStack() },
+                onContactarTecnicos = { nav.navigate("tecnicos") }
             )
+        }
+
+        // Técnicos
+        composable("tecnicos") {
+            TecnicosScreen(
+                viewModel = tecnicosVM,
+                onVolver = { nav.popBackStack() },
+                onVerPerfil = { id -> nav.navigate("perfil_tecnico/$id") }
+            )
+        }
+        composable("perfil_tecnico/{tecnicoId}") { backEntry ->
+            PerfilTecnicoScreen(
+                viewModel = perfilTecnicoVM,
+                tecnicoId = backEntry.arguments?.getString("tecnicoId") ?: "",
+                onVolver = { nav.popBackStack() }
+            )
+        }
+
+        // Resto de pantallas
+        composable("rankings") {
+            RankingsScreen(viewModel = rankingsVM, onVolver = { nav.popBackStack() })
+        }
+        composable("proyectos") {
+            MisProyectosScreen(viewModel = proyectosVM, onVolver = { nav.popBackStack() })
+        }
+        composable("presupuestos") {
+            PresupuestosScreen(viewModel = presupuestosVM, onVolver = { nav.popBackStack() })
+        }
+        composable("historial_informes") {
+            HistorialInformesScreen(
+                viewModel = historialVM,
+                onVolver = { nav.popBackStack() },
+                onVerInforme = { inf ->
+                    informeVM.cargarInforme(inf)
+                    nav.navigate("informe")
+                }
+            )
+        }
+        composable("mis_viviendas") {
+            MisViviendasScreen(
+                viewModel = viviendasVM,
+                onVolver = { nav.popBackStack() },
+                onNuevoPreestudio = { nav.navigate("preestudio") }
+            )
+        }
+        composable("chat/{chatId}") { backEntry ->
+            ChatScreen(
+                viewModel = chatVM,
+                chatId = backEntry.arguments?.getString("chatId") ?: "",
+                onVolver = { nav.popBackStack() }
+            )
+        }
+        composable("graficas") {
+            GraficasConsumoScreen(viewModel = graficasVM, onVolver = { nav.popBackStack() })
+        }
+        composable("mapa_tecnicos") {
+            MapaTecnicosScreen(
+                viewModel = tecnicosVM,
+                onVolver = { nav.popBackStack() },
+                onVerPerfil = { id -> nav.navigate("perfil_tecnico/$id") }
+            )
+        }
+        composable("sobre_app") {
+            SobreAppScreen(onVolver = { nav.popBackStack() })
+        }
+        composable("ajustes") {
+            AjustesScreen(viewModel = ajustesVM, onVolver = { nav.popBackStack() })
         }
     }
 }

@@ -1,7 +1,9 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,331 +13,214 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.ViewModel.RegistroViewModel
 
 @Composable
 fun RegistroScreen(
-    // Lambdas para navegar a otras pantallas
-    onCrearCuenta: () -> Unit = {},
-    onIniciarSesion: () -> Unit = {}
+    viewModel: RegistroViewModel,
+    onRegistroExitoso: () -> Unit,
+    onIniciarSesion: () -> Unit
 ) {
-
-    // Colores principales
+    val estado = viewModel.estado
     val verde = Color(0xFF16A34A)
     val fondo = Color(0xFFEEF8F5)
-
-    // Estados locales del formulario
-    var nombre by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var tipoUsuario by remember { mutableStateOf("Propietario") }
-    var contrasena by remember { mutableStateOf("") }
-    var confirmarContrasena by remember { mutableStateOf("") }
-
-    // Controla si el menú desplegable del tipo de usuario está abierto o cerrado
+    val gris = Color(0xFF6B7280)
+    val borde = Color(0xFFD1D5DB)
     var expandirTipo by remember { mutableStateOf(false) }
 
-    //Campos de validacion de datos
-    val emailValido = android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
-    val contrasenaValida = contrasena.length >= 8
-    val contrasenaNum = contrasena.any { it.isDigit() } && contrasena.any { it.isLetter() }
-    val formularioValido = emailValido && contrasenaValida && contrasena == confirmarContrasena && nombre.isNotEmpty()
+    LaunchedEffect(estado.registroCorrecto) { if (estado.registroCorrecto) onRegistroExitoso() }
 
-    // Scaffold estructura base de la pantalla
     Scaffold(containerColor = fondo) { pv ->
         Column(
             modifier = Modifier
                 .padding(pv)
-                .fillMaxSize()              // ocupa toda la pantalla
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(26.dp))
 
-            // Icono superior dentro de un contenedor verde con
-            // esquinas redondeadas junto con el logo provisional de mi app
-            Surface(
-                modifier = Modifier.size(56.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = verde
-            ) {
+            // Logo
+            Surface(Modifier.size(56.dp), shape = RoundedCornerShape(14.dp), color = verde) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
+                    Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(26.dp))
                 }
             }
-
             Spacer(Modifier.height(10.dp))
-
-            // Nombre de la app
             Text("ZeroHaus", color = verde, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-
-            Spacer(Modifier.height(4.dp))
-
-            // Subtítulo
             Text("Crea tu cuenta", color = Color(0xFF2F3A3A), fontSize = 13.sp)
-
             Spacer(Modifier.height(18.dp))
 
-            // Card que contiene el formulario de registro
+            // Formulario
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(Modifier.padding(18.dp)) {
-
-                    // Título del formulario
                     Text("Registrarse", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-
                     Spacer(Modifier.height(14.dp))
 
-                    // Campo para escribir el Nombre
+                    // Nombre
                     Text("Nombre completo", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
-                        value = nombre,                      // valor actual del input
-                        onValueChange = { nombre = it },     // actualiza al escribir
-                        placeholder = { Text("Tu nombre", fontSize = 13.sp) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF6B7280))
-                        },
+                        value = estado.nombre,
+                        onValueChange = { viewModel.cambiarNombre(it) },
+                        placeholder = { Text("Tu nombre") },
+                        leadingIcon = { Icon(Icons.Default.Person, null, tint = gris) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                            focusedBorderColor = Color(0xFF9CA3AF),
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Campo de Email
-                    Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        placeholder = { Text("tu@email.com", fontSize = 13.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.MailOutline,
-                                contentDescription = null,
-                                tint = Color(0xFF6B7280)
-                            )
-                        },
-                        singleLine = true,
-                        isError = email.isNotEmpty() && !emailValido,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                            focusedBorderColor = Color(0xFF9CA3AF)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (email.isNotEmpty() && !emailValido) {
-                        Text(
-                            text = "Introduce un email válido",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 11.sp
-                        )
+                    if (estado.nombre.isEmpty() && estado.error != null) {
+                        Text("El nombre es obligatorio", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Selector sobre el tipo de usuario (propietario / técnico)
+                    // Email
+                    Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = estado.email,
+                        onValueChange = { viewModel.cambiarEmail(it) },
+                        placeholder = { Text("tu@email.com") },
+                        leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
+                        isError = estado.email.isNotEmpty() && !estado.emailValido,
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (estado.email.isNotEmpty() && !estado.emailValido) {
+                        Text("Introduce un email válido", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Tipo de usuario
                     Text("Tipo de usuario", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
-
-                    // Box para superponer el DropdownMenu encima del TextField
-                    // y que quede correctamente alineado
                     Box(Modifier.fillMaxWidth()) {
-
-                        // TextField en modo readOnly para que funcione
-                        // como un selector y se vea mas bonito
                         OutlinedTextField(
-                            value = tipoUsuario,     // lo que se muestra
-                            onValueChange = {},      // no se edita escribiendo
-                            readOnly = true,         // evita que se escriba es solo de escritura
+                            value = estado.tipoUsuario, onValueChange = {}, readOnly = true,
                             trailingIcon = {
                                 IconButton(onClick = { expandirTipo = true }) {
-                                    Icon(
-                                        Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = Color(0xFF6B7280)
-                                    )
+                                    Icon(Icons.Default.ArrowDropDown, null, tint = gris)
                                 }
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedBorderColor = Color(0xFFD1D5DB),
-                                focusedBorderColor = Color(0xFF9CA3AF),
-                                unfocusedContainerColor = Color.White,
-                                focusedContainerColor = Color.White
-                            ),
+                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                             modifier = Modifier.fillMaxWidth()
                         )
-
-                        // Menú desplegable con opciones
-                        DropdownMenu(
-                            expanded = expandirTipo,
-                            onDismissRequest = { expandirTipo = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Propietario") },
-                                onClick = {
-                                    tipoUsuario = "Propietario"
-                                    expandirTipo = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Técnico") },
-                                onClick = {
-                                    tipoUsuario = "Técnico"
-                                    expandirTipo = false
-                                }
-                            )
+                        DropdownMenu(expanded = expandirTipo, onDismissRequest = { expandirTipo = false }) {
+                            listOf("Propietario", "Técnico").forEach { opt ->
+                                DropdownMenuItem(
+                                    text = { Text(opt) },
+                                    onClick = { viewModel.cambiarTipoUsuario(opt); expandirTipo = false }
+                                )
+                            }
                         }
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Campo para Contraseña
+                    // Contraseña
                     Text("Contraseña", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
-                        value = contrasena,
-                        onValueChange = { contrasena = it },
-                        placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = Color(0xFF6B7280)
-                            )
-                        },
-                        singleLine = true,
+                        value = estado.contrasena,
+                        onValueChange = { viewModel.cambiarContrasena(it) },
+                        placeholder = { Text("Mínimo 8 caracteres") },
+                        leadingIcon = { Icon(Icons.Default.Lock, null, tint = gris) },
                         visualTransformation = PasswordVisualTransformation(),
-                        isError = contrasena.isNotEmpty() && !contrasenaValida && !contrasenaNum,
+                        isError = estado.contrasena.isNotEmpty() && !estado.contrasenaValida,
+                        singleLine = true,
                         shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                            focusedBorderColor = Color(0xFF9CA3AF),
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    if (contrasena.isNotEmpty() && !contrasenaValida) {
-                        Text(
-                            text = "La contraseña debe tener al menos 8 caracteres",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 11.sp
-                        )
+                    if (estado.contrasena.isNotEmpty() && !estado.contrasenaValida) {
+                        Text("Mínimo 8 caracteres", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
-                    if (contrasena.isNotEmpty() && !contrasenaValida) {
-                        Text(
-                            text = "La contraseña debe contener un numero y una letra",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 11.sp
-                        )
+                    if (estado.contrasena.isNotEmpty() && estado.contrasenaValida && !estado.contrasenaNumeroLetra) {
+                        Text("Debe contener al menos un número y una letra", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Campo para confirmar contraseña
+                    // Confirmar contraseña
                     Text("Confirmar contraseña", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
-                        value = confirmarContrasena,
-                        onValueChange = { confirmarContrasena = it },
-                        placeholder = { Text("Mínimo 8 caracteres", fontSize = 13.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = Color(0xFF6B7280)
-                            )
-                        },
-                        singleLine = true,
+                        value = estado.confirmarContrasena,
+                        onValueChange = { viewModel.cambiarConfirmarContrasena(it) },
+                        placeholder = { Text("Repite la contraseña") },
+                        leadingIcon = { Icon(Icons.Default.Lock, null, tint = gris) },
                         visualTransformation = PasswordVisualTransformation(),
-                        isError = confirmarContrasena.isNotEmpty() && !contrasenaValida
-                                && confirmarContrasena != contrasena && !contrasenaNum,
+                        isError = estado.confirmarContrasena.isNotEmpty() && estado.contrasena != estado.confirmarContrasena,
+                        singleLine = true,
                         shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color(0xFFD1D5DB),
-                            focusedBorderColor = Color(0xFF9CA3AF),
-                            unfocusedContainerColor = Color.White,
-                            focusedContainerColor = Color.White
-                        ),
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    if (confirmarContrasena.isNotEmpty() && confirmarContrasena != contrasena) {
-                        Text(
-                            text = "Las contraseñas deben ser inguales",
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 11.sp
-                        )
+                    if (estado.confirmarContrasena.isNotEmpty() && estado.contrasena != estado.confirmarContrasena) {
+                        Text("Las contraseñas no coinciden", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(18.dp))
 
-                    // Botón principal para registrarse y crear cuenta
+                    // Botón crear cuenta
                     Button(
-                        onClick = onCrearCuenta, // luego lo conectarás con ViewModel (validación/registro)
-                        enabled = formularioValido,
+                        onClick = { viewModel.crearCuenta() },
+                        enabled = estado.formularioValido && !estado.cargando,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(vertical = 12.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        if (estado.cargando) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
                         Text("Crear cuenta", color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
 
                     Spacer(Modifier.height(14.dp))
 
-                    // Texto inferior con acción para volver a login
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Text("¿Ya tienes cuenta? ", color = Color(0xFF6B7280), fontSize = 12.sp)
-                        TextButton(
-                            onClick = onIniciarSesion,
-                            contentPadding = PaddingValues(0.dp)
+                    // Volver a login
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        Text("¿Ya tienes cuenta? ", color = gris, fontSize = 12.sp)
+                        TextButton(onClick = onIniciarSesion, contentPadding = PaddingValues(0.dp)) {
+                            Text("Inicia sesión", color = verde, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    // Error del servidor
+                    estado.error?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
                         ) {
-                            Text(
-                                "Inicia sesión",
-                                color = verde,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(it, color = Color(0xFF991B1B), fontSize = 12.sp)
+                            }
                         }
                     }
                 }
             }
 
-            // Empuja el contenido hacia arriba y deja espacio abajo
             Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(20.dp))
         }
     }
-}
-//Preview
-@Preview
-@Composable
-fun RegistroPrevew() {
-    RegistroScreen()
 }

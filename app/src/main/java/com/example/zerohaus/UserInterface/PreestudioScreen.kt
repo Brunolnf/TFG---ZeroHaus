@@ -12,423 +12,209 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.ViewModel.PreestudioViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreestudioScreen(
-    // Acción para volver atrás
+    viewModel: PreestudioViewModel,
     onVolver: () -> Unit = {},
-
-    // Acción que al pulsar el botón se generara el informe en un futuro
-    onGenerarInforme: () -> Unit = {}
+    onInformeGenerado: () -> Unit = {}
 ) {
-    // Colores base para mantener el estilo del resto de pantallas
     val verde = Color(0xFF16A34A)
     val gris = Color(0xFF6B7280)
     val fondo = Color(0xFFF6F7F9)
     val borde = Color(0xFFE5E7EB)
+    val estado = viewModel.estado
 
-    // Estados del formulario (por ahora están en memoriaes decir, si sales de pantalla se pierden)
-    var nombreVivienda by remember { mutableStateOf("Mi vivienda principal") }
-    var superficie by remember { mutableStateOf("100") }
-    var anio by remember { mutableStateOf("2000") }
-
-    var ventanas by remember { mutableStateOf("Vidrio simple") }
-    var aislamiento by remember { mutableStateOf("Aislamiento parcial") }
-
-    var calefaccion by remember { mutableStateOf("Caldera de gas") }
-    var acs by remember { mutableStateOf("Gas") }
-
-    var direccion by remember { mutableStateOf("") }
-    var orientacion by remember { mutableStateOf("Sur") }
-
-    // Estados para abrir/cerrar cada desplegable
     var expandVentanas by remember { mutableStateOf(false) }
     var expandAislamiento by remember { mutableStateOf(false) }
     var expandCalefaccion by remember { mutableStateOf(false) }
     var expandAcs by remember { mutableStateOf(false) }
     var expandOrientacion by remember { mutableStateOf(false) }
 
-    // Scaffold: TopAppBar junto al contenido
+    // Cuando se genera el informe, navegar automáticamente
+    LaunchedEffect(estado.informeGenerado) {
+        if (estado.informeGenerado != null) onInformeGenerado()
+    }
+
     Scaffold(
         containerColor = fondo,
         topBar = {
             TopAppBar(
-                // Título y subtítulo
                 title = {
                     Column {
                         Text("Preestudio energético", fontWeight = FontWeight.SemiBold)
                         Text("Completa los datos de tu vivienda", color = gris, fontSize = 12.sp)
                     }
                 },
-                // Botón de volver
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.Default.ArrowBack, "Volver")
                     }
                 }
             )
         }
     ) { ps ->
-
-        // Contenedor general del formulario
-        Column(
-            modifier = Modifier
-                .padding(ps)
-                .fillMaxSize()
-        ) {
-
-            // Contenido scrollable: así el formulario no se corta en pantallas pequeñas
+        Column(Modifier.padding(ps).fillMaxSize()) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-
-
-                // Card de los Datos básicos
-
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                // Datos básicos
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
-
-                        // Cabecera con icono y título
-                        CabeceraSeccion(
-                            iconoColorFondo = Color(0xFFD1FAE5),
-                            iconoTint = Color(0xFF059669),
-                            icono = Icons.Default.Info,
-                            titulo = "Datos básicos"
-                        )
-
+                        CabeceraSeccion(Color(0xFFD1FAE5), Color(0xFF059669), Icons.Default.Info, "Datos básicos")
                         Spacer(Modifier.height(10.dp))
-
-                        // Nombre de la vivienda
                         EtiquetaCampo("Nombre de la vivienda")
-                        CampoTexto(
-                            valor = nombreVivienda,
-                            onValor = { nombreVivienda = it },
-                            placeholder = "Ej: Mi casa, Piso Madrid…",
-                            borde = borde
-                        )
-
+                        CampoTexto(estado.nombreVivienda, { viewModel.cambiarNombre(it) }, "Ej: Mi casa", borde)
                         Spacer(Modifier.height(10.dp))
-
-                        // Superficie y año en la misma fila
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.weight(1f)) {
                                 EtiquetaCampo("Superficie (m²)")
-                                CampoTexto(
-                                    valor = superficie,
-                                    onValor = { superficie = it },
-                                    placeholder = "100",
-                                    borde = borde
-                                )
+                                CampoTexto(estado.superficie, { viewModel.cambiarSuperficie(it) }, "100", borde)
                             }
                             Column(Modifier.weight(1f)) {
                                 EtiquetaCampo("Año construcción")
-                                CampoTexto(
-                                    valor = anio,
-                                    onValor = { anio = it },
-                                    placeholder = "2000",
-                                    borde = borde
-                                )
+                                CampoTexto(estado.anio, { viewModel.cambiarAnio(it) }, "2000", borde)
                             }
                         }
                     }
                 }
 
-
-                // Card de Envolvente térmica
-
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                // Envolvente térmica
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
-
-                        CabeceraSeccion(
-                            iconoColorFondo = Color(0xFFDBEAFE),
-                            iconoTint = Color(0xFF2563EB),
-                            icono = Icons.Default.Warning,
-                            titulo = "Envolvente térmica"
-                        )
-
+                        CabeceraSeccion(Color(0xFFDBEAFE), Color(0xFF2563EB), Icons.Default.Warning, "Envolvente térmica")
                         Spacer(Modifier.height(10.dp))
-
-                        // Selector de ventanas
-                        SelectorCompacto(
-                            etiqueta = "Tipo de ventanas",
-                            valor = ventanas,
-                            opciones = listOf("Vidrio simple", "Doble acristalamiento", "Triple"),
-                            expandido = expandVentanas,
-                            onExpandido = { expandVentanas = it },
-                            onSeleccion = { ventanas = it },
-                            borde = borde
-                        )
-
+                        SelectorCompacto("Tipo de ventanas", estado.ventanas,
+                            listOf("Vidrio simple", "Doble acristalamiento", "Triple"),
+                            expandVentanas, { expandVentanas = it }, { viewModel.cambiarVentanas(it) }, borde)
                         Spacer(Modifier.height(10.dp))
-
-                        // Selector de aislamiento
-                        SelectorCompacto(
-                            etiqueta = "Aislamiento",
-                            valor = aislamiento,
-                            opciones = listOf(
-                                "Sin aislamiento",
-                                "Aislamiento parcial",
-                                "Aislamiento completo"
-                            ),
-                            expandido = expandAislamiento,
-                            onExpandido = { expandAislamiento = it },
-                            onSeleccion = { aislamiento = it },
-                            borde = borde
-                        )
+                        SelectorCompacto("Aislamiento", estado.aislamiento,
+                            listOf("Sin aislamiento", "Aislamiento parcial", "Aislamiento completo"),
+                            expandAislamiento, { expandAislamiento = it }, { viewModel.cambiarAislamiento(it) }, borde)
                     }
                 }
 
-                // Card de Sistemas energéticos
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                // Sistemas energéticos
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
-
-                        CabeceraSeccion(
-                            iconoColorFondo = Color(0xFFEDE9FE),
-                            iconoTint = Color(0xFF7C3AED),
-                            icono = Icons.Default.Build,
-                            titulo = "Sistemas energéticos"
-                        )
-
+                        CabeceraSeccion(Color(0xFFEDE9FE), Color(0xFF7C3AED), Icons.Default.Build, "Sistemas energéticos")
                         Spacer(Modifier.height(10.dp))
-
-                        // Selector de calefacción
-                        SelectorCompacto(
-                            etiqueta = "Calefacción",
-                            valor = calefaccion,
-                            opciones = listOf(
-                                "Caldera de gas",
-                                "Eléctrica",
-                                "Aerotermia",
-                                "Biomasa"
-                            ),
-                            expandido = expandCalefaccion,
-                            onExpandido = { expandCalefaccion = it },
-                            onSeleccion = { calefaccion = it },
-                            borde = borde
-                        )
-
+                        SelectorCompacto("Calefacción", estado.calefaccion,
+                            listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa"),
+                            expandCalefaccion, { expandCalefaccion = it }, { viewModel.cambiarCalefaccion(it) }, borde)
                         Spacer(Modifier.height(10.dp))
-
-                        // Selector de ACS
-                        SelectorCompacto(
-                            etiqueta = "ACS",
-                            valor = acs,
-                            opciones = listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia"),
-                            expandido = expandAcs,
-                            onExpandido = { expandAcs = it },
-                            onSeleccion = { acs = it },
-                            borde = borde
-                        )
+                        SelectorCompacto("ACS", estado.acs,
+                            listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia"),
+                            expandAcs, { expandAcs = it }, { viewModel.cambiarAcs(it) }, borde)
                     }
                 }
 
-                //Card de ubicacion
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                // Ubicación
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
-
-                        CabeceraSeccion(
-                            iconoColorFondo = Color(0xFFFFEDD5),
-                            iconoTint = Color(0xFFEA580C),
-                            icono = Icons.Default.LocationOn,
-                            titulo = "Ubicación"
-                        )
-
+                        CabeceraSeccion(Color(0xFFFFEDD5), Color(0xFFEA580C), Icons.Default.LocationOn, "Ubicación")
                         Spacer(Modifier.height(10.dp))
-
-                        // Dirección
                         EtiquetaCampo("Dirección")
-                        CampoTexto(
-                            valor = direccion,
-                            onValor = { direccion = it },
-                            placeholder = "Calle, número, ciudad",
-                            borde = borde
-                        )
-
+                        CampoTexto(estado.direccion, { viewModel.cambiarDireccion(it) }, "Calle, número, ciudad", borde)
                         Spacer(Modifier.height(10.dp))
-
-                        // Orientación
-                        SelectorCompacto(
-                            etiqueta = "Orientación",
-                            valor = orientacion,
-                            opciones = listOf("Norte", "Sur", "Este", "Oeste"),
-                            expandido = expandOrientacion,
-                            onExpandido = { expandOrientacion = it },
-                            onSeleccion = { orientacion = it },
-                            borde = borde
-                        )
+                        SelectorCompacto("Orientación", estado.orientacion,
+                            listOf("Norte", "Sur", "Este", "Oeste"),
+                            expandOrientacion, { expandOrientacion = it }, { viewModel.cambiarOrientacion(it) }, borde)
                     }
                 }
 
-                // Botón principal para terminar el preestudio
+                // Error
+                estado.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+
+                // Botón generar informe
                 Button(
-                    onClick = onGenerarInforme,
+                    onClick = { viewModel.generarInforme() },
+                    enabled = !estado.cargando,
                     colors = ButtonDefaults.buttonColors(containerColor = verde),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 14.dp)
                 ) {
-                    Text(
-                        "Generar informe energético",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    if (estado.cargando) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Generar informe energético", color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
-
                 Spacer(Modifier.height(6.dp))
             }
         }
     }
 }
 
-/* Cabecera de cada sección:
- * un icono pequeño con fondo junto a el título de la sección
- */
 @Composable
-private fun CabeceraSeccion(
-    iconoColorFondo: Color,
-    iconoTint: Color,
-    icono: androidx.compose.ui.graphics.vector.ImageVector,
-    titulo: String
-) {
+private fun CabeceraSeccion(iconoColorFondo: Color, iconoTint: Color, icono: androidx.compose.ui.graphics.vector.ImageVector, titulo: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(30.dp)
-                .background(iconoColorFondo, RoundedCornerShape(10.dp)),
+            modifier = Modifier.size(30.dp).background(iconoColorFondo, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                icono,
-                contentDescription = null,
-                tint = iconoTint,
-                modifier = Modifier.size(18.dp)
-            )
+            Icon(icono, null, tint = iconoTint, modifier = Modifier.size(18.dp))
         }
         Spacer(Modifier.width(10.dp))
         Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
     }
 }
 
-// Etiqueta pequeña encima de cada campo de texto
-// ya que la uso en cada una de las cards
 @Composable
 private fun EtiquetaCampo(texto: String) {
     Text(texto, fontSize = 12.sp, color = Color(0xFF111827))
     Spacer(Modifier.height(6.dp))
 }
 
-// Campo de texto reutilizable con estilo consistente
 @Composable
-private fun CampoTexto(
-    valor: String,
-    onValor: (String) -> Unit,
-    placeholder: String,
-    borde: Color
-) {
+private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: String, borde: Color) {
     OutlinedTextField(
-        value = valor,
-        onValueChange = onValor,
+        value = valor, onValueChange = onValor,
         placeholder = { Text(placeholder, fontSize = 13.sp) },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        singleLine = true, shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = borde,
-            focusedBorderColor = borde,
-            unfocusedContainerColor = Color.White,
-            focusedContainerColor = Color.White
+            unfocusedBorderColor = borde, focusedBorderColor = borde,
+            unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
         ),
         modifier = Modifier.fillMaxWidth()
     )
 }
 
-/* Selector compacto  es como un dropdown pero queda mejor visualmente
-y concuerda mas con la vista de mi analisis funcional
- */
 @Composable
 private fun SelectorCompacto(
-    etiqueta: String,
-    valor: String,
-    opciones: List<String>,
-    expandido: Boolean,
-    onExpandido: (Boolean) -> Unit,
-    onSeleccion: (String) -> Unit,
-    borde: Color
+    etiqueta: String, valor: String, opciones: List<String>,
+    expandido: Boolean, onExpandido: (Boolean) -> Unit,
+    onSeleccion: (String) -> Unit, borde: Color
 ) {
     EtiquetaCampo(etiqueta)
-
     Box(Modifier.fillMaxWidth()) {
-
-        // Campo que muestra el valor actual
         OutlinedTextField(
-            value = valor,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
+            value = valor, onValueChange = {}, readOnly = true, singleLine = true,
             trailingIcon = {
                 IconButton(onClick = { onExpandido(true) }) {
-                    Icon(
-                        Icons.Default.ArrowDropDown,
-                        contentDescription = null,
-                        tint = Color(0xFF6B7280)
-                    )
+                    Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF6B7280))
                 }
             },
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = borde,
-                focusedBorderColor = borde,
-                unfocusedContainerColor = Color.White,
-                focusedContainerColor = Color.White
+                unfocusedBorderColor = borde, focusedBorderColor = borde,
+                unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
             ),
             modifier = Modifier.fillMaxWidth()
         )
-
-        // Menú con las opciones
-        DropdownMenu(
-            expanded = expandido,
-            onDismissRequest = { onExpandido(false) }
-        ) {
+        DropdownMenu(expanded = expandido, onDismissRequest = { onExpandido(false) }) {
             opciones.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(opt) },
-                    onClick = {
-                        onSeleccion(opt)
-                        onExpandido(false)
-                    }
-                )
+                DropdownMenuItem(text = { Text(opt) }, onClick = { onSeleccion(opt); onExpandido(false) })
             }
         }
     }
-}
-
-@Preview
-@Composable
-fun PreestudioPreview() {
-    PreestudioScreen()
 }

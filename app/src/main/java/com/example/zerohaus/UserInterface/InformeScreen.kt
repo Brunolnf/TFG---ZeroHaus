@@ -1,190 +1,70 @@
+
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.ViewModel.InformeViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InformeScreen(
-    //Lambdas para desplazarme entre las pantallas
-    onVolver: () -> Unit = {},
-    onDescargar: () -> Unit = {},
-    onCompartir: () -> Unit = {},
-    onContactarTecnicos: () -> Unit = {}
-) {
-    //Variables de colores
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+fun InformeScreen(viewModel: InformeViewModel, onVolver: () -> Unit = {}, onContactarTecnicos: () -> Unit = {}) {
+    val verde = Color(0xFF16A34A); val gris = Color(0xFF6B7280); val borde = Color(0xFFE5E7EB)
+    val informe = viewModel.informe; val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()); val ctx = LocalContext.current
+    LaunchedEffect(Unit) { if (informe == null) viewModel.cargarUltimoInforme() }
 
-    //Estructura de la pantalla
-    Scaffold(
-        containerColor = fondo,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Último informe", fontWeight = FontWeight.SemiBold)
-                        Text("Resumen de eficiencia energética", color = gris, fontSize = 12.sp)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onCompartir) {
-                        Icon(Icons.Default.Share, contentDescription = "Compartir")
-                    }
-                    IconButton(onClick = onDescargar) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Descargar")
-                    }
-                }
-            )
-        }
-    ) { pv ->
-
-        Column(
-            modifier = Modifier
-                .padding(pv)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-
-            // Datos generales sobre la vivienda
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, borde),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Vivienda", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Mi vivienda principal", fontWeight = FontWeight.Medium)
-                    Text("Generado: 02/02/2026", color = gris, fontSize = 12.sp)
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+        TopAppBar(title = { Column { Text("Informe energético", fontWeight = FontWeight.SemiBold); Text("Resumen de eficiencia", color = gris, fontSize = 12.sp) } },
+            navigationIcon = { IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") } },
+            actions = { if (informe != null) IconButton(onClick = { compartirInforme(ctx, informe) }) { Icon(Icons.Default.Share, "Compartir") } })
+    }) { pv ->
+        if (viewModel.cargando) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = verde) } }
+        else if (informe == null) {
+            Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Assessment, null, tint = gris, modifier = Modifier.size(48.dp)); Spacer(Modifier.height(12.dp))
+                    Text("No hay informes disponibles", color = gris); Text("Realiza un preestudio primero", color = gris, fontSize = 13.sp); Spacer(Modifier.height(16.dp))
+                    OutlinedButton(onClick = { viewModel.cargarUltimoInforme() }) { Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Reintentar") }
                 }
             }
-
-            // Calificación energética segun los campos que rellenes en los formularios
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, borde),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Calificación energética", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Etiqueta", color = gris, fontSize = 12.sp)
-                            Text("D", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                            Text("Estado", color = gris, fontSize = 12.sp)
-                            Text("Eficiencia media", fontWeight = FontWeight.Medium)
-                        }
+        } else {
+            Column(Modifier.padding(pv).padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, borde), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) { Text("Vivienda", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(6.dp)); Text(informe.nombreVivienda, fontWeight = FontWeight.Medium); Text("Generado: ${sdf.format(Date(informe.fechaGeneracion))}", color = gris, fontSize = 12.sp) }
+                }
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, borde), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) { Text("Calificación energética", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text("Etiqueta", color = gris, fontSize = 12.sp); Text(informe.etiqueta, fontWeight = FontWeight.Bold, fontSize = 20.sp) }; Column(horizontalAlignment = Alignment.End) { Text("Estado", color = gris, fontSize = 12.sp); Text(informe.estadoEficiencia, fontWeight = FontWeight.Medium) } } }
+                }
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, borde), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) { Text("Indicadores", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(10.dp)); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text("Consumo", color = gris, fontSize = 12.sp); Text("${informe.consumoEstimado} kWh/año", fontWeight = FontWeight.Medium) }; Column(horizontalAlignment = Alignment.End) { Text("Emisiones", color = gris, fontSize = 12.sp); Text("${informe.emisiones} kg CO₂/año", fontWeight = FontWeight.Medium) } }; Spacer(Modifier.height(10.dp)); Text("Coste anual", color = gris, fontSize = 12.sp); Text("${informe.costeAnual} €/año", fontWeight = FontWeight.Medium) }
+                }
+                if (informe.recomendaciones.isNotEmpty()) {
+                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = BorderStroke(1.dp, borde), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp)) { Text("Recomendaciones", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(10.dp)); informe.recomendaciones.forEachIndexed { i, r -> Text("• ${r.titulo}", fontWeight = FontWeight.Medium); Text("Ahorro: ${r.ahorroEstimado}%", color = gris, fontSize = 12.sp); if (i < informe.recomendaciones.lastIndex) Spacer(Modifier.height(10.dp)) } }
                     }
                 }
-            }
-
-            // Indicadores de eficiencia y emisiones
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, borde),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Indicadores", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Consumo estimado", color = gris, fontSize = 12.sp)
-                            Text("145 kWh/año", fontWeight = FontWeight.Medium)
-                        }
-                        Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                            Text("Emisiones", color = gris, fontSize = 12.sp)
-                            Text("32 kg CO₂/año", fontWeight = FontWeight.Medium)
-                        }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-                    Text("Coste anual estimado", color = gris, fontSize = 12.sp)
-                    Text("22 €/año", fontWeight = FontWeight.Medium)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    OutlinedButton(onClick = { compartirInforme(ctx, informe) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, verde)) { Icon(Icons.Default.Share, null, tint = verde, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Compartir", color = verde, fontWeight = FontWeight.SemiBold) }
+                    Button(onClick = onContactarTecnicos, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = verde), contentPadding = PaddingValues(vertical = 12.dp)) { Icon(Icons.Default.AccountBox, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Técnicos", color = Color.White, fontWeight = FontWeight.SemiBold) }
                 }
-            }
-
-            // Recomendaciones para el usuario sobre la vivienda que no creo que tengan
-            // ninguna funcionalidad nunca es meramente informativa
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                border = BorderStroke(1.dp, borde),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("Recomendaciones principales", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(10.dp))
-
-                    Text("• Mejorar aislamiento de ventanas", fontWeight = FontWeight.Medium)
-                    Text("Ahorro estimado: 25%", color = gris, fontSize = 12.sp)
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text("• Instalar aerotermia", fontWeight = FontWeight.Medium)
-                    Text("Ahorro estimado: 20%", color = gris, fontSize = 12.sp)
-
-                    Spacer(Modifier.height(10.dp))
-
-                    Text("• Sustituir iluminación por LED", fontWeight = FontWeight.Medium)
-                    Text("Ahorro estimado: 10%", color = gris, fontSize = 12.sp)
-                }
-            }
-
-            // Boton para ir a la pantalla tecnicos
-            Button(
-                onClick = onContactarTecnicos,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = verde),
-                contentPadding = PaddingValues(vertical = 12.dp)
-            ) {
-                Icon(Icons.Default.AccountBox, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Contactar técnicos", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         }
     }
-}
-
-@Preview
-@Composable
-fun InformePreview() {
-    InformeScreen()
 }
