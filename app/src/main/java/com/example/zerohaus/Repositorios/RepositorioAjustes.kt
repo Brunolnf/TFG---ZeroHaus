@@ -1,5 +1,5 @@
 
-package com.example.zerohaus.data.repository
+package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.AjustesUsuario
 import com.google.firebase.auth.FirebaseAuth

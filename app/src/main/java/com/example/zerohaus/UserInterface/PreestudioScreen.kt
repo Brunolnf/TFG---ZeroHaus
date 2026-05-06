@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,11 +30,6 @@ fun PreestudioScreen(
     val borde = Color(0xFFE5E7EB)
     val estado = viewModel.estado
 
-    var expandVentanas by remember { mutableStateOf(false) }
-    var expandAislamiento by remember { mutableStateOf(false) }
-    var expandCalefaccion by remember { mutableStateOf(false) }
-    var expandAcs by remember { mutableStateOf(false) }
-    var expandOrientacion by remember { mutableStateOf(false) }
 
     // Cuando se genera el informe, navegar automáticamente
     LaunchedEffect(estado.informeGenerado) {
@@ -52,7 +48,7 @@ fun PreestudioScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.Default.ArrowBack, "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
                     }
                 }
             )
@@ -92,11 +88,11 @@ fun PreestudioScreen(
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("Tipo de ventanas", estado.ventanas,
                             listOf("Vidrio simple", "Doble acristalamiento", "Triple"),
-                            expandVentanas, { expandVentanas = it }, { viewModel.cambiarVentanas(it) }, borde)
+                            { viewModel.cambiarVentanas(it) }, borde)
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("Aislamiento", estado.aislamiento,
                             listOf("Sin aislamiento", "Aislamiento parcial", "Aislamiento completo"),
-                            expandAislamiento, { expandAislamiento = it }, { viewModel.cambiarAislamiento(it) }, borde)
+                            { viewModel.cambiarAislamiento(it) }, borde)
                     }
                 }
 
@@ -107,11 +103,11 @@ fun PreestudioScreen(
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("Calefacción", estado.calefaccion,
                             listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa"),
-                            expandCalefaccion, { expandCalefaccion = it }, { viewModel.cambiarCalefaccion(it) }, borde)
+                            { viewModel.cambiarCalefaccion(it) }, borde)
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("ACS", estado.acs,
                             listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia"),
-                            expandAcs, { expandAcs = it }, { viewModel.cambiarAcs(it) }, borde)
+                            { viewModel.cambiarAcs(it) }, borde)
                     }
                 }
 
@@ -125,7 +121,7 @@ fun PreestudioScreen(
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("Orientación", estado.orientacion,
                             listOf("Norte", "Sur", "Este", "Oeste"),
-                            expandOrientacion, { expandOrientacion = it }, { viewModel.cambiarOrientacion(it) }, borde)
+                            { viewModel.cambiarOrientacion(it) }, borde)
                     }
                 }
 
@@ -177,43 +173,42 @@ private fun EtiquetaCampo(texto: String) {
 
 @Composable
 private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: String, borde: Color) {
+    val verde = Color(0xFF16A34A)
     OutlinedTextField(
         value = valor, onValueChange = onValor,
         placeholder = { Text(placeholder, fontSize = 13.sp) },
         singleLine = true, shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedBorderColor = borde, focusedBorderColor = borde,
+            unfocusedBorderColor = borde, focusedBorderColor = verde,
             unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
         ),
         modifier = Modifier.fillMaxWidth()
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SelectorCompacto(
     etiqueta: String, valor: String, opciones: List<String>,
-    expandido: Boolean, onExpandido: (Boolean) -> Unit,
     onSeleccion: (String) -> Unit, borde: Color
 ) {
+    val verde = Color(0xFF16A34A)
+    var expandido by remember { mutableStateOf(false) }
     EtiquetaCampo(etiqueta)
-    Box(Modifier.fillMaxWidth()) {
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
         OutlinedTextField(
             value = valor, onValueChange = {}, readOnly = true, singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = { onExpandido(true) }) {
-                    Icon(Icons.Default.ArrowDropDown, null, tint = Color(0xFF6B7280))
-                }
-            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor = borde, focusedBorderColor = borde,
+                unfocusedBorderColor = borde, focusedBorderColor = verde,
                 unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
         )
-        DropdownMenu(expanded = expandido, onDismissRequest = { onExpandido(false) }) {
+        ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
             opciones.forEach { opt ->
-                DropdownMenuItem(text = { Text(opt) }, onClick = { onSeleccion(opt); onExpandido(false) })
+                DropdownMenuItem(text = { Text(opt) }, onClick = { onSeleccion(opt); expandido = false })
             }
         }
     }

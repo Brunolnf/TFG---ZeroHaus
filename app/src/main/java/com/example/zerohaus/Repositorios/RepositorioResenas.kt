@@ -3,8 +3,6 @@ package com.example.zerohaus.Repositorios
 import com.example.zerohaus.Modelos.Resena
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-
 class RepositorioResenas {
 
     private val db = FirebaseFirestore.getInstance()
@@ -13,10 +11,13 @@ class RepositorioResenas {
     fun obtenerResenas(tecnicoId: String, callback: (List<Resena>) -> Unit) {
         db.collection("resenas")
             .whereEqualTo("tecnicoId", tecnicoId)
-            .orderBy("fecha", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
-                callback(snap.documents.mapNotNull { it.toObject(Resena::class.java) })
+                callback(
+                    snap.documents
+                        .mapNotNull { it.toObject(Resena::class.java) }
+                        .sortedByDescending { it.fecha }
+                )
             }
             .addOnFailureListener { callback(emptyList()) }
     }
@@ -34,18 +35,16 @@ class RepositorioResenas {
             }
     }
 
-    private fun actualizarRatingTecnico(tecnicoId: String) {
+    fun actualizarRatingTecnico(tecnicoId: String) {
         db.collection("resenas")
             .whereEqualTo("tecnicoId", tecnicoId)
             .get()
             .addOnSuccessListener { snap ->
                 val resenas = snap.documents.mapNotNull { it.toObject(Resena::class.java) }
-                if (resenas.isNotEmpty()) {
-                    val media = resenas.map { it.puntuacion }.average()
-                    val mediaRedondeada = Math.round(media * 10.0) / 10.0
-                    db.collection("tecnicos").document(tecnicoId)
-                        .update(mapOf("rating" to mediaRedondeada, "opiniones" to resenas.size))
-                }
+                val media = if (resenas.isEmpty()) 0.0
+                            else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
+                db.collection("tecnicos").document(tecnicoId)
+                    .update(mapOf("rating" to media, "opiniones" to resenas.size))
             }
     }
 

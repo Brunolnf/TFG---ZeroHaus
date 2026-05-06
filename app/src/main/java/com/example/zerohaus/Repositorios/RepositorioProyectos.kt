@@ -31,6 +31,13 @@ class RepositorioProyectos {
             }
     }
 
+    fun eliminarProyecto(proyectoId: String, callback: (Boolean) -> Unit) {
+        db.collection("proyectos").document(proyectoId)
+            .delete()
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
+
     fun actualizarTarea(
         proyectoId: String,
         tareaIndex: Int,

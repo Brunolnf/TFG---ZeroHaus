@@ -14,9 +14,26 @@ data class TecnicosEstado(val tecnicos: List<Tecnico> = emptyList(), val busqued
 class TecnicosViewModel : ViewModel() {
     var estado by mutableStateOf(TecnicosEstado())
         private set
-    private val repo = RepositorioTecnicos(); private val repoAuth = RepositorioAutenticacion()
+    private val repo = RepositorioTecnicos()
+    private val repoResenas = RepositorioResenas()
+    private val repoAuth = RepositorioAutenticacion()
 
-    fun cargarTecnicos() { estado = estado.copy(cargando = true); repo.obtenerTecnicos { l -> estado = estado.copy(tecnicos = l, cargando = false) } }
+    fun cargarTecnicos(forzar: Boolean = false) {
+        if (!forzar && estado.tecnicos.isNotEmpty()) return
+        estado = estado.copy(cargando = true)
+        repo.obtenerTecnicos { lista ->
+            if (lista.isEmpty()) { estado = estado.copy(cargando = false); return@obtenerTecnicos }
+            estado = estado.copy(tecnicos = lista.map { it.copy(rating = 0.0, opiniones = 0) }, cargando = false)
+            lista.forEach { t ->
+                repoResenas.obtenerResenas(t.id) { resenas ->
+                    val count = resenas.size
+                    val avg = if (count == 0) 0.0
+                              else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
+                    estado = estado.copy(tecnicos = estado.tecnicos.map { if (it.id == t.id) it.copy(rating = avg, opiniones = count) else it })
+                }
+            }
+        }
+    }
     fun cambiarBusqueda(q: String) { estado = estado.copy(busqueda = q) }
     fun cambiarFiltro(f: String?) { estado = estado.copy(filtro = f) }
     fun tecnicosFiltrados(): List<Tecnico> { val q = estado.busqueda.trim().lowercase(); return estado.tecnicos.filter { q.isBlank() || it.nombre.lowercase().contains(q) || it.especialidades.any { e -> e.lowercase().contains(q) } }.filter { t -> estado.filtro == null || t.especialidades.contains(estado.filtro) } }

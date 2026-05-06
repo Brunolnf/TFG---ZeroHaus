@@ -20,7 +20,7 @@
         <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="TU_API_KEY_AQUI" />
+            android:value="AIzaSyDN-z7jMUMNdcjW1EvQKZiQ9l5qZOHu7a8" />
 
         <!-- Servicio FCM para push notifications -->
         <service
@@ -29,7 +29,19 @@
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
+
         </service>
+
+        <!-- FileProvider para compartir PDFs -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Activity principal -->
         <activity

@@ -10,7 +10,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.zerohaus"
+        applicationId = "es.zerohaus.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -19,13 +19,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("zerohaus-release.jks")
+            storePassword = "ZeroHaus2024!"
+            keyAlias = "zerohaus"
+            keyPassword = "ZeroHaus2024!"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -40,6 +51,10 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    lint {
+        disable += "InvalidFragmentVersionForActivityResult"
     }
 
     // NO necesitas composeOptions cuando usas kotlin.plugin.compose

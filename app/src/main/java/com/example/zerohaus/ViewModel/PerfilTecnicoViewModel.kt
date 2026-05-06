@@ -13,6 +13,7 @@ data class PerfilTecnicoEstado(
     val tecnico: Tecnico? = null,
     val resenas: List<Resena> = emptyList(),
     val yaValorado: Boolean = false,
+    val puedeValorar: Boolean = false,
     val cargando: Boolean = true,
     val enviandoResena: Boolean = false,
     val exitoResena: Boolean = false,
@@ -33,14 +34,31 @@ class PerfilTecnicoViewModel : ViewModel() {
         repoTecnicos.obtenerTecnico(tecnicoId) { tecnico ->
             estado = estado.copy(tecnico = tecnico)
             repoResenas.obtenerResenas(tecnicoId) { resenas ->
+                val realOpiniones = resenas.size
+                val realRating = if (resenas.isEmpty()) 0.0
+                                 else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
+                val tecnicoCorregido = tecnico?.copy(opiniones = realOpiniones, rating = realRating)
+                repoResenas.actualizarRatingTecnico(tecnicoId)
                 repoResenas.yaValorado(tecnicoId) { yaValorado ->
-                    estado = estado.copy(resenas = resenas, yaValorado = yaValorado, cargando = false)
+                    repoTecnicos.puedeValorar(tecnicoId) { puede ->
+                        estado = estado.copy(
+                            tecnico = tecnicoCorregido,
+                            resenas = resenas,
+                            yaValorado = yaValorado,
+                            puedeValorar = puede,
+                            cargando = false
+                        )
+                    }
                 }
             }
         }
     }
 
     fun publicarResena(tecnicoId: String, puntuacion: Int, comentario: String) {
+        if (!estado.puedeValorar || estado.yaValorado) {
+            estado = estado.copy(error = "No puedes valorar a este técnico todavía")
+            return
+        }
         estado = estado.copy(enviandoResena = true, error = null, exitoResena = false)
         repoAuth.obtenerUsuario { usuario ->
             val resena = Resena(

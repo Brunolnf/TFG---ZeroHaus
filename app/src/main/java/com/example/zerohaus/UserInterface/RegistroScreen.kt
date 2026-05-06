@@ -13,22 +13,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.RegistroViewModel
+import com.example.zerohaus.util.LocalCadenas
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegistroScreen(
     viewModel: RegistroViewModel,
     onRegistroExitoso: () -> Unit,
     onIniciarSesion: () -> Unit
 ) {
+    val c = LocalCadenas.current
     val estado = viewModel.estado
     val verde = Color(0xFF16A34A)
     val fondo = Color(0xFFEEF8F5)
     val gris = Color(0xFF6B7280)
     val borde = Color(0xFFD1D5DB)
     var expandirTipo by remember { mutableStateOf(false) }
+    var verContrasena by remember { mutableStateOf(false) }
+    var verConfirmar by remember { mutableStateOf(false) }
 
     LaunchedEffect(estado.registroCorrecto) { if (estado.registroCorrecto) onRegistroExitoso() }
 
@@ -43,34 +49,27 @@ fun RegistroScreen(
         ) {
             Spacer(Modifier.height(26.dp))
 
-            // Logo
-            Surface(Modifier.size(56.dp), shape = RoundedCornerShape(14.dp), color = verde) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Home, null, tint = Color.White, modifier = Modifier.size(26.dp))
-                }
-            }
+            ZeroHausLogo(size = 56.dp)
             Spacer(Modifier.height(10.dp))
             Text("ZeroHaus", color = verde, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Text("Crea tu cuenta", color = Color(0xFF2F3A3A), fontSize = 13.sp)
+            Text(c.registroTitulo, color = Color(0xFF2F3A3A), fontSize = 13.sp)
             Spacer(Modifier.height(18.dp))
 
-            // Formulario
             Card(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(Modifier.padding(18.dp)) {
-                    Text("Registrarse", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(c.registroSubtitulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Spacer(Modifier.height(14.dp))
 
-                    // Nombre
-                    Text("Nombre completo", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroNombre, fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.nombre,
                         onValueChange = { viewModel.cambiarNombre(it) },
-                        placeholder = { Text("Tu nombre") },
+                        placeholder = { Text(c.registroNombrePlaceholder) },
                         leadingIcon = { Icon(Icons.Default.Person, null, tint = gris) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -78,18 +77,17 @@ fun RegistroScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (estado.nombre.isEmpty() && estado.error != null) {
-                        Text("El nombre es obligatorio", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(c.registroNombreError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Email
                     Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.email,
                         onValueChange = { viewModel.cambiarEmail(it) },
-                        placeholder = { Text("tu@email.com") },
+                        placeholder = { Text(c.emailPlaceholder) },
                         leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
                         isError = estado.email.isNotEmpty() && !estado.emailValido,
                         singleLine = true,
@@ -98,32 +96,37 @@ fun RegistroScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (estado.email.isNotEmpty() && !estado.emailValido) {
-                        Text("Introduce un email válido", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(c.emailError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Tipo de usuario
-                    Text("Tipo de usuario", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroTipoUsuario, fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
-                    Box(Modifier.fillMaxWidth()) {
+                    val tipoDisplay = when (estado.tipoUsuario) {
+                        "Técnico" -> c.tipoTecnico
+                        else -> c.tipoPropietario
+                    }
+                    ExposedDropdownMenuBox(
+                        expanded = expandirTipo,
+                        onExpandedChange = { expandirTipo = it }
+                    ) {
                         OutlinedTextField(
-                            value = estado.tipoUsuario, onValueChange = {}, readOnly = true,
-                            trailingIcon = {
-                                IconButton(onClick = { expandirTipo = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, null, tint = gris)
-                                }
-                            },
+                            value = tipoDisplay, onValueChange = {}, readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandirTipo) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
                         )
-                        DropdownMenu(expanded = expandirTipo, onDismissRequest = { expandirTipo = false }) {
-                            listOf("Propietario", "Técnico").forEach { opt ->
+                        ExposedDropdownMenu(
+                            expanded = expandirTipo,
+                            onDismissRequest = { expandirTipo = false }
+                        ) {
+                            listOf("Propietario" to c.tipoPropietario, "Técnico" to c.tipoTecnico).forEach { (clave, etiqueta) ->
                                 DropdownMenuItem(
-                                    text = { Text(opt) },
-                                    onClick = { viewModel.cambiarTipoUsuario(opt); expandirTipo = false }
+                                    text = { Text(etiqueta) },
+                                    onClick = { viewModel.cambiarTipoUsuario(clave); expandirTipo = false }
                                 )
                             }
                         }
@@ -131,15 +134,22 @@ fun RegistroScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Contraseña
-                    Text("Contraseña", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.contrasena, fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.contrasena,
                         onValueChange = { viewModel.cambiarContrasena(it) },
-                        placeholder = { Text("Mínimo 8 caracteres") },
+                        placeholder = { Text(c.contrasenaPlaceholder) },
                         leadingIcon = { Icon(Icons.Default.Lock, null, tint = gris) },
-                        visualTransformation = PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { verContrasena = !verContrasena }) {
+                                Icon(
+                                    if (verContrasena) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    null, tint = gris
+                                )
+                            }
+                        },
+                        visualTransformation = if (verContrasena) VisualTransformation.None else PasswordVisualTransformation(),
                         isError = estado.contrasena.isNotEmpty() && !estado.contrasenaValida,
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -147,23 +157,30 @@ fun RegistroScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (estado.contrasena.isNotEmpty() && !estado.contrasenaValida) {
-                        Text("Mínimo 8 caracteres", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(c.contrasenaError, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
                     if (estado.contrasena.isNotEmpty() && estado.contrasenaValida && !estado.contrasenaNumeroLetra) {
-                        Text("Debe contener al menos un número y una letra", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(c.registroContrasenaNumeroLetra, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Confirmar contraseña
-                    Text("Confirmar contraseña", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroConfirmar, fontSize = 12.sp, color = Color(0xFF1F2937))
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.confirmarContrasena,
                         onValueChange = { viewModel.cambiarConfirmarContrasena(it) },
-                        placeholder = { Text("Repite la contraseña") },
+                        placeholder = { Text(c.registroConfirmarPlaceholder) },
                         leadingIcon = { Icon(Icons.Default.Lock, null, tint = gris) },
-                        visualTransformation = PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { verConfirmar = !verConfirmar }) {
+                                Icon(
+                                    if (verConfirmar) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    null, tint = gris
+                                )
+                            }
+                        },
+                        visualTransformation = if (verConfirmar) VisualTransformation.None else PasswordVisualTransformation(),
                         isError = estado.confirmarContrasena.isNotEmpty() && estado.contrasena != estado.confirmarContrasena,
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -171,12 +188,11 @@ fun RegistroScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (estado.confirmarContrasena.isNotEmpty() && estado.contrasena != estado.confirmarContrasena) {
-                        Text("Las contraseñas no coinciden", color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                        Text(c.registroContrasenasNoCoinciden, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
                     }
 
                     Spacer(Modifier.height(18.dp))
 
-                    // Botón crear cuenta
                     Button(
                         onClick = { viewModel.crearCuenta() },
                         enabled = estado.formularioValido && !estado.cargando,
@@ -189,26 +205,21 @@ fun RegistroScreen(
                             CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text("Crear cuenta", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(c.registroBoton, color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
 
                     Spacer(Modifier.height(14.dp))
 
-                    // Volver a login
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        Text("¿Ya tienes cuenta? ", color = gris, fontSize = 12.sp)
+                        Text(c.registroYaTieneCuenta, color = gris, fontSize = 12.sp)
                         TextButton(onClick = onIniciarSesion, contentPadding = PaddingValues(0.dp)) {
-                            Text("Inicia sesión", color = verde, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(c.registroIniciarSesion, color = verde, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
-                    // Error del servidor
                     estado.error?.let {
                         Spacer(Modifier.height(10.dp))
-                        Card(
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
-                        ) {
+                        Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))) {
                             Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))

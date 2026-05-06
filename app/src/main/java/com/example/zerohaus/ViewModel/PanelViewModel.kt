@@ -6,7 +6,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
-
+import com.example.zerohaus.util.NotificacionesLocales
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.ListenerRegistration
 
 data class PanelEstado(
     val usuario: Usuario? = null,
@@ -27,27 +29,48 @@ class PanelViewModel : ViewModel() {
     private val repoInformes = RepositorioInformes()
     private val repoNotificaciones = RepositorioNotificaciones()
 
+    private var listenerNotifs: ListenerRegistration? = null
+    private var notifIdsVistos = emptySet<String>()
+
+    private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
+        if (auth.currentUser == null) {
+            listenerNotifs?.remove()
+            listenerNotifs = null
+            notifIdsVistos = emptySet()
+        }
+    }
+
+    init {
+        FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
+    }
+
     fun cargarDatos() {
         estado = estado.copy(cargando = true)
-
         repoAuth.obtenerUsuario { usuario ->
             estado = estado.copy(usuario = usuario)
-
             repoViviendas.obtenerViviendas { viviendas ->
                 estado = estado.copy(vivienda = viviendas.firstOrNull())
-
                 repoInformes.obtenerUltimoInforme { informe ->
-                    estado = estado.copy(ultimoInforme = informe)
-
-                    repoNotificaciones.obtenerNotificaciones { notifs ->
-                        estado = estado.copy(
-                            notificaciones = notifs,
-                            hayNoLeidas = notifs.any { !it.leida },
-                            cargando = false
-                        )
-                    }
+                    estado = estado.copy(ultimoInforme = informe, cargando = false)
+                    arrancarListenerNotificaciones()
                 }
             }
+        }
+    }
+
+    private fun arrancarListenerNotificaciones() {
+        listenerNotifs?.remove()
+        listenerNotifs = repoNotificaciones.escucharNotificaciones { notifs ->
+            // Si ya teníamos notifs cargadas, mostrar push local para las nuevas no leídas
+            if (notifIdsVistos.isNotEmpty()) {
+                notifs.filter { !it.leida && it.id !in notifIdsVistos }
+                    .forEach { n -> NotificacionesLocales.mostrar(n.titulo, n.detalle, n.tipo) }
+            }
+            notifIdsVistos = notifs.map { it.id }.toSet()
+            estado = estado.copy(
+                notificaciones = notifs,
+                hayNoLeidas = notifs.any { !it.leida }
+            )
         }
     }
 
@@ -72,5 +95,11 @@ class PanelViewModel : ViewModel() {
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
+        listenerNotifs?.remove()
     }
 }

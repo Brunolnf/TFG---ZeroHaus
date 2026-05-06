@@ -16,10 +16,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.util.LocalCadenas
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onTerminado: () -> Unit) {
+    val c = LocalCadenas.current
     var iniciar by remember { mutableStateOf(false) }
     val escala by animateFloatAsState(targetValue = if (iniciar) 1f else 0.4f, animationSpec = tween(700, easing = EaseOutBack), label = "e")
     val opacidad by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(600), label = "o")
@@ -43,7 +45,7 @@ fun SplashScreen(onTerminado: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             Text("ZeroHaus", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 32.sp, modifier = Modifier.alpha(opTexto))
             Spacer(Modifier.height(6.dp))
-            Text("Eficiencia energética inteligente", color = Color.White.copy(0.75f), fontSize = 14.sp, modifier = Modifier.alpha(opTexto))
+            Text(c.splashSlogan, color = Color.White.copy(0.75f), fontSize = 14.sp, modifier = Modifier.alpha(opTexto))
         }
     }
 }

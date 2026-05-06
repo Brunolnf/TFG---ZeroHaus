@@ -53,6 +53,18 @@ class ViviendasViewModel : ViewModel() {
         }
     }
 
+    fun guardarVivienda(vivienda: Vivienda) {
+        estado = estado.copy(cargando = true)
+        repo.guardarVivienda(vivienda) { result ->
+            result.onSuccess {
+                estado = estado.copy(mensaje = "Vivienda actualizada")
+                cargarViviendas()
+            }.onFailure {
+                estado = estado.copy(cargando = false, error = it.message)
+            }
+        }
+    }
+
     fun limpiarMensaje() {
         estado = estado.copy(mensaje = null, error = null)
     }

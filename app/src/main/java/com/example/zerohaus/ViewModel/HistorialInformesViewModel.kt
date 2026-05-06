@@ -27,9 +27,13 @@ class HistorialInformesViewModel : ViewModel() {
         repo.obtenerInformes { lista -> estado = estado.copy(informes = lista, cargando = false) }
     }
 
+    fun activarModoComparar() {
+        estado = estado.copy(modoComparar = true, informeSeleccionado = null, informeComparar = null)
+    }
+
     fun seleccionarParaComparar(informe: InformeEnergetico) {
         if (estado.informeSeleccionado == null) {
-            estado = estado.copy(informeSeleccionado = informe, modoComparar = true)
+            estado = estado.copy(informeSeleccionado = informe)
         } else if (estado.informeComparar == null && informe.id != estado.informeSeleccionado?.id) {
             estado = estado.copy(informeComparar = informe)
         }
