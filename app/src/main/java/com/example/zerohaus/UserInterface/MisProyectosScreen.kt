@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -33,9 +33,9 @@ fun MisProyectosScreen(
     viewModel: ProyectosViewModel,
     onVolver: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
 
     var mostrarCrear by remember { mutableStateOf(false) }
     var proyectoDetalle by remember { mutableStateOf<Proyecto?>(null) }
@@ -103,6 +103,8 @@ fun MisProyectosScreen(
     if (mostrarCrear) {
         NuevoProyectoDialog(
             guardando = viewModel.guardando,
+            viviendas = viewModel.viviendas.map { it.nombre },
+            tecnicos = viewModel.tecnicos.map { it.nombre },
             onDismiss = { mostrarCrear = false },
             onCrear = { titulo, desc, vivienda, tecnico, tareas, fechaFin ->
                 viewModel.crearProyecto(titulo, desc, vivienda, tecnico, tareas, fechaFin) { exito ->
@@ -149,7 +151,7 @@ private fun TarjetaProyecto(
     onVerDetalle: () -> Unit,
     onEliminar: () -> Unit
 ) {
-    val borde = Color(0xFFE5E7EB)
+    val borde = MaterialTheme.colorScheme.outline
     val estadoColor = when (proyecto.estado) {
         "Finalizado" -> verde
         "En curso" -> Color(0xFF2563EB)
@@ -320,8 +322,8 @@ private fun DetalleProyectoDialog(
     onToggleTarea: (Int, Boolean) -> Unit,
     onEliminar: () -> Unit
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val estadoColor = when (proyecto.estado) {
         "Finalizado" -> verde
         "En curso" -> Color(0xFF2563EB)
@@ -471,17 +473,21 @@ private fun DetalleProyectoDialog(
 @Composable
 private fun NuevoProyectoDialog(
     guardando: Boolean,
+    viviendas: List<String>,
+    tecnicos: List<String>,
     onDismiss: () -> Unit,
     onCrear: (String, String, String, String, List<Tarea>, Long) -> Unit
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
     var titulo by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
     var viviendaNombre by remember { mutableStateOf("") }
     var tecnicoNombre by remember { mutableStateOf("") }
+    var expandidoVivienda by remember { mutableStateOf(false) }
+    var expandidoTecnico by remember { mutableStateOf(false) }
     var fechaFinTexto by remember { mutableStateOf("") }
     var tareas by remember { mutableStateOf(listOf<String>()) }
     var nuevaTarea by remember { mutableStateOf("") }
@@ -528,22 +534,56 @@ private fun NuevoProyectoDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = viviendaNombre,
-                            onValueChange = { viviendaNombre = it },
-                            label = { Text("Vivienda") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
+                        ExposedDropdownMenuBox(
+                            expanded = expandidoVivienda,
+                            onExpandedChange = { expandidoVivienda = it },
                             modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = tecnicoNombre,
-                            onValueChange = { tecnicoNombre = it },
-                            label = { Text("Técnico") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = viviendaNombre,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Vivienda") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoVivienda) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            )
+                            ExposedDropdownMenu(expanded = expandidoVivienda, onDismissRequest = { expandidoVivienda = false }) {
+                                if (viviendas.isEmpty()) {
+                                    DropdownMenuItem(text = { Text("Sin viviendas", color = gris) }, onClick = { expandidoVivienda = false })
+                                } else {
+                                    viviendas.forEach { v ->
+                                        DropdownMenuItem(text = { Text(v) }, onClick = { viviendaNombre = v; expandidoVivienda = false })
+                                    }
+                                }
+                            }
+                        }
+                        ExposedDropdownMenuBox(
+                            expanded = expandidoTecnico,
+                            onExpandedChange = { expandidoTecnico = it },
                             modifier = Modifier.weight(1f)
-                        )
+                        ) {
+                            OutlinedTextField(
+                                value = tecnicoNombre,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Técnico") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoTecnico) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            )
+                            ExposedDropdownMenu(expanded = expandidoTecnico, onDismissRequest = { expandidoTecnico = false }) {
+                                if (tecnicos.isEmpty()) {
+                                    DropdownMenuItem(text = { Text("Sin técnicos", color = gris) }, onClick = { expandidoTecnico = false })
+                                } else {
+                                    tecnicos.forEach { t ->
+                                        DropdownMenuItem(text = { Text(t) }, onClick = { tecnicoNombre = t; expandidoTecnico = false })
+                                    }
+                                }
+                            }
+                        }
                     }
                     OutlinedTextField(
                         value = fechaFinTexto,

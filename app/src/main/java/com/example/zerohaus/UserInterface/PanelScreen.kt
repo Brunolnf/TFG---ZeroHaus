@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -47,7 +47,7 @@ fun PanelScreen(
     onAjustes: () -> Unit = {}
 ) {
     val c = LocalCadenas.current
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     val estado = panelViewModel.estado
     val certEstado = certificadoViewModel.estado
     var mostrarNotif by remember { mutableStateOf(false) }

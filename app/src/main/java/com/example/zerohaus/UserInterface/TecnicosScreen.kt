@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -30,10 +30,10 @@ fun TecnicosScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
     val amarillo = Color(0xFFFFC107)
     val estado = viewModel.estado
     val filtrados = viewModel.tecnicosFiltrados()

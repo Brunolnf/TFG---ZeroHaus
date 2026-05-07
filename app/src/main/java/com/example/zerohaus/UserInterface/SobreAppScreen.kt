@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,8 +24,8 @@ import com.example.zerohaus.util.SembradorDatos
 @Composable
 fun SobreAppScreen(onVolver: () -> Unit = {}) {
     val c = LocalCadenas.current
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val context = LocalContext.current
 
     var reseteando by remember { mutableStateOf(false) }

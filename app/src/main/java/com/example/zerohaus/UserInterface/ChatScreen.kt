@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import android.content.Intent
 import android.net.Uri
@@ -47,10 +47,10 @@ fun ChatScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     val verdeClaro = Color(0xFF22C55E)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
 
     val estado = viewModel.chatEstado
     val miUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""

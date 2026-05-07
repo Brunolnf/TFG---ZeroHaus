@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -30,10 +30,10 @@ fun MisViviendasScreen(
     onVolver: () -> Unit = {},
     onNuevoPreestudio: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
 
     var confirmarEliminar by remember { mutableStateOf<String?>(null) }
@@ -192,7 +192,7 @@ private fun EditarViviendaDialog(
     onDismiss: () -> Unit,
     onGuardar: (Vivienda) -> Unit
 ) {
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
 
     var nombre by remember { mutableStateOf(vivienda.nombre) }
     var superficie by remember { mutableStateOf(vivienda.superficie.toString()) }

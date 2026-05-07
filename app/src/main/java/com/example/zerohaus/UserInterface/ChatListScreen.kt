@@ -1,4 +1,4 @@
-
+﻿
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
@@ -50,10 +50,10 @@ fun ChatsListScreen(
     onVolver: () -> Unit = {},
     onAbrirChat: (String) -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.listaEstado
     val miUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 

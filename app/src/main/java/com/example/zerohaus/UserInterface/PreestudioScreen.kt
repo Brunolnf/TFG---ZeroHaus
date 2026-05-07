@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -24,10 +24,10 @@ fun PreestudioScreen(
     onVolver: () -> Unit = {},
     onInformeGenerado: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
 
 
@@ -173,7 +173,7 @@ private fun EtiquetaCampo(texto: String) {
 
 @Composable
 private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: String, borde: Color) {
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     OutlinedTextField(
         value = valor, onValueChange = onValor,
         placeholder = { Text(placeholder, fontSize = 13.sp) },
@@ -192,7 +192,7 @@ private fun SelectorCompacto(
     etiqueta: String, valor: String, opciones: List<String>,
     onSeleccion: (String) -> Unit, borde: Color
 ) {
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     var expandido by remember { mutableStateOf(false) }
     EtiquetaCampo(etiqueta)
     ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {

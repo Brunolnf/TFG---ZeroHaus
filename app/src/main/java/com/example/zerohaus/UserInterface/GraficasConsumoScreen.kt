@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -34,12 +34,12 @@ fun GraficasConsumoScreen(
     viewModel: GraficasViewModel,
     onVolver: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val azul = Color(0xFF2563EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val azul = MaterialTheme.colorScheme.secondary
     val naranja = Color(0xFFEA580C)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
-    val borde = Color(0xFFE5E7EB)
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
 
     val estado = viewModel.estado
     val sdf = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }

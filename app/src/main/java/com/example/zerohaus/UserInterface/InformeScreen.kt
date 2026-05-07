@@ -1,4 +1,4 @@
-
+﻿
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
@@ -29,9 +29,9 @@ fun InformeScreen(
     onVolver: () -> Unit = {},
     onContactarTecnicos: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val borde = Color(0xFFE5E7EB)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val borde = MaterialTheme.colorScheme.outline
     val informe = viewModel.informe
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val ctx = LocalContext.current

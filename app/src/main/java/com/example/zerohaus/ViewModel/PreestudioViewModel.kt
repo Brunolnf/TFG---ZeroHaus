@@ -4,8 +4,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 data class PreestudioEstado(
     val nombreVivienda: String = "Mi vivienda principal",
@@ -67,30 +71,21 @@ class PreestudioViewModel : ViewModel() {
             orientacion = estado.orientacion
         )
 
-        // Primero guardamos la vivienda, luego generamos el informe
-        repoViviendas.guardarVivienda(vivienda) { resultVivienda ->
-            resultVivienda
-                .onSuccess { viviendaId ->
-                    val viviendaConId = vivienda.copy(id = viviendaId)
-                    repoInformes.generarInforme(viviendaConId) { resultInforme ->
-                        resultInforme
-                            .onSuccess { informe ->
-                                estado = estado.copy(
-                                    informeGenerado = informe,
-                                    cargando = false
-                                )
-                            }
-                            .onFailure { e ->
-                                estado = estado.copy(
-                                    error = e.message,
-                                    cargando = false
-                                )
-                            }
-                    }
-                }
-                .onFailure { e ->
-                    estado = estado.copy(error = e.message, cargando = false)
-                }
+        viewModelScope.launch {
+            val resultVivienda = suspendCancellableCoroutine { cont ->
+                repoViviendas.guardarVivienda(vivienda) { cont.resume(it) }
+            }
+            val viviendaId = resultVivienda.getOrElse { e ->
+                estado = estado.copy(error = e.message, cargando = false)
+                return@launch
+            }
+            val viviendaConId = vivienda.copy(id = viviendaId)
+            val resultInforme = suspendCancellableCoroutine { cont ->
+                repoInformes.generarInforme(viviendaConId) { cont.resume(it) }
+            }
+            resultInforme
+                .onSuccess { informe -> estado = estado.copy(informeGenerado = informe, cargando = false) }
+                .onFailure { e -> estado = estado.copy(error = e.message, cargando = false) }
         }
     }
 

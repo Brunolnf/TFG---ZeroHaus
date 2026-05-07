@@ -6,11 +6,19 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Proyecto
 import com.example.zerohaus.Modelos.Tarea
+import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.RepositorioProyectos
+import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.example.zerohaus.Repositorios.RepositorioViviendas
 
 class ProyectosViewModel : ViewModel() {
 
     var proyectos by mutableStateOf<List<Proyecto>>(emptyList())
+        private set
+    var viviendas by mutableStateOf<List<Vivienda>>(emptyList())
+        private set
+    var tecnicos by mutableStateOf<List<Tecnico>>(emptyList())
         private set
     var cargando by mutableStateOf(true)
         private set
@@ -20,6 +28,8 @@ class ProyectosViewModel : ViewModel() {
         private set
 
     private val repo = RepositorioProyectos()
+    private val repoViviendas = RepositorioViviendas()
+    private val repoTecnicos = RepositorioTecnicos()
 
     fun cargarProyectos() {
         cargando = true
@@ -27,6 +37,8 @@ class ProyectosViewModel : ViewModel() {
             proyectos = lista
             cargando = false
         }
+        repoViviendas.obtenerViviendas { lista -> viviendas = lista }
+        repoTecnicos.obtenerTecnicos { lista -> tecnicos = lista.filter { it.nombre.isNotBlank() } }
     }
 
     fun crearProyecto(

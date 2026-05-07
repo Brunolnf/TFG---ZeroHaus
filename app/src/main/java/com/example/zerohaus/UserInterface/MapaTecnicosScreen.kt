@@ -1,4 +1,4 @@
-
+﻿
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
@@ -46,9 +46,9 @@ fun MapaTecnicosScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
     val estado = viewModel.estado
 
     // Centro de España
@@ -61,17 +61,20 @@ fun MapaTecnicosScreen(
 
     LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
 
-    // Usar coordenadas reales del técnico si existen; si no, posición residencial curada por toda España
+    // Coordenadas reales si existen; si no, posición de fallback determinista por ID del técnico
+    // (misma posición siempre para el mismo técnico, independientemente del orden de lista)
     val tecnicosConPos = remember(estado.tecnicos) {
-        estado.tecnicos.mapIndexed { i, t ->
+        estado.tecnicos.map { t ->
             val pos = if (t.latitud != 0.0 || t.longitud != 0.0) {
                 LatLng(t.latitud, t.longitud)
             } else {
-                UBICACIONES_RESIDENCIALES_FALLBACK[i % UBICACIONES_RESIDENCIALES_FALLBACK.size]
+                val idx = Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size
+                UBICACIONES_RESIDENCIALES_FALLBACK[idx]
             }
             t to pos
         }
     }
+    val hayUbicacionesAproximadas = estado.tecnicos.any { it.latitud == 0.0 && it.longitud == 0.0 }
 
     Scaffold(
         containerColor = fondo,
@@ -114,6 +117,22 @@ fun MapaTecnicosScreen(
                                 false
                             }
                         )
+                    }
+                }
+
+                // Banner de ubicaciones aproximadas
+                if (hayUbicacionesAproximadas) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.TopCenter).padding(12.dp).fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        tonalElevation = 2.dp
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, null, tint = gris, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Algunas ubicaciones son aproximadas", fontSize = 12.sp, color = gris)
+                        }
                     }
                 }
 

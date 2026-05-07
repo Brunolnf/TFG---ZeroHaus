@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -29,9 +29,9 @@ fun PresupuestosScreen(
     viewModel: PresupuestosViewModel,
     onVolver: () -> Unit = {}
 ) {
-    val verde = Color(0xFF16A34A)
-    val gris = Color(0xFF6B7280)
-    val fondo = Color(0xFFF6F7F9)
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
     val estado = viewModel.estado
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
@@ -179,7 +179,7 @@ private fun TarjetaEnviada(
     onRechazar: () -> Unit,
     onCompletar: () -> Unit
 ) {
-    val borde = Color(0xFFE5E7EB)
+    val borde = MaterialTheme.colorScheme.outline
     val colorEstado = when (s.estado) {
         "Pendiente" -> Color(0xFFF59E0B)
         "Presupuestado" -> Color(0xFF2563EB)
@@ -264,7 +264,7 @@ private fun TarjetaRecibida(
     gris: Color,
     onResponder: () -> Unit
 ) {
-    val borde = Color(0xFFE5E7EB)
+    val borde = MaterialTheme.colorScheme.outline
     val colorEstado = when (s.estado) {
         "Pendiente" -> Color(0xFFF59E0B)
         "Presupuestado" -> Color(0xFF2563EB)
@@ -322,7 +322,7 @@ private fun ResponderDialog(
     onDismiss: () -> Unit,
     onEnviar: (Double, String) -> Unit
 ) {
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     var precio by remember { mutableStateOf("") }
     var respuesta by remember { mutableStateOf("") }
     val precioValido = precio.toDoubleOrNull()?.let { it > 0 } == true

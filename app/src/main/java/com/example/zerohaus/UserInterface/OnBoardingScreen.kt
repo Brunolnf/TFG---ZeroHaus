@@ -1,4 +1,4 @@
-
+﻿
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -27,7 +27,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun OnboardingScreen(onCompletar: () -> Unit) {
-    val verde = Color(0xFF16A34A); val scope = rememberCoroutineScope()
+    val verde = MaterialTheme.colorScheme.primary; val scope = rememberCoroutineScope()
     data class P(val ic: ImageVector, val cI: Color, val cF: Color, val t: String, val d: String)
     val pags = listOf(
         P(Icons.Default.Home, Color(0xFF059669), Color(0xFFD1FAE5), "Analiza tu vivienda", "Rellena los datos de tu hogar y obtén un informe energético con tu etiqueta, consumo estimado y recomendaciones personalizadas."),

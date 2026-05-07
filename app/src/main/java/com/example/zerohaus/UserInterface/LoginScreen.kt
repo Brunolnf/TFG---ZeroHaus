@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,9 +28,9 @@ fun LoginScreen(
 ) {
     val c = LocalCadenas.current
     val estado = viewModel.estado
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     val fondo = Color(0xFFEEF8F5)
-    val gris = Color(0xFF6B7280)
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val borde = Color(0xFFD1D5DB)
     var verContrasena by remember { mutableStateOf(false) }
 

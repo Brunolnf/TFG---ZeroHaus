@@ -1,4 +1,4 @@
-package com.example.zerohaus.UserInterface
+﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -28,7 +28,7 @@ fun MainScaffold(
     onMapaTecnicos: () -> Unit = {}, onSobreApp: () -> Unit = {}, onAjustes: () -> Unit = {}
 ) {
     val c = LocalCadenas.current
-    val verde = Color(0xFF16A34A)
+    val verde = MaterialTheme.colorScheme.primary
     val tabs = listOf(
         "inicio" to Icons.Default.Home,
         "mensajes" to Icons.Default.MailOutline,
