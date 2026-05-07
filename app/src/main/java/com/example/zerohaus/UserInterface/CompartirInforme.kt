@@ -35,51 +35,6 @@ fun compartirInforme(context: Context, informe: InformeEnergetico) {
     }
 }
 
-fun compartirPorEmail(context: Context, informe: InformeEnergetico) {
-    val pdfFile = try { generarPdf(context, informe) } catch (_: Exception) { null }
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        putExtra(Intent.EXTRA_SUBJECT, "Informe energético — ${informe.nombreVivienda}")
-        putExtra(Intent.EXTRA_TEXT, buildTextoInforme(informe))
-        if (pdfFile != null) {
-            type = "application/pdf"
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } else {
-            type = "text/plain"
-        }
-    }
-    context.startActivity(Intent.createChooser(intent, "Enviar por email"))
-}
-
-fun compartirPorWhatsApp(context: Context, informe: InformeEnergetico) {
-    val texto = buildTextoWhatsApp(informe)
-    val pdfFile = try { generarPdf(context, informe) } catch (_: Exception) { null }
-
-    if (pdfFile != null) {
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/pdf"
-            setPackage("com.whatsapp")
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_TEXT, texto)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        try { context.startActivity(intent); return } catch (_: Exception) {}
-    }
-
-    val intentTexto = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        setPackage("com.whatsapp")
-        putExtra(Intent.EXTRA_TEXT, texto)
-    }
-    try {
-        context.startActivity(intentTexto)
-    } catch (_: Exception) {
-        compartirInforme(context, informe)
-    }
-}
-
 private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val fechaStr = sdf.format(Date(informe.fechaGeneracion))
@@ -265,26 +220,3 @@ private fun buildTextoInforme(informe: InformeEnergetico): String {
     }
 }
 
-private fun buildTextoWhatsApp(informe: InformeEnergetico): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-    return buildString {
-        appendLine("*Informe Energético ZeroHaus*")
-        appendLine("🏠 ${informe.nombreVivienda}")
-        appendLine("📅 ${sdf.format(Date(informe.fechaGeneracion))}")
-        appendLine()
-        appendLine("*Calificación: ${informe.etiqueta}* — ${informe.estadoEficiencia}")
-        appendLine()
-        appendLine("⚡ Consumo: ${informe.consumoEstimado} kWh/año")
-        appendLine("🌿 Emisiones: ${informe.emisiones} kg CO₂/año")
-        appendLine("💰 Coste: ${informe.costeAnual} €/año")
-        if (informe.recomendaciones.isNotEmpty()) {
-            appendLine()
-            appendLine("*Mejoras recomendadas:*")
-            informe.recomendaciones.take(3).forEach { r ->
-                appendLine("• ${r.titulo} (ahorro ${r.ahorroEstimado}%)")
-            }
-        }
-        appendLine()
-        appendLine("_Generado con ZeroHaus_")
-    }
-}

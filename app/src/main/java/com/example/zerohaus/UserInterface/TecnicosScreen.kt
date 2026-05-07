@@ -107,8 +107,8 @@ fun TecnicosScreen(
                             colors = OutlinedTextFieldDefaults.colors(
                                 unfocusedBorderColor = borde,
                                 focusedBorderColor = verde,
-                                unfocusedContainerColor = Color.White,
-                                focusedContainerColor = Color.White
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                focusedContainerColor = MaterialTheme.colorScheme.surface
                             )
                         )
                         Box {
@@ -183,7 +183,7 @@ fun TecnicosScreen(
                 items(filtrados) { t ->
                     Card(
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, borde),
                         modifier = Modifier
                             .fillMaxWidth()

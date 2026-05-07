@@ -186,7 +186,7 @@ fun ChatScreen(
             // ── Barra inferior ──
             Surface(
                 shadowElevation = 8.dp,
-                color = Color.White
+                color = MaterialTheme.colorScheme.surface
             ) {
                 Column(
                     Modifier
@@ -416,7 +416,7 @@ private fun BurbujaMensaje(
             val extColor = archivoColor(ext, gris)
             Card(
                 shape = shape,
-                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else Color.White),
+                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
                 modifier = Modifier
                     .widthIn(max = 270.dp)
                     .clickable {
@@ -496,7 +496,7 @@ private fun BurbujaMensaje(
         else -> {
             Card(
                 shape = shape,
-                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else Color.White),
+                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
                 modifier = Modifier.widthIn(max = 280.dp)
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {

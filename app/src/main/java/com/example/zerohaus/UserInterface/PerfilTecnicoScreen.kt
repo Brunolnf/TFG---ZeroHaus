@@ -89,7 +89,7 @@ fun PerfilTecnicoScreen(
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, borde),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -190,7 +190,7 @@ fun PerfilTecnicoScreen(
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             border = BorderStroke(1.dp, borde),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -220,7 +220,7 @@ fun PerfilTecnicoScreen(
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             border = BorderStroke(1.dp, borde),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -372,7 +372,7 @@ fun PerfilTecnicoScreen(
                 items(estado.resenas) { r ->
                     Card(
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, borde),
                         modifier = Modifier.fillMaxWidth()
                     ) {

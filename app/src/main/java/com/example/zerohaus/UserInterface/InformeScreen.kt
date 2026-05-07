@@ -2,7 +2,6 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,8 +36,6 @@ fun InformeScreen(
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val ctx = LocalContext.current
 
-    var mostrarDialogCompartir by remember { mutableStateOf(false) }
-
     LaunchedEffect(Unit) { if (informe == null) viewModel.cargarUltimoInforme() }
 
     Scaffold(
@@ -57,7 +53,7 @@ fun InformeScreen(
                 },
                 actions = {
                     if (informe != null) {
-                        IconButton(onClick = { mostrarDialogCompartir = true }) {
+                        IconButton(onClick = { compartirInforme(ctx, informe) }) {
                             Icon(Icons.Default.Share, "Compartir")
                         }
                     }
@@ -190,7 +186,7 @@ fun InformeScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { mostrarDialogCompartir = true },
+                        onClick = { informe?.let { compartirInforme(ctx, it) } },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, verde)
@@ -217,95 +213,4 @@ fun InformeScreen(
         }
     }
 
-    // ── Diálogo de compartir ──
-    if (mostrarDialogCompartir && informe != null) {
-        AlertDialog(
-            onDismissRequest = { mostrarDialogCompartir = false },
-            title = { Text("Compartir informe", fontWeight = FontWeight.SemiBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "Elige cómo quieres compartir el informe energético en PDF:",
-                        color = gris,
-                        fontSize = 14.sp
-                    )
-                    Spacer(Modifier.height(8.dp))
-
-                    OpcionCompartir(
-                        icono = Icons.Default.Email,
-                        titulo = "Enviar por email",
-                        subtitulo = "Gmail, Outlook u otro cliente de correo",
-                        color = Color(0xFF2563EB)
-                    ) {
-                        mostrarDialogCompartir = false
-                        compartirPorEmail(ctx, informe)
-                    }
-
-                    OpcionCompartir(
-                        icono = Icons.Default.Chat,
-                        titulo = "Enviar por WhatsApp",
-                        subtitulo = "Comparte el PDF directamente en WhatsApp",
-                        color = Color(0xFF16A34A)
-                    ) {
-                        mostrarDialogCompartir = false
-                        compartirPorWhatsApp(ctx, informe)
-                    }
-
-                    OpcionCompartir(
-                        icono = Icons.Default.MoreHoriz,
-                        titulo = "Otras aplicaciones",
-                        subtitulo = "Telegram, Drive, Dropbox…",
-                        color = Color(0xFF6B7280)
-                    ) {
-                        mostrarDialogCompartir = false
-                        compartirInforme(ctx, informe)
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { mostrarDialogCompartir = false }) {
-                    Text("Cancelar")
-                }
-            },
-            shape = RoundedCornerShape(16.dp)
-        )
-    }
-}
-
-@Composable
-private fun OpcionCompartir(
-    icono: ImageVector,
-    titulo: String,
-    subtitulo: String,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = color.copy(alpha = 0.12f),
-            modifier = Modifier.size(44.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icono, null, tint = color, modifier = Modifier.size(24.dp))
-            }
-        }
-        Column(Modifier.weight(1f)) {
-            Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Text(subtitulo, color = Color(0xFF6B7280), fontSize = 12.sp)
-        }
-        Icon(
-            Icons.Default.ChevronRight, null,
-            tint = Color(0xFFD1D5DB),
-            modifier = Modifier.size(20.dp)
-        )
-    }
 }

@@ -27,8 +27,10 @@ fun SobreAppScreen(onVolver: () -> Unit = {}) {
     val gris = Color(0xFF6B7280)
     val context = LocalContext.current
 
-    var creandoCuentas by remember { mutableStateOf(false) }
-    var mensajeSetup by remember { mutableStateOf("") }
+    var reseteando by remember { mutableStateOf(false) }
+    var credenciales by remember { mutableStateOf<List<SembradorDatos.CredencialTecnico>>(emptyList()) }
+    var borrandoSinValoracion by remember { mutableStateOf(false) }
+    var resultadoBorrado by remember { mutableStateOf<SembradorDatos.ResultadoBorrado?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -91,35 +93,136 @@ fun SobreAppScreen(onVolver: () -> Unit = {}) {
 
             Text(c.sobreCopyright, color = gris, fontSize = 12.sp)
 
-            // ── Configuración inicial de cuentas técnicas ──
+            // ── Reset completo de técnicos demo ──
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Configuración técnicos", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = gris)
-                    if (mensajeSetup.isNotEmpty()) {
-                        Text(mensajeSetup, fontSize = 12.sp, color = if (mensajeSetup.startsWith("OK") || mensajeSetup.startsWith("Cuentas")) verde else Color(0xFFDC2626))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Refresh, null, tint = Color(0xFFD97706), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Resetear técnicos demo", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF92400E))
                     }
+                    Text(
+                        "Borra todos los técnicos demo antiguos (incluye duplicados y versiones legacy con emails de empresa) y crea desde cero los 7 mejor valorados con cuentas Firebase Auth funcionales. Cada email se corresponde con el nombre del técnico.",
+                        fontSize = 12.sp, color = Color(0xFF78350F)
+                    )
                     Button(
                         onClick = {
-                            creandoCuentas = true
-                            mensajeSetup = ""
-                            SembradorDatos.sembrarUsuariosTecnicos(context) { ok, msg ->
-                                creandoCuentas = false
-                                mensajeSetup = if (ok) "Cuentas configuradas correctamente" else "Error: $msg"
+                            reseteando = true
+                            credenciales = emptyList()
+                            SembradorDatos.resetearTecnicosCompleto(context) { creds ->
+                                reseteando = false
+                                credenciales = creds
                             }
                         },
-                        enabled = !creandoCuentas,
-                        colors = ButtonDefaults.buttonColors(containerColor = gris),
+                        enabled = !reseteando,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (creandoCuentas) {
+                        if (reseteando) {
                             CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                         }
-                        Text(if (creandoCuentas) "Configurando…" else "Configurar cuentas técnicos", fontSize = 13.sp)
+                        Text(
+                            if (reseteando) "Reseteando…" else "Resetear y crear cuentas de los 7 técnicos",
+                            fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // ── Borrar técnicos sin valoración ──
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Limpiar técnicos sin valoración", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF991B1B))
+                    }
+                    Text(
+                        "Borra todos los técnicos cuyas opiniones estén a 0. Útil para eliminar técnicos huérfanos o registrados a mano que aún no tienen reseñas.",
+                        fontSize = 12.sp, color = Color(0xFF7F1D1D)
+                    )
+                    resultadoBorrado?.let { r ->
+                        if (r.total == 0) {
+                            Text("No había técnicos sin valoración.", fontSize = 12.sp, color = Color(0xFF065F46))
+                        } else {
+                            Text(
+                                "Borrados ${r.borrados}/${r.total}.",
+                                fontSize = 12.sp, color = Color(0xFF065F46), fontWeight = FontWeight.Medium
+                            )
+                            if (r.fallidos.isNotEmpty()) {
+                                Text(
+                                    "Sin permisos para borrar (hazlo desde Firebase Console): ${r.fallidos.joinToString(", ")}",
+                                    fontSize = 11.sp, color = Color(0xFFDC2626)
+                                )
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            borrandoSinValoracion = true
+                            resultadoBorrado = null
+                            SembradorDatos.borrarTecnicosSinValoracion { res ->
+                                borrandoSinValoracion = false
+                                resultadoBorrado = res
+                            }
+                        },
+                        enabled = !borrandoSinValoracion && !reseteando,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (borrandoSinValoracion) {
+                            CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(
+                            if (borrandoSinValoracion) "Borrando…" else "Borrar técnicos sin valoración",
+                            fontSize = 13.sp, color = Color.White, fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            // Lista de credenciales generadas
+            if (credenciales.isNotEmpty()) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "Credenciales (${credenciales.count { it.ok }}/${credenciales.size} OK)",
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp
+                        )
+                        Text("Contraseña común: ${SembradorDatos.PASSWORD_TECNICOS}", fontSize = 12.sp, color = gris)
+                        HorizontalDivider()
+                        credenciales.forEach { cred ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (cred.ok) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    null,
+                                    tint = if (cred.ok) verde else Color(0xFFDC2626),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(cred.nombre, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    Text(cred.email, fontSize = 11.sp, color = gris)
+                                    if (!cred.ok && cred.motivo.isNotBlank()) {
+                                        Text(cred.motivo, fontSize = 10.sp, color = Color(0xFFDC2626))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
