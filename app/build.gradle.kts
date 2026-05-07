@@ -1,8 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
+}
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -17,14 +24,15 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
     }
 
     signingConfigs {
         create("release") {
             storeFile = file("zerohaus-release.jks")
-            storePassword = "ZeroHaus2024!"
+            storePassword = localProps.getProperty("KEYSTORE_PASSWORD")
             keyAlias = "zerohaus"
-            keyPassword = "ZeroHaus2024!"
+            keyPassword = localProps.getProperty("KEY_PASSWORD")
         }
     }
 
@@ -51,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {

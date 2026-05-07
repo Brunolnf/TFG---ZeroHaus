@@ -180,7 +180,7 @@ private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: St
         singleLine = true, shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             unfocusedBorderColor = borde, focusedBorderColor = verde,
-            unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface
         ),
         modifier = Modifier.fillMaxWidth()
     )
@@ -202,7 +202,7 @@ private fun SelectorCompacto(
             shape = RoundedCornerShape(12.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = borde, focusedBorderColor = verde,
-                unfocusedContainerColor = Color.White, focusedContainerColor = Color.White
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface
             ),
             modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
         )

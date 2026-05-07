@@ -1,6 +1,8 @@
 *.iml
 .gradle
 /local.properties
+claude.exe
+.claude/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml

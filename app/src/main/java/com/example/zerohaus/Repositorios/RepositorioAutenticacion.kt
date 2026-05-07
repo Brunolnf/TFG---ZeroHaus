@@ -49,7 +49,9 @@ class RepositorioAutenticacion {
                             )
                             db.collection("tecnicos").document(uid).set(tecnico)
                                 .addOnSuccessListener { callback(Result.success(Unit)) }
-                                .addOnFailureListener { callback(Result.success(Unit)) }
+                                .addOnFailureListener { e ->
+                                    callback(Result.failure(Exception(e.message ?: "Error creando perfil de técnico")))
+                                }
                         } else {
                             callback(Result.success(Unit))
                         }

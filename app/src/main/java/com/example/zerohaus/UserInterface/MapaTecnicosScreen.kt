@@ -80,7 +80,7 @@ fun MapaTecnicosScreen(
                 title = {
                     Column {
                         Text("Mapa de técnicos", fontWeight = FontWeight.SemiBold)
-                        Text("${estado.tecnicos.size} técnicos cerca", color = gris, fontSize = 12.sp)
+                        Text("${estado.tecnicos.size} técnicos disponibles", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {

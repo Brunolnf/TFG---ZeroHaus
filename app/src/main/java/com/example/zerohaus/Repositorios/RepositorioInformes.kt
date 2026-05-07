@@ -56,9 +56,16 @@ class RepositorioInformes {
             vivienda.anioConstruccion >= 1980 -> 1.1
             else -> 1.3
         }
+        // Orientación sur maximiza captación solar pasiva; norte la minimiza
+        val factorOrientacion = when (vivienda.orientacion) {
+            "Sur" -> 0.92
+            "Este", "Oeste" -> 1.0
+            "Norte" -> 1.08
+            else -> 1.0
+        }
 
         val consumo = baseConsumo * factorVentanas * factorAislamiento *
-                factorCalefaccion * factorAcs * factorAnio
+                factorCalefaccion * factorAcs * factorAnio * factorOrientacion
         val emisiones = consumo * 0.22
         val coste = consumo * 0.15
 

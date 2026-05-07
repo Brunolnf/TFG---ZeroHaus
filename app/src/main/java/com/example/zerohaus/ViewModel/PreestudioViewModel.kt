@@ -41,12 +41,24 @@ class PreestudioViewModel : ViewModel() {
     fun cambiarOrientacion(v: String) { estado = estado.copy(orientacion = v) }
 
     fun generarInforme() {
+        val superficie = estado.superficie.toIntOrNull()
+        val anio = estado.anio.toIntOrNull()
+
+        when {
+            estado.nombreVivienda.isBlank() ->
+                { estado = estado.copy(error = "El nombre de la vivienda no puede estar vacío"); return }
+            superficie == null || superficie <= 0 || superficie > 5000 ->
+                { estado = estado.copy(error = "Introduce una superficie válida (1–5000 m²)"); return }
+            anio == null || anio < 1900 || anio > 2025 ->
+                { estado = estado.copy(error = "Introduce un año de construcción válido (1900–2025)"); return }
+        }
+
         estado = estado.copy(cargando = true, error = null)
 
         val vivienda = Vivienda(
             nombre = estado.nombreVivienda,
-            superficie = estado.superficie.toIntOrNull() ?: 100,
-            anioConstruccion = estado.anio.toIntOrNull() ?: 2000,
+            superficie = superficie!!,
+            anioConstruccion = anio!!,
             tipoVentanas = estado.ventanas,
             aislamiento = estado.aislamiento,
             calefaccion = estado.calefaccion,

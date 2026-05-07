@@ -20,7 +20,7 @@
         <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDN-z7jMUMNdcjW1EvQKZiQ9l5qZOHu7a8" />
+            android:value="${MAPS_API_KEY}" />
 
         <!-- Servicio FCM para push notifications -->
         <service

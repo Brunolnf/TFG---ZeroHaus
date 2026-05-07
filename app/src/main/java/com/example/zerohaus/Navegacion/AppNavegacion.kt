@@ -19,29 +19,16 @@ import com.example.zerohaus.ViewModel.*
 fun AppNavegacion() {
     val nav = rememberNavController()
 
-    // ViewModels
+    // Solo los ViewModels compartidos entre varias rutas viven al nivel raíz.
+    // Los demás se instancian dentro de su composable() para que Navigation
+    // los limpie automáticamente al salir de la pantalla.
     val sesionVM: SesionViewModel = viewModel()
-    val loginVM: LoginViewModel = viewModel()
-    val registroVM: RegistroViewModel = viewModel()
-    val panelVM: PanelViewModel = viewModel()
-    val preestudioVM: PreestudioViewModel = viewModel()
-    val informeVM: InformeViewModel = viewModel()
-    val tecnicosVM: TecnicosViewModel = viewModel()
-    val rankingsVM: RankingsViewModel = viewModel()
-    val proyectosVM: ProyectosViewModel = viewModel()
-    val certificadoVM: CertificadoViewModel = viewModel()
-    val perfilVM: PerfilViewModel = viewModel()
-    val perfilTecnicoVM: PerfilTecnicoViewModel = viewModel()
-    val presupuestosVM: PresupuestosViewModel = viewModel()
-    val historialVM: HistorialInformesViewModel = viewModel()
-    val chatVM: ChatViewModel = viewModel()
-    val viviendasVM: ViviendasViewModel = viewModel()
-    val graficasVM: GraficasViewModel = viewModel()
-    val ajustesVM: AjustesViewModel = viewModel()
+    val loginVM: LoginViewModel = viewModel()   // compartido: "login" + "recuperar"
+    val chatVM: ChatViewModel = viewModel()     // compartido: "main", "perfil_tecnico", "chat"
+    val informeVM: InformeViewModel = viewModel() // compartido: "preestudio" → "informe"
+    val tecnicosVM: TecnicosViewModel = viewModel() // compartido: "tecnicos" + "mapa_tecnicos"
 
-    // Estados de flujo inicial
     var mostrarSplash by remember { mutableStateOf(true) }
-    var mostrarOnboarding by remember { mutableStateOf(false) }
 
     // Splash
     if (mostrarSplash) {
@@ -64,12 +51,6 @@ fun AppNavegacion() {
         if (logueado) ServicioNotificaciones.registrarToken()
     }
 
-    // Onboarding (solo usuarios nuevos)
-    if (mostrarOnboarding) {
-        OnboardingScreen { mostrarOnboarding = false }
-        return
-    }
-
     val start = if (logueado) "main" else "login"
 
     NavHost(navController = nav, startDestination = start) {
@@ -84,14 +65,19 @@ fun AppNavegacion() {
             )
         }
         composable("registro") {
+            val registroVM: RegistroViewModel = viewModel()
             RegistroScreen(
                 viewModel = registroVM,
                 onRegistroExitoso = {
-                    mostrarOnboarding = true
-                    nav.navigate("main") { popUpTo("login") { inclusive = true } }
+                    nav.navigate("onboarding") { popUpTo("login") { inclusive = true } }
                 },
                 onIniciarSesion = { nav.popBackStack() }
             )
+        }
+        composable("onboarding") {
+            OnboardingScreen {
+                nav.navigate("main") { popUpTo("onboarding") { inclusive = true } }
+            }
         }
         composable("recuperar") {
             RecuperarPasswordScreen(
@@ -102,6 +88,8 @@ fun AppNavegacion() {
 
         // Main (Bottom Nav)
         composable("main") {
+            val panelVM: PanelViewModel = viewModel()
+            val certificadoVM: CertificadoViewModel = viewModel()
             MainScaffold(
                 panelViewModel = panelVM,
                 certificadoViewModel = certificadoVM,
@@ -129,6 +117,7 @@ fun AppNavegacion() {
 
         // Perfil usuario
         composable("perfil") {
+            val perfilVM: PerfilViewModel = viewModel()
             PerfilScreen(
                 viewModel = perfilVM,
                 onVolver = { nav.popBackStack() },
@@ -141,6 +130,7 @@ fun AppNavegacion() {
 
         // Preestudio → Informe
         composable("preestudio") {
+            val preestudioVM: PreestudioViewModel = viewModel()
             PreestudioScreen(
                 viewModel = preestudioVM,
                 onVolver = { nav.popBackStack() },
@@ -170,6 +160,7 @@ fun AppNavegacion() {
             )
         }
         composable("perfil_tecnico/{tecnicoId}") { backEntry ->
+            val perfilTecnicoVM: PerfilTecnicoViewModel = viewModel()
             PerfilTecnicoScreen(
                 viewModel = perfilTecnicoVM,
                 tecnicoId = backEntry.arguments?.getString("tecnicoId") ?: "",
@@ -184,6 +175,7 @@ fun AppNavegacion() {
 
         // Resto de pantallas
         composable("rankings") {
+            val rankingsVM: RankingsViewModel = viewModel()
             RankingsScreen(
                 viewModel = rankingsVM,
                 onVolver = { nav.popBackStack() },
@@ -191,12 +183,15 @@ fun AppNavegacion() {
             )
         }
         composable("proyectos") {
+            val proyectosVM: ProyectosViewModel = viewModel()
             MisProyectosScreen(viewModel = proyectosVM, onVolver = { nav.popBackStack() })
         }
         composable("presupuestos") {
+            val presupuestosVM: PresupuestosViewModel = viewModel()
             PresupuestosScreen(viewModel = presupuestosVM, onVolver = { nav.popBackStack() })
         }
         composable("historial_informes") {
+            val historialVM: HistorialInformesViewModel = viewModel()
             HistorialInformesScreen(
                 viewModel = historialVM,
                 onVolver = { nav.popBackStack() },
@@ -207,6 +202,7 @@ fun AppNavegacion() {
             )
         }
         composable("mis_viviendas") {
+            val viviendasVM: ViviendasViewModel = viewModel()
             MisViviendasScreen(
                 viewModel = viviendasVM,
                 onVolver = { nav.popBackStack() },
@@ -222,6 +218,7 @@ fun AppNavegacion() {
             )
         }
         composable("graficas") {
+            val graficasVM: GraficasViewModel = viewModel()
             GraficasConsumoScreen(viewModel = graficasVM, onVolver = { nav.popBackStack() })
         }
         composable("mapa_tecnicos") {
@@ -235,6 +232,7 @@ fun AppNavegacion() {
             SobreAppScreen(onVolver = { nav.popBackStack() })
         }
         composable("ajustes") {
+            val ajustesVM: AjustesViewModel = viewModel()
             AjustesScreen(viewModel = ajustesVM, onVolver = { nav.popBackStack() })
         }
     }

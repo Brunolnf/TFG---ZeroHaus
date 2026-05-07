@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.BuildConfig
 import com.example.zerohaus.util.LocalCadenas
 import com.example.zerohaus.util.SembradorDatos
 
@@ -93,6 +94,7 @@ fun SobreAppScreen(onVolver: () -> Unit = {}) {
 
             Text(c.sobreCopyright, color = gris, fontSize = 12.sp)
 
+            if (BuildConfig.DEBUG) {
             // ── Reset completo de técnicos demo ──
             Card(
                 shape = RoundedCornerShape(12.dp),
@@ -226,6 +228,7 @@ fun SobreAppScreen(onVolver: () -> Unit = {}) {
                     }
                 }
             }
+            } // end BuildConfig.DEBUG
 
             Spacer(Modifier.height(20.dp))
         }

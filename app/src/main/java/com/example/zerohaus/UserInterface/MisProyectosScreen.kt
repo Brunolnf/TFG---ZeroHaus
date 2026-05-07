@@ -159,7 +159,7 @@ private fun TarjetaProyecto(
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, borde),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -336,7 +336,7 @@ private fun DetalleProyectoDialog(
         Card(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.85f),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
@@ -494,7 +494,7 @@ private fun NuevoProyectoDialog(
         Card(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth(0.95f).fillMaxHeight(0.88f),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(
