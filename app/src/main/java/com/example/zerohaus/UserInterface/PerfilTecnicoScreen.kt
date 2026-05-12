@@ -1,5 +1,7 @@
 ﻿package com.example.zerohaus.UserInterface
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ fun PerfilTecnicoScreen(
     onVolver: () -> Unit = {},
     onContactar: (tecnicoUid: String, tecnicoNombre: String) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
@@ -205,7 +209,7 @@ fun PerfilTecnicoScreen(
                                 )
                                 Text(
                                     t.descripcion,
-                                    color = Color(0xFF374151),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp,
                                     modifier = Modifier.padding(14.dp),
                                     fontStyle = FontStyle.Italic
@@ -269,7 +273,10 @@ fun PerfilTecnicoScreen(
                         }
                         if (t.telefono.isNotEmpty()) {
                             OutlinedButton(
-                                onClick = { /* Llamar — manejado externamente si se necesita */ },
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${t.telefono}"))
+                                    context.startActivity(intent)
+                                },
                                 border = BorderStroke(1.dp, verde),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = verde),
@@ -302,7 +309,7 @@ fun PerfilTecnicoScreen(
                     item {
                         Card(
                             shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F6)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                             border = BorderStroke(1.dp, borde),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -411,7 +418,7 @@ fun PerfilTecnicoScreen(
                             FilaEstrellas(r.puntuacion.toDouble(), tamano = 16.dp)
                             if (r.comentario.isNotEmpty()) {
                                 Spacer(Modifier.height(6.dp))
-                                Text(r.comentario, color = Color(0xFF374151), fontSize = 14.sp)
+                                Text(r.comentario, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
                             }
                         }
                     }

@@ -167,7 +167,7 @@ private fun CabeceraSeccion(iconoColorFondo: Color, iconoTint: Color, icono: and
 
 @Composable
 private fun EtiquetaCampo(texto: String) {
-    Text(texto, fontSize = 12.sp, color = Color(0xFF111827))
+    Text(texto, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
     Spacer(Modifier.height(6.dp))
 }
 

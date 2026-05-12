@@ -1,8 +1,9 @@
 package com.example.zerohaus
 
-import com.example.zerohaus.util.NotificacionesLocales
+import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -25,7 +26,7 @@ class ServicioNotificaciones : FirebaseMessagingService() {
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
         FirebaseFirestore.getInstance()
             .collection("usuarios").document(uid)
-            .update("tokenFCM", token)
+            .set(mapOf("tokenFCM" to token), SetOptions.merge())
     }
 
     companion object {

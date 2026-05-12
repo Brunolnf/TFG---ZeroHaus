@@ -260,7 +260,7 @@ private fun TarjetaProyecto(
                 progress = { proyecto.progreso / 100f },
                 modifier = Modifier.fillMaxWidth().height(8.dp),
                 color = estadoColor,
-                trackColor = Color(0xFFE5E7EB)
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
 
             if (proyecto.tareas.isNotEmpty()) {
@@ -407,7 +407,7 @@ private fun DetalleProyectoDialog(
                                 progress = { proyecto.progreso / 100f },
                                 modifier = Modifier.weight(1f).height(10.dp),
                                 color = estadoColor,
-                                trackColor = Color(0xFFE5E7EB)
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                             Spacer(Modifier.width(10.dp))
                             Text("${proyecto.progreso}%", color = estadoColor, fontWeight = FontWeight.Bold)

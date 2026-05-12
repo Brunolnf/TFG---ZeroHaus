@@ -20,10 +20,20 @@ class TecnicosViewModel : ViewModel() {
 
     fun cargarTecnicos(forzar: Boolean = false) {
         if (!forzar && estado.tecnicos.isNotEmpty()) return
-        estado = estado.copy(cargando = true)
+        // Si ya había técnicos, mantenemos la lista visible mientras refrescamos en segundo plano.
+        val tieneDatos = estado.tecnicos.isNotEmpty()
+        estado = estado.copy(cargando = !tieneDatos)
         repo.obtenerTecnicos { lista ->
             if (lista.isEmpty()) { estado = estado.copy(cargando = false); return@obtenerTecnicos }
-            estado = estado.copy(tecnicos = lista.map { it.copy(rating = 0.0, opiniones = 0) }, cargando = false)
+            // Conserva ratings ya conocidos para evitar parpadeo a 0.0 al refrescar.
+            val previos = estado.tecnicos.associateBy { it.id }
+            estado = estado.copy(
+                tecnicos = lista.map { t ->
+                    val prev = previos[t.id]
+                    if (prev != null) t.copy(rating = prev.rating, opiniones = prev.opiniones) else t.copy(rating = 0.0, opiniones = 0)
+                },
+                cargando = false
+            )
             lista.forEach { t ->
                 repoResenas.obtenerResenas(t.id) { resenas ->
                     val count = resenas.size
@@ -39,8 +49,19 @@ class TecnicosViewModel : ViewModel() {
     fun tecnicosFiltrados(): List<Tecnico> { val q = estado.busqueda.trim().lowercase(); return estado.tecnicos.filter { q.isBlank() || it.nombre.lowercase().contains(q) || it.especialidades.any { e -> e.lowercase().contains(q) } }.filter { t -> estado.filtro == null || t.especialidades.contains(estado.filtro) } }
     fun solicitarPresupuesto(tecnico: Tecnico) { solicitarPresupuestoConDescripcion(tecnico, "Solicitud de presupuesto") }
     fun solicitarPresupuestoConDescripcion(tecnico: Tecnico, descripcion: String) {
-        repoAuth.obtenerUsuario { u -> val s = SolicitudPresupuesto(uidCliente = repoAuth.getUid() ?: "", nombreCliente = u?.nombre ?: "Usuario", tecnicoId = tecnico.id, tecnicoNombre = tecnico.nombre, descripcion = descripcion)
-            repo.solicitarPresupuesto(s) { r -> r.onSuccess { estado = estado.copy(mensajeExito = "Solicitud enviada a ${tecnico.nombre}") }.onFailure { estado = estado.copy(error = it.message) } }
+        repoAuth.obtenerUsuario { u ->
+            val s = SolicitudPresupuesto(
+                uidCliente = repoAuth.getUid() ?: "",
+                nombreCliente = u?.nombre ?: "Usuario",
+                tecnicoId = tecnico.id,
+                tecnicoUid = tecnico.uid,   // Auth UID real del técnico (para notificaciones)
+                tecnicoNombre = tecnico.nombre,
+                descripcion = descripcion
+            )
+            repo.solicitarPresupuesto(s) { r ->
+                r.onSuccess { estado = estado.copy(mensajeExito = "Solicitud enviada a ${tecnico.nombre}") }
+                    .onFailure { estado = estado.copy(error = it.message) }
+            }
         }
     }
     fun limpiarMensaje() { estado = estado.copy(mensajeExito = null, error = null) }

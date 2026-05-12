@@ -16,7 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.*
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.LocalCadenas
 
 @Composable
 fun MainScaffold(
@@ -86,7 +86,7 @@ private fun PantallaExplorar(
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Spacer(Modifier.height(8.dp))
         Text(c.explorarTitulo, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(c.explorarSubtitulo, color = Color(0xFF6B7280), fontSize = 15.sp)
+        Text(c.explorarSubtitulo, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))
         Opc(Icons.Default.Place, Color(0xFF2563EB), c.explorarBuscarTecnicos, c.explorarBuscarTecnicosSub, onBuscarTecnicos)
         Opc(Icons.Default.LocationOn, Color(0xFFD97706), c.explorarMapaTecnicos, c.explorarMapaTecnicosSub, onMapaTecnicos)
@@ -103,11 +103,11 @@ private fun PantallaMas(
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Spacer(Modifier.height(8.dp))
         Text(c.masTitulo, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text(c.masSubtitulo, color = Color(0xFF6B7280), fontSize = 15.sp)
+        Text(c.masSubtitulo, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))
         Opc(Icons.Default.Person, Color(0xFF7C3AED), c.masPerfil, c.masPerfilSub, onPerfil)
-        Opc(Icons.Default.Settings, Color(0xFF6B7280), c.masAjustes, c.masAjustesSub, onAjustes)
-        Opc(Icons.Default.Info, Color(0xFF6B7280), c.masSobreApp, c.masSobreAppSub, onSobreApp)
+        Opc(Icons.Default.Settings, MaterialTheme.colorScheme.onSurfaceVariant, c.masAjustes, c.masAjustesSub, onAjustes)
+        Opc(Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, c.masSobreApp, c.masSobreAppSub, onSobreApp)
         Spacer(Modifier.weight(1f))
         OutlinedButton(
             onClick = onCerrarSesion,

@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +34,7 @@ fun HistorialInformesScreen(
     val fondo = MaterialTheme.colorScheme.background
     val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
+    val ctx = LocalContext.current
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
     LaunchedEffect(Unit) { viewModel.cargarInformes() }
@@ -125,7 +127,7 @@ fun HistorialInformesScreen(
                         val b = estado.informeComparar!!
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             border = BorderStroke(2.dp, verde),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -198,7 +200,7 @@ fun HistorialInformesScreen(
                         },
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (seleccionado) Color(0xFFD1FAE5) else Color.White
+                            containerColor = if (seleccionado) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface
                         ),
                         border = BorderStroke(1.dp, if (seleccionado) verde else borde),
                         modifier = Modifier.fillMaxWidth()
@@ -213,11 +215,19 @@ fun HistorialInformesScreen(
                                     Text(informe.nombreVivienda, fontWeight = FontWeight.SemiBold)
                                     Text(sdf.format(Date(informe.fechaGeneracion)), color = gris, fontSize = 12.sp)
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (seleccionado) {
                                         Icon(Icons.Default.CheckCircle, null, tint = verde, modifier = Modifier.size(20.dp))
                                     }
                                     EtiquetaBadge(informe.etiqueta)
+                                    if (!estado.modoComparar) {
+                                        IconButton(
+                                            onClick = { compartirInforme(ctx, informe) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.Share, "Compartir", tint = gris, modifier = Modifier.size(18.dp))
+                                        }
+                                    }
                                 }
                             }
                             Spacer(Modifier.height(8.dp))

@@ -1,4 +1,4 @@
-package com.example.zerohaus.util
+package com.example.zerohaus.Util
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

@@ -182,7 +182,13 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
 
     val dir = File(context.cacheDir, "informes")
     dir.mkdirs()
-    val fileName = "informe_${informe.nombreVivienda.replace(" ", "_")}_${informe.fechaGeneracion}.pdf"
+    val nombreSeguro = informe.nombreVivienda
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifBlank { "vivienda" }
+        .take(40)
+    val fileName = "informe_${nombreSeguro}_${informe.fechaGeneracion}.pdf"
     val file = File(dir, fileName)
     FileOutputStream(file).use { doc.writeTo(it) }
     doc.close()

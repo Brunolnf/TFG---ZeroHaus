@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.zerohaus.ViewModel.PerfilViewModel
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.LocalCadenas
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +87,7 @@ fun PerfilScreen(
                     modifier = Modifier
                         .size(110.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFE5E7EB))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { fotoPicker.launch("image/*") },
                     contentAlignment = Alignment.Center
                 ) {
@@ -117,13 +117,13 @@ fun PerfilScreen(
                 // Datos personales
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         Text(c.perfilDatosPersonales, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
-                        Text(c.registroNombre, fontSize = 12.sp, color = Color(0xFF111827))
+                        Text(c.registroNombre, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         OutlinedTextField(
                             value = estado.nombre,
                             onValueChange = { viewModel.cambiarNombre(it) },
@@ -135,7 +135,7 @@ fun PerfilScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Text(c.perfilEmailLabel, fontSize = 12.sp, color = Color(0xFF111827))
+                        Text(c.perfilEmailLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         OutlinedTextField(
                             value = estado.email, onValueChange = {}, readOnly = true,
                             leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
@@ -144,7 +144,7 @@ fun PerfilScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Text(c.perfilTipoUsuarioLabel, fontSize = 12.sp, color = Color(0xFF111827))
+                        Text(c.perfilTipoUsuarioLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         val tipoDisplay = when (estado.tipoUsuario) {
                             "Técnico" -> c.tipoTecnico
                             else -> c.tipoPropietario
@@ -163,13 +163,13 @@ fun PerfilScreen(
                 if (estado.tipoUsuario == "Técnico") {
                     Card(
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             Text(c.perfilTecnicoTitulo, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
-                            Text(c.perfilEspecialidades, fontSize = 12.sp, color = Color(0xFF111827))
+                            Text(c.perfilEspecialidades, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                             OutlinedTextField(
                                 value = estado.especialidades,
                                 onValueChange = { viewModel.cambiarEspecialidades(it) },
@@ -179,7 +179,7 @@ fun PerfilScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text(c.perfilDescripcionProf, fontSize = 12.sp, color = Color(0xFF111827))
+                            Text(c.perfilDescripcionProf, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                             OutlinedTextField(
                                 value = estado.descripcion,
                                 onValueChange = { viewModel.cambiarDescripcion(it) },
@@ -189,7 +189,7 @@ fun PerfilScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text("Teléfono", fontSize = 12.sp, color = Color(0xFF111827))
+                            Text("Teléfono", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                             OutlinedTextField(
                                 value = estado.telefono,
                                 onValueChange = { viewModel.cambiarTelefono(it) },
@@ -200,12 +200,66 @@ fun PerfilScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text(c.perfilEmailContacto, fontSize = 12.sp, color = Color(0xFF111827))
+                            Text(c.perfilEmailContacto, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                             OutlinedTextField(
                                 value = estado.emailContacto,
                                 onValueChange = { viewModel.cambiarEmailContacto(it) },
                                 placeholder = { Text(c.perfilEmailContactoPlaceholder) },
                                 leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
+                                singleLine = true, shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Text("Ciudad", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            OutlinedTextField(
+                                value = estado.ciudad,
+                                onValueChange = { viewModel.cambiarCiudad(it) },
+                                placeholder = { Text("Tu ciudad de trabajo") },
+                                leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = gris) },
+                                singleLine = true, shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    // ── Métodos de cobro (técnico) ──
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Payments, null, tint = verde, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Métodos de cobro", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            }
+                            Text(
+                                "Configura cómo quieres que tus clientes te paguen. Necesitas al menos uno para poder cobrar reformas.",
+                                fontSize = 12.sp, color = gris
+                            )
+
+                            Text("PayPal — usuario de PayPal.me", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            OutlinedTextField(
+                                value = estado.paypalUsername,
+                                onValueChange = { viewModel.cambiarPaypal(it) },
+                                placeholder = { Text("p.ej. carlosgomez") },
+                                leadingIcon = { Icon(Icons.Default.AccountBalance, null, tint = gris) },
+                                supportingText = { Text("Tu enlace será paypal.me/${estado.paypalUsername.ifEmpty { "tu_usuario" }}", fontSize = 11.sp) },
+                                singleLine = true, shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Text("Bizum — teléfono asociado", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            OutlinedTextField(
+                                value = estado.bizumTelefono,
+                                onValueChange = { viewModel.cambiarBizum(it) },
+                                placeholder = { Text("+34600123456") },
+                                leadingIcon = { Icon(Icons.Default.Smartphone, null, tint = gris) },
+                                supportingText = { Text("El cliente lo usará para enviarte un Bizum", fontSize = 11.sp) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
                                 modifier = Modifier.fillMaxWidth()
@@ -251,7 +305,7 @@ fun PerfilScreen(
                 }
 
                 // Cuenta
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.fillMaxWidth()) {
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(c.perfilCuenta, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         OutlinedButton(

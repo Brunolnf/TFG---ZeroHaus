@@ -24,6 +24,9 @@ data class PerfilEstado(
     val telefono: String = "",
     val emailContacto: String = "",
     val tecnicoDocId: String = "",
+    val ciudad: String = "",
+    val paypalUsername: String = "",
+    val bizumTelefono: String = "",
     // Estado UI
     val cargando: Boolean = true,
     val guardando: Boolean = false,
@@ -54,13 +57,17 @@ class PerfilViewModel : ViewModel() {
                     fotoPerfil = usuario.fotoPerfil
                 )
                 if (usuario.tipoUsuario == "Técnico") {
-                    repoTecnicos.obtenerTecnico(usuario.uid) { tecnico ->
+                    // Buscamos por campo uid (no por ID de documento, que es diferente al Auth UID)
+                    repoTecnicos.obtenerMiPerfilTecnico { tecnico ->
                         estado = estado.copy(
                             especialidades = tecnico?.especialidades?.joinToString(", ") ?: "",
                             descripcion = tecnico?.descripcion ?: "",
                             telefono = tecnico?.telefono ?: "",
                             emailContacto = tecnico?.emailContacto?.ifEmpty { usuario.email } ?: usuario.email,
-                            tecnicoDocId = tecnico?.id ?: usuario.uid,
+                            tecnicoDocId = tecnico?.id ?: "",
+                            ciudad = tecnico?.ciudad ?: "",
+                            paypalUsername = tecnico?.paypalUsername ?: "",
+                            bizumTelefono = tecnico?.bizumTelefono ?: "",
                             cargando = false
                         )
                     }
@@ -78,6 +85,9 @@ class PerfilViewModel : ViewModel() {
     fun cambiarDescripcion(v: String) { estado = estado.copy(descripcion = v, exito = false) }
     fun cambiarTelefono(v: String) { estado = estado.copy(telefono = v, exito = false) }
     fun cambiarEmailContacto(v: String) { estado = estado.copy(emailContacto = v, exito = false) }
+    fun cambiarPaypal(v: String) { estado = estado.copy(paypalUsername = v, exito = false) }
+    fun cambiarBizum(v: String) { estado = estado.copy(bizumTelefono = v, exito = false) }
+    fun cambiarCiudad(v: String) { estado = estado.copy(ciudad = v, exito = false) }
 
     fun guardarPerfil() {
         val usuario = estado.usuario ?: return
@@ -92,17 +102,36 @@ class PerfilViewModel : ViewModel() {
                             .split(",")
                             .map { it.trim() }
                             .filter { it.isNotEmpty() }
-                        val tecnico = Tecnico(
-                            id = estado.tecnicoDocId.ifEmpty { usuario.uid },
-                            uid = usuario.uid,
-                            nombre = estado.nombre,
-                            especialidades = especialidadesLista,
-                            descripcion = estado.descripcion,
-                            telefono = estado.telefono,
-                            emailContacto = estado.emailContacto.ifEmpty { usuario.email }
-                        )
-                        repoTecnicos.registrarTecnico(tecnico) { _ ->
-                            estado = estado.copy(guardando = false, exito = true)
+
+                        // Si ya existe documento, hacemos UPDATE parcial (preserva rating, opiniones, etc.)
+                        // Si no, hacemos SET completo.
+                        if (estado.tecnicoDocId.isNotEmpty()) {
+                            repoTecnicos.actualizarPerfilTecnico(
+                                tecnicoId = estado.tecnicoDocId,
+                                nombre = estado.nombre,
+                                ciudad = estado.ciudad,
+                                descripcion = estado.descripcion,
+                                telefono = estado.telefono,
+                                emailContacto = estado.emailContacto.ifEmpty { usuario.email },
+                                especialidades = especialidadesLista,
+                                paypalUsername = estado.paypalUsername.trim(),
+                                bizumTelefono = estado.bizumTelefono.trim()
+                            ) { _ -> estado = estado.copy(guardando = false, exito = true) }
+                        } else {
+                            val tecnico = Tecnico(
+                                uid = usuario.uid,
+                                nombre = estado.nombre,
+                                ciudad = estado.ciudad,
+                                especialidades = especialidadesLista,
+                                descripcion = estado.descripcion,
+                                telefono = estado.telefono,
+                                emailContacto = estado.emailContacto.ifEmpty { usuario.email },
+                                paypalUsername = estado.paypalUsername.trim(),
+                                bizumTelefono = estado.bizumTelefono.trim()
+                            )
+                            repoTecnicos.registrarTecnico(tecnico) { _ ->
+                                estado = estado.copy(guardando = false, exito = true)
+                            }
                         }
                     } else {
                         estado = estado.copy(guardando = false, exito = true)

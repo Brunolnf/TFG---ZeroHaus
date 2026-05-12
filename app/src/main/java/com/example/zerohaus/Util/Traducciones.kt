@@ -1,4 +1,4 @@
-package com.example.zerohaus.util
+package com.example.zerohaus.Util
 
 fun getCadenas(idioma: String): AppCadenas = when (idioma) {
     "English"   -> english

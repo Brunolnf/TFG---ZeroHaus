@@ -17,9 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.AjustesViewModel
-import com.example.zerohaus.util.AppEstado
-import com.example.zerohaus.util.AppPreferencias
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.AppPreferencias
+import com.example.zerohaus.Util.LocalCadenas
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

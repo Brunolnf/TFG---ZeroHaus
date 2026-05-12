@@ -142,7 +142,7 @@ fun MapaTecnicosScreen(
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, Color(0xFFE5E7EB)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(16.dp)
@@ -160,15 +160,9 @@ fun MapaTecnicosScreen(
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                repeat(5) { i ->
-                                    Icon(
-                                        Icons.Default.Star, null,
-                                        tint = if (t.rating >= (i + 1) - 0.01) Color(0xFFFFC107) else Color(0xFFBDBDBD),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                FilaEstrellas(t.rating, tamano = 16.dp)
                                 Spacer(Modifier.width(6.dp))
-                                Text("${t.rating} (${t.opiniones})", color = gris, fontSize = 12.sp)
+                                Text("%.1f (${t.opiniones})".format(t.rating), color = gris, fontSize = 12.sp)
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(t.especialidades.joinToString(" · "), color = gris, fontSize = 13.sp)

@@ -1,0 +1,1727 @@
+================================================================================
+                              MEMORIA DEL PROYECTO
+                                  Z E R O H A U S
+            Aplicación móvil Android para la mejora de la eficiencia
+                  energética de viviendas y la intermediación
+                       con técnicos de rehabilitación
+================================================================================
+
+Trabajo Fin de Grado
+Autor: Bruno Linares
+Curso académico: 2025-2026
+Plataforma: Android (Kotlin + Jetpack Compose)
+Backend: Firebase (Authentication, Firestore, Storage, Cloud Messaging)
+Repositorio: ZeroHaus
+applicationId: es.zerohaus.app
+
+================================================================================
+ÍNDICE
+================================================================================
+
+1.  Resumen y abstract
+2.  Introducción
+    2.1. Contexto y motivación
+    2.2. Problema a resolver
+    2.3. Justificación del proyecto
+3.  Objetivos
+    3.1. Objetivo general
+    3.2. Objetivos específicos
+4.  Marco teórico
+    4.1. Eficiencia energética en la edificación residencial
+    4.2. El Código Técnico de la Edificación (CTE)
+    4.3. El RD 390/2021 y la escala A–G
+    4.4. Factores de conversión del IDAE
+5.  Estado del arte
+    5.1. Aplicaciones existentes
+    5.2. Aportación diferencial de ZeroHaus
+6.  Análisis de requisitos
+    6.1. Tipos de usuario
+    6.2. Requisitos funcionales del propietario
+    6.3. Requisitos funcionales del técnico
+    6.4. Requisitos no funcionales
+7.  Tecnologías utilizadas
+    7.1. Lenguaje y SDK
+    7.2. Jetpack Compose y Material 3
+    7.3. Firebase
+    7.4. Google Maps Compose
+    7.5. Coil, Navigation, Lifecycle
+    7.6. Build, firma y proguard
+8.  Arquitectura del sistema
+    8.1. Patrón MVVM
+    8.2. Capas y paquetes
+    8.3. Flujo unidireccional de datos
+    8.4. Gestión de la sesión y la navegación
+9.  Modelo de datos
+    9.1. Colecciones de Firestore
+    9.2. Modelo Usuario
+    9.3. Modelo Tecnico
+    9.4. Modelo Vivienda
+    9.5. Modelo InformeEnergetico
+    9.6. Modelo SolicitudPresupuesto
+    9.7. Modelo Proyecto
+    9.8. Modelos Chat y MensajeChat
+    9.9. Modelos Resena, Notificacion, Certificado, AjustesUsuario
+10. Diseño de la interfaz de usuario
+    10.1. Pantallas del propietario
+    10.2. Pantallas del técnico
+    10.3. Navegación y scaffolds
+    10.4. Sistema de cadenas e internacionalización
+    10.5. Tema, modo oscuro y accesibilidad
+11. Implementación de la lógica de negocio
+    11.1. Autenticación y registro
+    11.2. Algoritmo energético
+    11.3. Generación e historial de informes
+    11.4. Búsqueda de técnicos y rankings
+    11.5. Mapa de técnicos y geolocalización por ciudad
+    11.6. Ciclo de vida de una solicitud (presupuesto, ficha, pago)
+    11.7. Chat en tiempo real con multimedia
+    11.8. Sistema de notificaciones (push y locales)
+    11.9. Reseñas, rating y panel del técnico
+    11.10. Certificados y compartición de informes
+12. Seguridad
+    12.1. Reglas de Firestore
+    12.2. Almacenamiento de credenciales y secretos
+    12.3. Validación de entrada
+13. Pruebas y validación
+14. Despliegue y empaquetado
+15. Resultados
+16. Conclusiones
+17. Líneas futuras
+18. Bibliografía y referencias
+19. Anexos
+    A. Estructura del repositorio
+    B. Listado de pantallas y ViewModels
+    C. Diagrama de estados de una solicitud
+    D. Glosario
+
+
+================================================================================
+1. RESUMEN Y ABSTRACT
+================================================================================
+
+ZeroHaus es una aplicación móvil nativa para Android, desarrollada con Kotlin y
+Jetpack Compose, cuyo propósito es facilitar la mejora de la eficiencia
+energética en viviendas particulares. La aplicación permite a los propietarios
+generar pre-estudios energéticos a partir de los datos básicos de su vivienda
+(superficie, año de construcción, tipo de ventanas, aislamiento, sistema de
+calefacción, sistema de agua caliente sanitaria y orientación), obteniendo una
+estimación del consumo anual, las emisiones de CO2, el coste anual y una
+etiqueta energética en la escala A–G regulada por el RD 390/2021.
+
+Además del cálculo, ZeroHaus actúa como plataforma de intermediación con
+técnicos rehabilitadores. El usuario propietario puede explorar técnicos
+filtrando por especialidad, verlos en un mapa con su ubicación aproximada,
+consultar sus opiniones y solicitarles un presupuesto. Toda la conversación
+posterior — desde el envío del presupuesto hasta la confirmación del pago —
+queda registrada en la aplicación, con un chat en tiempo real que soporta
+texto, imágenes y archivos, y un sistema de notificaciones push y locales que
+mantiene al usuario informado.
+
+El proyecto utiliza Firebase como backend completo: Authentication para la
+gestión de identidad, Firestore para la persistencia documental, Storage para
+los archivos multimedia y Cloud Messaging para las notificaciones push. La
+arquitectura sigue el patrón MVVM (Model-View-ViewModel), con repositorios
+desacoplados que abstraen el acceso al backend y un flujo de datos
+unidireccional sobre estados inmutables de Kotlin.
+
+Abstract. ZeroHaus is an Android mobile application written in Kotlin with
+Jetpack Compose that helps homeowners improve the energy efficiency of their
+houses. The app generates simplified energy reports based on the dwelling
+parameters, classifies them on the A–G scale defined by the Spanish royal
+decree RD 390/2021 and provides actionable recommendations. It also connects
+homeowners with certified rehabilitation technicians: the user can browse
+profiles, view technicians on a map, request budgets, chat in real time and
+follow the full lifecycle of a renovation, from the initial budget to the
+final payment confirmation. The backend relies entirely on Firebase
+(Authentication, Firestore, Storage and Cloud Messaging) and the application
+follows the MVVM architectural pattern.
+
+
+================================================================================
+2. INTRODUCCIÓN
+================================================================================
+
+2.1. Contexto y motivación
+---------------------------------------------------------------------------------
+
+El parque edificado en España es responsable de aproximadamente el 30 % del
+consumo final de energía y de un porcentaje muy significativo de las
+emisiones de gases de efecto invernadero del país. Más del 80 % de las
+viviendas construidas son anteriores a 2007, año en el que entró en vigor el
+primer Código Técnico de la Edificación (CTE) con exigencias relevantes en
+materia de aislamiento y ahorro de energía. Esto implica que la mayor parte
+del parque residencial se sitúa en las letras E, F y G de la escala de
+eficiencia energética, con consumos elevados y un margen de mejora muy
+amplio.
+
+A esta realidad técnica se suma una realidad económica: las ayudas públicas
+ligadas a los fondos Next Generation, los programas PREE 5000, MOVES y las
+deducciones autonómicas han incentivado las reformas energéticas, pero el
+propietario medio sigue percibiendo el proceso como complejo. ¿Por dónde
+empezar? ¿Qué impacto tendrá sustituir las ventanas? ¿Cuánto cuesta una
+aerotermia? ¿A quién llamo? La oferta de técnicos rehabilitadores es amplia
+pero fragmentada, y la comparación entre profesionales se hace difícil.
+
+ZeroHaus nace para tratar de cubrir ese hueco con una herramienta sencilla,
+accesible desde el teléfono móvil, que ofrezca al propietario tres cosas:
+
+  1. Un diagnóstico inicial razonable sobre el estado energético de su
+     vivienda, sin necesidad de contratar un certificado oficial.
+  2. Un canal directo con técnicos especializados, con perfil público,
+     opiniones y geolocalización.
+  3. Un seguimiento ordenado del proceso de reforma, desde la petición del
+     presupuesto hasta la confirmación del pago, para que cliente y técnico
+     dispongan de un registro común y transparente.
+
+2.2. Problema a resolver
+---------------------------------------------------------------------------------
+
+El proceso real al que se enfrenta un propietario que quiere reformar
+energéticamente su vivienda suele ser el siguiente:
+
+  - Buscar técnicos en directorios genéricos, sin filtros por especialidad.
+  - Pedir presupuestos por teléfono o correo, con respuestas dispersas.
+  - Comparar manualmente precios, plazos y alcance de trabajos.
+  - Cerrar una contratación verbal o con poco soporte documental.
+  - Hacer un seguimiento informal del avance.
+  - Pagar por canales externos (transferencia, Bizum, PayPal) sin trazabilidad
+    dentro del propio proceso.
+
+Este flujo está plagado de pérdidas de información: los presupuestos quedan
+olvidados en el correo, los acuerdos verbales se desdibujan, y la única vez
+que cliente y técnico vuelven a estar en la misma página es cuando aparece un
+problema. ZeroHaus pretende formalizar ese flujo dentro de una única
+aplicación, sin convertirla en una plataforma rígida — el técnico sigue
+cobrando por sus medios habituales (PayPal o Bizum), simplemente la
+aplicación registra el ciclo completo.
+
+2.3. Justificación del proyecto
+---------------------------------------------------------------------------------
+
+La justificación del TFG se apoya en cuatro pilares:
+
+  - Pertinencia técnica: integra cálculo energético, base de datos en la
+    nube, autenticación, geolocalización, mensajería en tiempo real y
+    notificaciones push. Es un proyecto representativo del estado actual del
+    desarrollo móvil profesional.
+  - Pertinencia normativa: el algoritmo de clasificación se inspira en la
+    escala oficial del RD 390/2021 y en los factores de conversión del IDAE,
+    y el código se documenta refiriendo las fuentes.
+  - Pertinencia social: la transición energética es una prioridad nacional y
+    europea, y existe un déficit de herramientas digitales accesibles para
+    el ciudadano medio.
+  - Pertinencia académica: el alumno demuestra dominio de Kotlin moderno,
+    arquitectura MVVM, Compose, Firebase, y de buenas prácticas como reglas
+    de seguridad declarativas, internacionalización, modo oscuro y firma de
+    APKs.
+
+
+================================================================================
+3. OBJETIVOS
+================================================================================
+
+3.1. Objetivo general
+---------------------------------------------------------------------------------
+
+Diseñar, desarrollar y desplegar una aplicación Android nativa que permita al
+ciudadano evaluar la eficiencia energética de su vivienda y conectarle con
+técnicos profesionales para acometer las reformas necesarias, manteniendo el
+seguimiento completo del proceso dentro de la propia aplicación.
+
+3.2. Objetivos específicos
+---------------------------------------------------------------------------------
+
+O1. Implementar un algoritmo simplificado de cálculo de eficiencia energética
+    que tome como entrada los parámetros básicos de la vivienda y devuelva
+    una clasificación A–G, una estimación de consumo anual en kWh, las
+    emisiones de CO2, el coste anual estimado y un conjunto priorizado de
+    recomendaciones de mejora.
+
+O2. Diseñar un modelo de datos persistente en la nube que dé soporte a dos
+    perfiles de usuario (propietario y técnico), con datos privados (las
+    viviendas, los informes, los chats) y datos públicos (la ficha de cada
+    técnico, las opiniones).
+
+O3. Construir una interfaz nativa para Android con Jetpack Compose, que
+    cumpla los principios de Material 3, sea accesible en modo claro y
+    oscuro y esté traducida a nueve idiomas: español, inglés, catalán,
+    euskera, gallego, portugués, francés, alemán e italiano.
+
+O4. Integrar un sistema de chat en tiempo real basado en listeners de
+    Firestore, con soporte para texto, fotografías y archivos, contadores
+    de mensajes no leídos por usuario y un canal de notificaciones específico.
+
+O5. Modelar el ciclo de vida completo de una reforma como una máquina de
+    estados sobre la entidad SolicitudPresupuesto, contemplando los hitos
+    Pendiente → Presupuestado → Aceptado → FichaEnviada → EnCurso →
+    PendientePago → PagoEnVerificacion → Completado, con sus transiciones
+    inversas (rechazos) y notificaciones asociadas.
+
+O6. Implementar un mapa interactivo de técnicos basado en Google Maps
+    Compose que muestre la ubicación aproximada de cada profesional a
+    partir del nombre de su ciudad.
+
+O7. Definir un conjunto declarativo de reglas de seguridad de Firestore que
+    garantice que cada usuario sólo puede leer y modificar los recursos que
+    le pertenecen, y que prevenga ataques de escalado de privilegios.
+
+O8. Empaquetar y firmar la aplicación con un keystore propio para su
+    distribución mediante Google Play, aplicando R8 (minificación y
+    shrinking de recursos) en el build de release.
+
+
+================================================================================
+4. MARCO TEÓRICO
+================================================================================
+
+4.1. Eficiencia energética en la edificación residencial
+---------------------------------------------------------------------------------
+
+La eficiencia energética de una vivienda es la relación entre los servicios
+energéticos prestados (calefacción, refrigeración, iluminación, agua
+caliente sanitaria) y la energía primaria consumida para prestarlos. Una
+vivienda eficiente proporciona el mismo nivel de confort con menos energía,
+lo que se traduce en menor coste para el usuario y menores emisiones para
+el conjunto del sistema.
+
+Los principales factores que determinan la eficiencia energética de un
+edificio residencial son:
+
+  - La envolvente térmica: aislamiento de fachadas, cubiertas y suelos.
+  - Las carpinterías exteriores: tipo de vidrio (simple, doble, triple) y
+    rotura de puente térmico de los marcos.
+  - Los sistemas térmicos: calefacción, refrigeración y producción de agua
+    caliente sanitaria, con un rendimiento muy distinto según la
+    tecnología (resistencia eléctrica, caldera de gas, bomba de calor,
+    aerotermia, biomasa).
+  - La orientación y el factor solar: la captación pasiva en orientación
+    sur reduce la demanda de calefacción en invierno.
+  - El año de construcción: como criterio indirecto, permite estimar el
+    nivel de exigencia constructiva aplicable.
+
+4.2. El Código Técnico de la Edificación (CTE)
+---------------------------------------------------------------------------------
+
+El CTE es el marco normativo que regula las exigencias básicas de calidad
+que deben cumplir los edificios, incluidos sus instalaciones, para
+satisfacer los requisitos esenciales de seguridad y habitabilidad. Su
+Documento Básico HE (Ahorro de Energía) establece, entre otras, las
+secciones HE0 (limitación del consumo energético), HE1 (condiciones para
+el control de la demanda) y HE4 (contribución mínima de energía
+procedente de fuentes renovables para cubrir la demanda de agua caliente
+sanitaria). En el algoritmo simplificado de ZeroHaus se utilizan los
+principios de HE1 al ponderar la orientación y el aislamiento.
+
+4.3. El RD 390/2021 y la escala A–G
+---------------------------------------------------------------------------------
+
+El Real Decreto 390/2021, de 1 de junio, aprueba el procedimiento básico
+para la certificación de la eficiencia energética de los edificios y
+mantiene la escala de etiquetado A–G heredada de los reglamentos
+anteriores. La etiqueta se asigna a partir del indicador global de
+emisiones de dióxido de carbono o, alternativamente, del consumo de
+energía primaria no renovable, en función de un valor de referencia
+calculado para un edificio similar.
+
+ZeroHaus reproduce la escala visual (etiquetas y colores asociados) y
+calcula la clasificación a partir del consumo estimado en kWh/m² año
+mediante los siguientes tramos, ajustados para que el resultado sea
+plausible para vivienda residencial:
+
+      < 50  → A    Muy alta eficiencia
+   50–90   → B    Alta eficiencia
+   90–140  → C    Eficiencia buena
+  140–200  → D    Eficiencia media
+  200–280  → E    Eficiencia baja
+  280–380  → F    Eficiencia muy baja
+     ≥380  → G    Eficiencia mínima
+
+4.4. Factores de conversión del IDAE
+---------------------------------------------------------------------------------
+
+El IDAE (Instituto para la Diversificación y Ahorro de la Energía) publica
+periódicamente los factores de conversión entre energía final consumida y
+emisiones de CO2 para el mix eléctrico peninsular, así como precios medios
+de referencia. ZeroHaus utiliza dos constantes:
+
+  - 0,22 kg CO2 / kWh: factor de emisiones del mix eléctrico español
+    (referencia IDAE 2023, simplificado).
+  - 0,15 € / kWh: precio medio de la electricidad en España 2024, usado
+    para estimar el coste anual.
+
+Ambas constantes son ajustables centralmente desde el algoritmo y podrían
+actualizarse anualmente o leerse desde un documento de configuración en
+Firestore.
+
+
+================================================================================
+5. ESTADO DEL ARTE
+================================================================================
+
+5.1. Aplicaciones existentes
+---------------------------------------------------------------------------------
+
+Una revisión del panorama actual de aplicaciones móviles relacionadas con
+eficiencia energética permite identificar varias categorías:
+
+  - Simuladores oficiales (CE3X, CERMA): herramientas de escritorio
+    profesionales, no orientadas al ciudadano final, con curvas de
+    aprendizaje muy elevadas.
+  - Calculadoras de ahorro genéricas (web): páginas estáticas que ofrecen
+    una estimación muy aproximada a partir de pocos parámetros, sin
+    persistencia ni seguimiento.
+  - Marketplaces de profesionales (Habitissimo, Cronoshare): centradas en
+    poner en contacto al cliente con varios profesionales, pero sin
+    integrar el cálculo energético y con un modelo basado en la venta de
+    leads.
+  - Apps de control de consumo (Genially, Iberdrola Energy Monitor):
+    monitorizan facturas reales pero no orientan sobre reformas.
+
+5.2. Aportación diferencial de ZeroHaus
+---------------------------------------------------------------------------------
+
+ZeroHaus se posiciona como una herramienta integrada que combina:
+
+  - Diagnóstico energético previo, instantáneo y sin compromisos.
+  - Búsqueda de técnicos especializados, con perfil, opiniones y mapa.
+  - Comunicación in-app por chat con historial persistente.
+  - Ciclo de vida completo de la reforma como flujo modelado.
+  - Pago externo (PayPal/Bizum) pero con declaración y confirmación dentro
+    de la propia aplicación, registrando la trazabilidad.
+  - Multi-idioma de serie (nueve idiomas) y modo oscuro.
+
+Ninguna de las aplicaciones revisadas ofrece esta combinación en un único
+producto pensado para teléfono móvil.
+
+
+================================================================================
+6. ANÁLISIS DE REQUISITOS
+================================================================================
+
+6.1. Tipos de usuario
+---------------------------------------------------------------------------------
+
+La aplicación maneja dos tipos de usuario, diferenciados por el campo
+"tipoUsuario" del documento de la colección /usuarios:
+
+  - Propietario: usuario final que quiere conocer la eficiencia de su
+    vivienda y, eventualmente, contratar una reforma.
+  - Técnico: profesional especializado en rehabilitación energética
+    (aislamiento, ventanas, climatización, aerotermia, solar fotovoltaica,
+    solar térmica, etc.) que ofrece sus servicios en la plataforma.
+
+El flujo de registro permite elegir el tipo en el momento de creación de la
+cuenta. La aplicación deriva al usuario al MainScaffold (propietario) o al
+MainScaffoldTecnico (técnico) en función de este campo, y la pantalla de
+perfil expone secciones distintas según corresponda.
+
+6.2. Requisitos funcionales del propietario
+---------------------------------------------------------------------------------
+
+RFP-01. Registrar una vivienda con todos sus parámetros energéticos.
+RFP-02. Generar un pre-estudio energético basado en los datos introducidos.
+RFP-03. Consultar el último informe y el historial completo de informes.
+RFP-04. Comparar dos informes seleccionados (modo comparar).
+RFP-05. Ver gráficas de evolución de consumo, emisiones y coste.
+RFP-06. Compartir un informe en formato PDF mediante el FileProvider.
+RFP-07. Buscar técnicos con filtros por especialidad y por texto libre.
+RFP-08. Ver técnicos en un mapa con popup que muestra nombre y rating.
+RFP-09. Consultar el perfil público de un técnico, sus opiniones y su
+        ranking de estrellas con medias fraccionarias.
+RFP-10. Solicitar presupuesto a uno o varios técnicos.
+RFP-11. Aceptar o rechazar un presupuesto recibido.
+RFP-12. Aceptar o rechazar una ficha de inicio enviada por el técnico.
+RFP-13. Declarar el pago por PayPal o Bizum con referencia opcional.
+RFP-14. Anular una declaración de pago previa.
+RFP-15. Chatear en tiempo real con cualquier técnico contactado.
+RFP-16. Recibir notificaciones push y locales de cambios relevantes.
+RFP-17. Valorar a un técnico con estrellas y comentario una sola vez por
+        reforma completada.
+RFP-18. Consultar y modificar el perfil personal (nombre, foto).
+RFP-19. Ajustar idioma, tema y unidades.
+
+6.3. Requisitos funcionales del técnico
+---------------------------------------------------------------------------------
+
+RFT-01. Completar el perfil profesional (especialidades, ciudad,
+        descripción, teléfono, email, métodos de cobro).
+RFT-02. Subir certificados profesionales (PDF/imagen) a su perfil.
+RFT-03. Recibir solicitudes de presupuesto y consultarlas agrupadas por
+        estado.
+RFT-04. Enviar el presupuesto al cliente con un precio y un mensaje.
+RFT-05. Enviar la ficha de inicio del trabajo (fechas, descripción,
+        precio final y tareas).
+RFT-06. Marcar el trabajo como terminado para iniciar el cobro.
+RFT-07. Confirmar la recepción del pago del cliente.
+RFT-08. Visualizar el panel del técnico con KPIs (solicitudes pendientes,
+        proyectos activos, ingresos potenciales y consolidados, tasa de
+        respuesta y tasa de aceptación).
+RFT-09. Consultar el listado de sus clientes, con número de solicitudes
+        activas y enlace al chat.
+RFT-10. Ver los proyectos asignados, marcar tareas como completadas y
+        actualizar el progreso.
+RFT-11. Consultar las reseñas recibidas con distribución de puntuaciones.
+RFT-12. Editar los métodos de cobro (PayPal username y teléfono Bizum).
+
+6.4. Requisitos no funcionales
+---------------------------------------------------------------------------------
+
+RNF-01. Plataforma: Android nativo, minSdk 26 (Android 8.0), targetSdk 36.
+RNF-02. Idioma: la interfaz debe estar disponible en 9 idiomas mediante un
+        sistema de cadenas declarativo en código.
+RNF-03. Tema: modo claro y oscuro, respetando el ajuste del sistema y
+        permitiendo forzar uno u otro desde Ajustes.
+RNF-04. Latencia: los listeners de chat deben actualizar la conversación
+        en menos de un segundo desde la confirmación del envío.
+RNF-05. Seguridad: ningún usuario debe poder leer ni escribir documentos
+        que no le pertenezcan; debe garantizarse por reglas Firestore, no
+        sólo por la interfaz.
+RNF-06. Disponibilidad: dependiente de Firebase (SLA de Google Cloud).
+RNF-07. Persistencia offline: el SDK de Firestore mantiene caché local;
+        ZeroHaus aprovecha esta caché en la pantalla de chat para mostrar
+        mensajes inmediatamente al abrir.
+RNF-08. Tamaño: APK release minificado y shrunk con R8.
+
+
+================================================================================
+7. TECNOLOGÍAS UTILIZADAS
+================================================================================
+
+7.1. Lenguaje y SDK
+---------------------------------------------------------------------------------
+
+  - Kotlin 2.x con JVM target 17.
+  - Plugin Compose Compiler de Kotlin (kotlin.plugin.compose), que gestiona
+    automáticamente la versión del compilador Compose.
+  - compileSdk = 35, targetSdk = 36, minSdk = 26.
+
+7.2. Jetpack Compose y Material 3
+---------------------------------------------------------------------------------
+
+Toda la interfaz se construye con Jetpack Compose. Se usa el BOM
+compose-bom:2024.12.01, que fija de forma coherente las versiones de:
+
+  - androidx.compose.ui:ui
+  - androidx.compose.ui:ui-graphics
+  - androidx.compose.ui:ui-tooling-preview
+  - androidx.compose.material3:material3
+  - androidx.compose.material:material-icons-extended
+
+El tema de la aplicación (ZeroHausTheme) define los esquemas de color
+claro y oscuro derivados del Material You. La selección entre uno u otro
+se hace en MainActivity en función de la preferencia almacenada en
+AppPreferencias y, en su defecto, del ajuste del sistema operativo.
+
+7.3. Firebase
+---------------------------------------------------------------------------------
+
+El BOM firebase-bom:33.7.0 fija las versiones de:
+
+  - firebase-auth-ktx: autenticación por email y contraseña.
+  - firebase-firestore-ktx: persistencia documental, con listeners en
+    tiempo real para chat y notificaciones.
+  - firebase-storage-ktx: subida de imágenes y archivos.
+  - firebase-messaging-ktx: tokens FCM para notificaciones push.
+
+7.4. Google Maps Compose
+---------------------------------------------------------------------------------
+
+Para la pantalla MapaTecnicosScreen se utiliza maps-compose:6.2.1 y
+play-services-maps:19.0.0. La API key se inyecta vía manifest placeholder
+desde local.properties, lo que evita versionar el secreto en el
+repositorio.
+
+7.5. Coil, Navigation, Lifecycle
+---------------------------------------------------------------------------------
+
+  - coil-compose:2.7.0: carga asíncrona y caché de imágenes (fotos de
+    perfil, imágenes del chat).
+  - navigation-compose:2.8.5: navegación tipo single-activity con un
+    NavHost central (AppNavegacion).
+  - lifecycle-viewmodel-compose y lifecycle-runtime-ktx 2.8.7: integración
+    de ViewModel con composables.
+  - activity-compose:1.9.3: arranque de la única Activity de la
+    aplicación, MainActivity.
+
+7.6. Build, firma y proguard
+---------------------------------------------------------------------------------
+
+El build de release está firmado mediante un keystore propio
+(zerohaus-release.jks) cuya contraseña se lee de local.properties:
+
+  signingConfigs.create("release") {
+      storeFile = file("zerohaus-release.jks")
+      storePassword = localProps.getProperty("KEYSTORE_PASSWORD")
+      keyAlias = "zerohaus"
+      keyPassword = localProps.getProperty("KEY_PASSWORD")
+  }
+
+R8 está habilitado en release con minificación e isShrinkResources, lo que
+reduce significativamente el tamaño final del APK.
+
+
+================================================================================
+8. ARQUITECTURA DEL SISTEMA
+================================================================================
+
+8.1. Patrón MVVM
+---------------------------------------------------------------------------------
+
+ZeroHaus aplica el patrón Model-View-ViewModel de forma estricta:
+
+  - Model: clases de datos en el paquete Modelos. Son data classes Kotlin
+    inmutables con valores por defecto, lo que las hace compatibles con la
+    deserialización automática del SDK de Firestore.
+  - Repositorios: capa intermedia en el paquete Repositorios, una por
+    dominio (autenticación, viviendas, informes, técnicos, proyectos,
+    chat, certificados, notificaciones, reseñas, ajustes). Cada
+    repositorio expone funciones imperativas con callback que abstraen
+    completamente a Firestore.
+  - ViewModels: clases que extienden androidx.lifecycle.ViewModel, en el
+    paquete ViewModel. Cada uno mantiene un único estado inmutable mediante
+    `var estado by mutableStateOf(...)`, expuesto con `private set`. Las
+    acciones se exponen como métodos públicos que sustituyen el estado por
+    una copia modificada.
+  - Views: composables en el paquete UserInterface. Reciben siempre el
+    ViewModel correspondiente, observan su estado y disparan métodos en
+    respuesta a la interacción del usuario.
+
+Este patrón hace que la lógica de presentación esté desacoplada de la
+infraestructura, lo que facilita la prueba unitaria de los ViewModels y la
+sustitución del backend sin tocar las vistas.
+
+8.2. Capas y paquetes
+---------------------------------------------------------------------------------
+
+La organización en paquetes refleja directamente las capas:
+
+  com.example.zerohaus
+  ├── MainActivity.kt              # única Activity
+  ├── ServicioNotificaciones.kt    # FirebaseMessagingService
+  ├── Modelos/                     # data classes
+  ├── Estados/                     # estados específicos de Login/Registro
+  ├── Repositorios/                # acceso a Firestore/Storage/Auth
+  ├── ViewModel/                   # 24 ViewModels
+  ├── UserInterface/               # 30+ Composables de pantalla
+  ├── Navegacion/                  # AppNavegacion (NavHost)
+  ├── ui/theme/                    # ZeroHausTheme, colores, tipografía
+  └── util/                        # AppCadenas, Traducciones, AppEstado,
+                                     AppPreferencias, NotificacionesLocales,
+                                     SembradorDatos
+
+8.3. Flujo unidireccional de datos
+---------------------------------------------------------------------------------
+
+El flujo en cada pantalla sigue la siguiente secuencia:
+
+  1. La View se compone y obtiene su ViewModel con `viewModel()` (o lo
+     recibe ya instanciado, en el caso de los ViewModels compartidos).
+  2. La View ejecuta un LaunchedEffect(Unit) que invoca la función de
+     carga (cargarDatos, cargarPerfil, etc.).
+  3. El ViewModel pone el estado en "cargando = true" y delega en el
+     repositorio.
+  4. El repositorio invoca a Firestore y devuelve el resultado por callback.
+  5. El ViewModel reemplaza su estado con la nueva información.
+  6. Compose detecta el cambio en `estado` (porque es un MutableState) y
+     recompone la pantalla.
+  7. Las acciones del usuario (clic, escribir en un campo, deslizar) se
+     traducen a llamadas a métodos del ViewModel.
+
+8.4. Gestión de la sesión y la navegación
+---------------------------------------------------------------------------------
+
+La única Activity, MainActivity, instala el composable AppNavegacion. La
+gestión de la sesión se centraliza en SesionViewModel, que expone:
+
+  - logueado: MutableState<Boolean?>; null mientras se comprueba, true si
+    hay sesión activa, false en caso contrario.
+  - usuario: MutableState<Usuario?>; el documento usuario actual.
+  - comprobarSesion(): consulta FirebaseAuth.currentUser y, si existe,
+    carga el documento de la colección /usuarios.
+
+AppNavegacion muestra un SplashScreen al arrancar, después un
+CircularProgressIndicator mientras `logueado` es null, y a partir de ahí
+elige como pantalla raíz "login" o "main". El "main" se bifurca según
+tipoUsuario: si es "Técnico" pinta MainScaffoldTecnico (con bottom nav
+adaptado: Panel, Solicitudes, Clientes, Más); si no, MainScaffold (Panel,
+Mensajes, Explorar, Más).
+
+Los ViewModels compartidos entre varias rutas se elevan a la raíz de
+AppNavegacion (LoginViewModel para login y recuperar, ChatViewModel para
+todas las pantallas que abren chat, InformeViewModel para el flujo
+preestudio→informe, TecnicosViewModel para listado y mapa, SesionViewModel
+para toda la app). Los demás se instancian dentro de su composable() para
+que el componente Navigation los limpie automáticamente al salir.
+
+
+================================================================================
+9. MODELO DE DATOS
+================================================================================
+
+9.1. Colecciones de Firestore
+---------------------------------------------------------------------------------
+
+ZeroHaus opera con once colecciones principales:
+
+  /usuarios            Documentos de usuario (uid = doc id).
+  /tecnicos            Perfil público del técnico (uid = doc id, salvo en
+                       casos de migración antigua, donde se busca por el
+                       campo "uid").
+  /viviendas           Una por vivienda, vinculada al uid del propietario.
+  /informes            Informes energéticos generados.
+  /proyectos           Reformas en curso o finalizadas.
+  /solicitudes         Ciclo completo presupuesto → ficha → pago.
+  /chats               Conversaciones entre dos usuarios.
+  /chats/{id}/mensajes Subcolección de mensajes de cada chat.
+  /resenas             Opiniones publicadas por clientes sobre técnicos.
+  /notificaciones      Notificaciones internas asociadas a un uid.
+  /certificados        Metadatos de los certificados subidos.
+  /ajustes             Preferencias por usuario.
+  /pagos               Histórico de pagos confirmados.
+
+9.2. Modelo Usuario
+---------------------------------------------------------------------------------
+
+data class Usuario(
+    val uid: String = "",
+    val nombre: String = "",
+    val email: String = "",
+    val tipoUsuario: String = "Propietario",
+    val fotoPerfil: String = "",
+    val tokenFCM: String = "",
+    val fechaRegistro: Long = System.currentTimeMillis()
+)
+
+El campo tokenFCM se actualiza tras el login mediante
+ServicioNotificaciones.registrarToken(), lo que permite que el backend
+envíe notificaciones push al dispositivo del usuario en cuanto su token
+está disponible.
+
+9.3. Modelo Tecnico
+---------------------------------------------------------------------------------
+
+El modelo Tecnico añade campos específicos:
+
+  - especialidades: List<String>, lista libre que el técnico edita desde
+    su perfil (p.ej. "Aerotermia", "Ventanas", "Aislamiento").
+  - rating: Double, media aritmética redondeada a un decimal, recalculada
+    cada vez que se publica una nueva reseña.
+  - opiniones: Int, número total de reseñas.
+  - latitud, longitud: Double, coordenadas obtenidas a partir del nombre
+    de la ciudad mediante un diccionario embebido (CIUDADES_COORDS) con
+    más de 40 ciudades españolas, incluyendo variantes con y sin tildes
+    para tolerar errores de tecleo.
+  - paypalUsername y bizumTelefono: métodos de cobro que el técnico
+    expone al cliente cuando éste pulsa "Pagar".
+
+9.4. Modelo Vivienda
+---------------------------------------------------------------------------------
+
+data class Vivienda(
+    val id: String = "",
+    val uid: String = "",
+    val nombre: String = "",
+    val superficie: Int = 0,
+    val anioConstruccion: Int = 2000,
+    val tipoVentanas: String = "",
+    val aislamiento: String = "",
+    val calefaccion: String = "",
+    val acs: String = "",
+    val direccion: String = "",
+    val orientacion: String = "",
+    val fechaCreacion: Long = System.currentTimeMillis()
+)
+
+Los valores de cadena para tipoVentanas, aislamiento, calefaccion y acs
+están constreñidos a un conjunto cerrado (validado por la propia interfaz
+con DropdownMenu) que el algoritmo energético reconoce.
+
+9.5. Modelo InformeEnergetico
+---------------------------------------------------------------------------------
+
+Cada informe se vincula a una vivienda (viviendaId) y al propietario
+(uid). Contiene la etiqueta A–G, el estado textual ("Eficiencia buena",
+etc.), el consumo en kWh/año, las emisiones en kg CO2/año, el coste anual
+en € y la lista de Recomendacion (título + ahorro estimado en %).
+
+9.6. Modelo SolicitudPresupuesto
+---------------------------------------------------------------------------------
+
+Es la pieza central del ciclo de vida de una reforma. Combina cuatro
+estados de información:
+
+  - Cabecera: id, uidCliente, nombreCliente, tecnicoId, tecnicoUid,
+    tecnicoNombre, viviendaId, descripcion, fechaCreacion.
+  - Estado y precio: estado (cadena del enum implícito), precioPresupuesto,
+    respuestaTecnico, fechaRespuesta.
+  - Ficha de inicio: fichaFechaInicio, fichaFechaFinEstimada,
+    fichaDescripcion, fichaPrecioFinal, fichaTareas.
+  - Pago: pagado, fechaPago, metodoPago, referenciaPago, fechaPagoCliente.
+
+El campo `tecnicoId` apunta al id del documento del técnico en /tecnicos,
+mientras que `tecnicoUid` apunta al Auth UID. Esta distinción es
+imprescindible porque los documentos antiguos de /tecnicos pueden tener
+ids generados aleatoriamente que no coinciden con el uid de Auth, y las
+reglas de seguridad y las notificaciones deben usar el segundo.
+
+9.7. Modelo Proyecto
+---------------------------------------------------------------------------------
+
+El proyecto se crea automáticamente cuando el cliente acepta la ficha de
+inicio enviada por el técnico (RepositorioTecnicos.aceptarFichaYCrearProyecto).
+Conserva las tareas con su estado de completado, el progreso (0–100), y un
+vínculo al solicitudId que lo originó, permitiendo cerrar el ciclo cuando
+se confirma el cobro.
+
+9.8. Modelos Chat y MensajeChat
+---------------------------------------------------------------------------------
+
+Un Chat contiene la lista de participantes (dos uids), un mapa de nombres
+para mostrar y un mapa noLeidosPor que se incrementa de forma atómica con
+FieldValue.increment(1) cada vez que un participante recibe un mensaje. El
+emisor pone su propio contador a cero al abrir el chat.
+
+MensajeChat soporta tres tipos: "texto", "imagen" y "archivo". Los dos
+últimos suben el contenido a Firebase Storage en la ruta
+chats/{chatId}/{mensajeId}.{ext} y guardan la URL pública en mediaUrl.
+
+9.9. Modelos Resena, Notificacion, Certificado, AjustesUsuario
+---------------------------------------------------------------------------------
+
+  - Resena: tecnicoId, uid del autor, nombreUsuario, puntuacion 1–5,
+    comentario, fecha. La regla de negocio impide que un usuario pueda
+    valorar más de una vez al mismo técnico (yaValorado()) y exige que
+    exista al menos una solicitud en estado "Completado" entre ambos
+    (puedeValorar()).
+  - Notificacion: uid del destinatario, titulo, detalle, tipo
+    ("general", "presupuesto", "proyecto", "valoracion", "mensaje",
+    "reforma"), leida (Boolean), fecha.
+  - Certificado: metadatos de un archivo subido a Storage, asociado al
+    uid del técnico.
+  - AjustesUsuario: notificacionesPush, notificacionesEmail,
+    notificacionesSonido, idioma, tema, unidadEnergia, unidadMoneda.
+
+
+================================================================================
+10. DISEÑO DE LA INTERFAZ DE USUARIO
+================================================================================
+
+10.1. Pantallas del propietario
+---------------------------------------------------------------------------------
+
+El propietario navega entre las siguientes pantallas, agrupadas por el
+bottom navigation del MainScaffold (Inicio, Mensajes, Explorar, Más):
+
+  - PanelScreen: tarjeta de saludo con foto, banner con KPI energéticos
+    de la última vivienda, accesos rápidos a Pre-estudio, Mis viviendas,
+    Mis proyectos, Presupuestos, Buscar técnicos, Mapa de técnicos,
+    Rankings y Gráficas. Notificaciones desplegables en el AppBar.
+  - PreestudioScreen: formulario con los parámetros de la vivienda. Al
+    enviar, valida superficie (1–5000 m²) y año (1900–2025), guarda la
+    vivienda y dispara el cálculo del informe.
+  - InformeScreen: visualiza la etiqueta A–G grande, los tres KPIs
+    (consumo, emisiones, coste) y la lista de recomendaciones con ahorro
+    estimado. Incluye un botón "Contactar técnicos".
+  - HistorialInformesScreen: lista todos los informes del usuario y
+    permite seleccionar dos para compararlos lado a lado.
+  - GraficasConsumoScreen: dibuja en un Canvas la evolución temporal del
+    consumo, las emisiones y el coste. Los ejes se trazan con drawLine
+    usando MaterialTheme.colorScheme.outlineVariant.
+  - MisViviendasScreen: lista todas las viviendas guardadas con
+    posibilidad de editar y eliminar.
+  - TecnicosScreen: lista de técnicos con filtro por especialidad
+    (Chips) y buscador de texto. Cada tarjeta muestra rating con
+    estrellas parciales, especialidades, distancia (cuando aplica) y un
+    botón para ver el perfil.
+  - MapaTecnicosScreen: GoogleMap con un marker por técnico, con popup
+    Card que muestra nombre, especialidades y FilaEstrellas.
+  - PerfilTecnicoScreen: ficha pública con foto, descripción,
+    especialidades, opiniones agregadas y formulario para valorar (sólo
+    si hay solicitud completada). Botón "Contactar" que abre o crea el
+    chat.
+  - PresupuestosScreen: agrupa las solicitudes enviadas y recibidas con
+    pestañas. Para cada estado expone las acciones permitidas (aceptar,
+    rechazar, declarar pago, etc.).
+  - MisProyectosScreen: lista de proyectos con barra de progreso por
+    tareas; al pulsar uno se abren las tareas con checkboxes.
+  - ChatListScreen: lista de conversaciones con badge de mensajes no
+    leídos, ordenadas por fecha del último mensaje.
+  - ChatScreen: hilo de mensajes con burbujas adaptadas al tema,
+    inserción de imágenes (con preview y caption) y archivos.
+  - PerfilScreen: edición del perfil personal (nombre, foto), y para
+    técnicos también las especialidades, descripción, contacto, ciudad y
+    métodos de cobro.
+  - AjustesScreen: notificaciones, idioma, tema, unidades.
+  - SobreAppScreen: información sobre la aplicación.
+  - RankingsScreen: ordenación de técnicos por rating descendente.
+
+10.2. Pantallas del técnico
+---------------------------------------------------------------------------------
+
+El técnico navega un MainScaffoldTecnico distinto, con accesos a:
+
+  - PanelTecnicoScreen: KPIs de su actividad (solicitudes pendientes,
+    presupuestadas, aceptadas) y resumen de su perfil público.
+  - PresupuestosScreen (rol técnico): vista de solicitudes recibidas,
+    con acciones para responder con precio, enviar ficha, marcar trabajo
+    terminado y confirmar cobro.
+  - MisClientesTecnicoScreen: agregado por cliente con número de
+    solicitudes activas y enlace al chat.
+  - ProyectosAsignadosScreen: proyectos donde el técnico está asignado;
+    actualiza las tareas y el progreso.
+  - ResenasRecibidasScreen: distribución de puntuaciones, media y lista
+    completa de opiniones.
+  - EstadisticasTecnicoScreen: tasa de aceptación, tasa de respuesta,
+    ingresos consolidados, ingresos potenciales, proyectos activos y
+    completados.
+  - EditarPerfilTecnicoScreen: edición de ciudad, descripción,
+    especialidades, teléfono y email de contacto. Los métodos de cobro
+    se editan desde PerfilScreen.
+
+10.3. Navegación y scaffolds
+---------------------------------------------------------------------------------
+
+La navegación se centraliza en AppNavegacion. Cada destino se declara
+como un composable() del NavHost; las dependencias se inyectan en el
+contenido del composable. Para evitar duplicación de instancias entre
+pantallas que comparten un ViewModel, los ViewModels comunes se elevan al
+nivel del NavHost. Esto se aplica a SesionViewModel, LoginViewModel
+(para login y recuperar password), ChatViewModel, InformeViewModel y
+TecnicosViewModel.
+
+10.4. Sistema de cadenas e internacionalización
+---------------------------------------------------------------------------------
+
+ZeroHaus implementa su propio sistema de internacionalización en lugar de
+usar resources XML, lo que permite cambiar el idioma en caliente sin
+reiniciar la Activity:
+
+  - AppCadenas es una data class con cientos de campos, uno por cada
+    cadena de la aplicación.
+  - Traducciones.kt expone nueve instancias inmutables (espanol, english,
+    catala, euskara, galego, portugues, francais, deutsch, italiano).
+  - getCadenas(idioma) devuelve la instancia correspondiente.
+  - LocalCadenas es un CompositionLocal proporcionado en MainActivity, lo
+    que permite que cualquier composable use LocalCadenas.current para
+    leer la cadena en el idioma activo.
+
+La preferencia de idioma se guarda en AppPreferencias (SharedPreferences)
+y se replica en AppEstado.idioma, un objeto Compose-observable. Cambiar
+el idioma desde AjustesScreen actualiza AppEstado.idioma, lo que dispara
+una recomposición global con las nuevas cadenas.
+
+10.5. Tema, modo oscuro y accesibilidad
+---------------------------------------------------------------------------------
+
+La preferencia de tema admite tres valores: "Claro", "Oscuro" y "Sistema".
+MainActivity resuelve isSystemInDarkTheme() y aplica el ZeroHausTheme con
+darkTheme = true/false. A lo largo del desarrollo se realizó un barrido
+masivo para eliminar los colores hardcoded (Color(0xFF374151), 0xFF6B7280,
+0xFF111827, 0xFF1F2937, etc.) y reemplazarlos por los slots de
+MaterialTheme.colorScheme (onSurface, onSurfaceVariant, outlineVariant,
+surface, surfaceVariant). Esto incluye los ejes del Canvas de
+GraficasConsumoScreen, las burbujas y separadores del ChatScreen, los
+contenedores de OutlinedTextField en Login/Registro/Perfil/Rankings y los
+bordes del popup del MapaTecnicosScreen.
+
+La accesibilidad se cuida con tamaños mínimos de tap (48dp), uso de
+contentDescription en los IconButton de cabecera (volver, ajustes) y
+contrastes adecuados gracias a Material 3.
+
+
+================================================================================
+11. IMPLEMENTACIÓN DE LA LÓGICA DE NEGOCIO
+================================================================================
+
+11.1. Autenticación y registro
+---------------------------------------------------------------------------------
+
+RepositorioAutenticacion encapsula Firebase Auth y la sincronización con
+el documento /usuarios/{uid}:
+
+  - login(email, password, callback): firma con email/password y devuelve
+    Result<Unit>.
+  - registro(nombre, email, password, tipo, callback): crea la cuenta,
+    inserta el documento /usuarios/{uid} y, si tipo == "Técnico", crea
+    también /tecnicos/{uid} con los campos básicos para que el técnico
+    pueda aparecer inmediatamente en las búsquedas.
+  - obtenerUsuario(callback): lee el documento de /usuarios del usuario
+    actual.
+  - actualizarUsuario(usuario, callback): persiste cambios en el perfil.
+  - recuperarPassword(email, callback): dispara el flujo de
+    sendPasswordResetEmail con un mapeo de errores a mensajes amistosos
+    en español (cuenta no existente, formato inválido, red, demasiados
+    intentos, etc.).
+  - isLoggedIn(), getUid(), logout(): utilidades de sesión.
+
+LoginViewModel y RegistroViewModel siguen el mismo patrón: validan el
+formulario localmente (Patterns.EMAIL_ADDRESS para el email, longitud y
+mezcla de letra+dígito para la contraseña) y exponen un estado con los
+flags emailValido, passwordValida y formularioValido. El botón de envío
+sólo se habilita si formularioValido es true.
+
+11.2. Algoritmo energético
+---------------------------------------------------------------------------------
+
+El núcleo del cálculo es el objeto AlgoritmoEnergetico, que recibe una
+Vivienda y devuelve un ResultadoCalculo. El consumo se calcula como:
+
+  consumo = superficie * 1,2
+          * factorVentanas
+          * factorAislamiento
+          * factorCalefaccion
+          * factorAcs
+          * factorAnio
+          * factorOrientacion
+
+Los factores son multiplicadores adimensionales:
+
+  factorVentanas      : 1,4 (simple) – 1,0 (doble) – 0,8 (triple)
+  factorAislamiento   : 1,5 (sin) – 1,15 (parcial) – 0,8 (completo)
+  factorCalefaccion   : 1,2 (gas) – 1,4 (eléctrica) – 0,7 (aerotermia)
+                       – 0,9 (biomasa)
+  factorAcs           : 1,1 (gas) – 1,3 (eléctrico) – 0,6 (solar
+                       térmica) – 0,7 (aerotermia)
+  factorAnio          : 0,8 (≥2020) – 0,95 (≥2006) – 1,1 (≥1980) – 1,3
+                       (anterior)
+  factorOrientacion   : 0,92 (sur) – 1,0 (este/oeste) – 1,08 (norte)
+
+A partir del consumo se obtienen:
+
+  emisiones = consumo * 0,22 kg CO2/kWh
+  coste     = consumo * 0,15 €/kWh
+  etiqueta  ∈ {A,B,C,D,E,F,G} según los tramos del apartado 4.3.
+
+Por último, se construye la lista de recomendaciones priorizadas a partir
+de los puntos débiles detectados: ventanas de vidrio simple, calefacción
+no renovable, falta de aislamiento, ACS no renovable y, siempre,
+sustitución de la iluminación por LED.
+
+11.3. Generación e historial de informes
+---------------------------------------------------------------------------------
+
+RepositorioInformes.generarInforme(vivienda) ejecuta el algoritmo, crea un
+nuevo documento en /informes y devuelve el InformeEnergetico
+persistido. RepositorioInformes.obtenerUltimoInforme y obtenerInformes
+ordenan por fechaGeneracion descendente, lo que requiere un índice
+implícito de Firestore (creado automáticamente la primera vez que se
+ejecuta la consulta).
+
+El flujo de PreestudioViewModel.generarInforme() encadena dos operaciones
+asíncronas con suspendCancellableCoroutine: primero guarda la vivienda
+(obteniendo su id generado), después la enriquece y dispara el cálculo
+del informe. Si cualquiera de los dos pasos falla, el estado se actualiza
+con el mensaje de error apropiado.
+
+11.4. Búsqueda de técnicos y rankings
+---------------------------------------------------------------------------------
+
+TecnicosViewModel mantiene una lista de técnicos cacheada entre la
+TecnicosScreen y el MapaTecnicosScreen (es un ViewModel compartido,
+elevado al nivel de AppNavegacion). cargarTecnicos(forzar) hace una
+llamada a /tecnicos y, en paralelo, dispara la carga de reseñas por cada
+técnico para calcular su rating real.
+
+Para evitar el parpadeo de los ratings al refrescar, el ViewModel
+preserva los ratings ya conocidos: copia los previos en un mapa por id y,
+al recibir la lista nueva, sólo pone a cero los técnicos completamente
+nuevos. RankingsViewModel sigue una lógica análoga ordenando además por
+rating descendente.
+
+11.5. Mapa de técnicos y geolocalización por ciudad
+---------------------------------------------------------------------------------
+
+ZeroHaus no recoge la ubicación exacta de cada técnico (lo que implicaría
+permisos de localización para él y revisión de privacidad). En lugar de
+eso, derivamos las coordenadas a partir del nombre de la ciudad mediante
+un diccionario CIUDADES_COORDS de más de 40 ciudades, incluido en
+RepositorioTecnicos.
+
+Cuando un técnico edita su perfil y cambia su ciudad
+(actualizarPerfilTecnico), el repositorio busca las coordenadas de la
+ciudad y, si las encuentra, las añade al update. El cliente lee
+latitud/longitud y dibuja un Marker en GoogleMap. El popup usa el
+componente FilaEstrellas (estrellas con medias estrellas reales) en lugar
+de un texto plano "⭐ 4.7".
+
+11.6. Ciclo de vida de una solicitud
+---------------------------------------------------------------------------------
+
+El ciclo de vida de una solicitud es la pieza más compleja de la lógica de
+negocio. Está modelado como una máquina de estados sobre el campo
+`estado` de SolicitudPresupuesto, con las siguientes transiciones
+posibles (el actor que dispara la transición se indica entre paréntesis):
+
+   Pendiente
+      ├── (Técnico) → Presupuestado     [responderPresupuesto]
+   Presupuestado
+      ├── (Cliente) → Aceptado          [aceptarPresupuesto]
+      ├── (Cliente) → Rechazado         [rechazarPresupuesto] (terminal)
+   Aceptado
+      ├── (Técnico) → FichaEnviada      [enviarFichaActividad]
+   FichaEnviada
+      ├── (Cliente) → EnCurso           [aceptarFichaYCrearProyecto]
+      │    + crea /proyectos/{id}
+      ├── (Cliente) → Aceptado          [rechazarFicha]
+   EnCurso
+      ├── (Técnico) → PendientePago     [marcarTrabajoTerminado]
+   PendientePago
+      ├── (Cliente) → PagoEnVerificacion [clienteMarcaPagado]
+   PagoEnVerificacion
+      ├── (Técnico) → Completado        [tecnicoConfirmaPago]
+      │    + cierra /proyectos/{id}, crea /pagos
+      ├── (Cliente) → PendientePago     [cancelarMarcaPago]
+   Completado                            (terminal)
+      └── (Cliente) → puede valorar al técnico
+
+Cada transición:
+
+  1. Actualiza el documento /solicitudes/{id} con el nuevo estado y los
+     campos de pago/ficha correspondientes.
+  2. Crea una entrada en /notificaciones para el otro participante (y a
+     veces también para el propio actor), de modo que ambos reciben una
+     notificación in-app y, gracias al listener del PanelViewModel, un
+     push local.
+  3. En el caso de aceptarFichaYCrearProyecto, crea adicionalmente un
+     documento en /proyectos copiando las tareas como objetos Tarea con
+     completada = false.
+  4. En el caso de tecnicoConfirmaPago, marca el proyecto como
+     Finalizado con progreso 100 y crea un documento en /pagos con los
+     datos del cobro para histórico.
+
+Las notificaciones se crean directamente desde el cliente con
+crearNotif(), sin pasar por una Cloud Function, lo que simplifica el
+backend a costa de exigir que las reglas de Firestore permitan crear
+notificaciones a cualquier usuario logueado (con la limitación de que
+sólo el destinatario puede leer/marcar leídas las suyas).
+
+11.7. Chat en tiempo real con multimedia
+---------------------------------------------------------------------------------
+
+RepositorioChat implementa el chat con listeners en tiempo real:
+
+  - obtenerOCrearChat(otroUid, otroNombre, miNombre, callback): busca un
+    chat existente entre dos uids; si no existe, lo crea con
+    participantes = [miUid, otroUid] y noLeidosPor = {miUid:0, otroUid:0}.
+  - escucharChats(callback): addSnapshotListener sobre los chats donde el
+    usuario actual está en participantes, ordenado por
+    fechaUltimoMensaje descendente.
+  - escucharMensajes(chatId, callback): addSnapshotListener sobre la
+    subcolección /chats/{chatId}/mensajes, ordenado por fecha.
+  - cargarMensajesDesdeCache(chatId, callback): get(Source.CACHE) para
+    pintar instantáneamente los mensajes ya descargados en sesiones
+    anteriores.
+
+Al enviar un mensaje, además de crear el documento en la subcolección,
+actualizarChatYNotificar() incrementa noLeidosPor[otroUid] con
+FieldValue.increment(1), actualiza ultimoMensaje y fechaUltimoMensaje, y
+crea una notificación de tipo "mensaje" para el destinatario.
+
+Los mensajes de imagen y archivo siguen el mismo flujo, pero suben antes
+el contenido a Firebase Storage en la ruta chats/{chatId}/{mensajeId}.
+El mensaje resultante guarda mediaUrl, mediaNombre y mediaBytes.
+
+ChatViewModel mantiene dos estados:
+
+  - listaEstado (ChatListEstado): lista de chats del usuario.
+  - chatEstado (ChatEstado): conversación abierta, con mensajes, texto en
+    redacción, imagen pendiente de envío (preview antes de subir) y
+    flags subiendoMedia/enviando.
+
+Un AuthStateListener limpia los listeners al cerrar sesión para evitar
+fugas de memoria y permisos denegados al revocar las reglas.
+
+11.8. Sistema de notificaciones
+---------------------------------------------------------------------------------
+
+ZeroHaus combina cuatro mecanismos:
+
+  - Documentos /notificaciones: creados sincrónicamente por cada acción
+    relevante. Visibles en el AppBar del Panel mediante un dropdown.
+  - PanelViewModel.arrancarListenerNotificaciones: addSnapshotListener
+    que detecta nuevas notificaciones no leídas y, para cada una,
+    invoca NotificacionesLocales.mostrar(titulo, detalle, tipo).
+  - NotificacionesLocales: cuatro canales (Mensajes, Presupuestos,
+    Proyectos, General) con NotificationCompat.Builder, cada uno con su
+    importancia y vibración. Si el dispositivo está en SDK >= O, los
+    canales se crean al iniciar la Activity.
+  - ServicioNotificaciones (FirebaseMessagingService): recibe push de
+    FCM cuando llegan a través de un servidor externo. Persiste el
+    tokenFCM en /usuarios/{uid}.tokenFCM. onMessageReceived dispara una
+    notificación local con el contenido del payload.
+
+11.9. Reseñas, rating y panel del técnico
+---------------------------------------------------------------------------------
+
+RepositorioResenas.publicarResena crea el documento en /resenas e
+inmediatamente recalcula la media y el número de opiniones del técnico
+con actualizarRatingTecnico(tecnicoId), que actualiza los campos
+rating y opiniones del documento /tecnicos/{tecnicoId}. yaValorado() y
+puedeValorar() son las dos comprobaciones que la UI cruza antes de
+mostrar el formulario.
+
+EstadisticasTecnicoViewModel agrega varios KPIs:
+
+  - solicitudesTotales, por estado.
+  - ingresosTotales: suma de precioPresupuesto en estados "Aceptado" y
+    "Completado".
+  - ingresosPotenciales: suma de precioPresupuesto en estado
+    "Presupuestado" (ofertas a la espera de respuesta).
+  - tasaRespuesta: (presupuestadas + aceptadas + rechazadas +
+    completadas) / total.
+  - tasaAceptacion: (aceptadas + completadas) / respondidas.
+  - proyectosActivos y proyectosCompletados.
+
+Estos KPIs alimentan la pantalla EstadisticasTecnicoScreen y el
+PanelTecnicoScreen, dando al técnico una visión clara de la salud de su
+actividad.
+
+11.10. Certificados y compartición de informes
+---------------------------------------------------------------------------------
+
+El técnico puede subir sus certificados profesionales a través de
+RepositorioCertificados.subirCertificado, que sube el archivo a
+Storage en certificados/{uid}/{filename} y guarda los metadatos en
+/certificados.
+
+La compartición de informes (CompartirInforme) genera un PDF localmente
+con el contenido del informe y lo expone mediante FileProvider con la
+autoridad ${applicationId}.fileprovider. El nombre del PDF se sanitiza
+con la regex [^a-z0-9] → _ y se trunca a 40 caracteres para evitar
+problemas de longitud y caracteres no válidos en distintos sistemas de
+archivos.
+
+
+================================================================================
+12. SEGURIDAD
+================================================================================
+
+12.1. Reglas de Firestore
+---------------------------------------------------------------------------------
+
+El fichero firestore.rules implementa el principio de mínimo privilegio.
+Los helpers logueado(), esMio(uid) y uid() permiten expresar las reglas
+con claridad:
+
+  - /usuarios/{userId}: lectura para cualquier logueado (necesario para
+    mostrar nombre y foto en chats y listas); creación, actualización y
+    borrado sólo del propio documento.
+  - /viviendas, /informes, /certificados: lectura, escritura y borrado
+    sólo del propietario (resource.data.uid == uid()).
+  - /tecnicos: lectura para cualquier logueado (perfil público);
+    escritura sólo del propio técnico.
+  - /resenas: lectura para cualquier logueado; creación sólo si la
+    escribe el propio autor.
+  - /solicitudes y /proyectos: lectura y actualización tanto del
+    cliente (uidCliente == uid()) como del técnico (tecnicoUid == uid()).
+    El borrado queda restringido al cliente, que es el propietario de
+    la solicitud.
+  - /notificaciones: lectura, actualización y borrado sólo del
+    destinatario (resource.data.uid == uid()). Creación abierta a
+    cualquier logueado, lo que permite que cliente y técnico se
+    notifiquen mutuamente sin necesidad de Cloud Functions.
+  - /chats/{chatId}: lectura, escritura y borrado sólo si uid() está en
+    el array participantes. Los mensajes de la subcolección permiten
+    crear y leer a cualquier participante, pero update/delete sólo al
+    emisor (resource.data.emisorUid == uid()).
+  - /ajustes/{userId}: lectura y escritura sólo del propio usuario.
+  - /pagos: lectura y creación tanto del cliente como del técnico
+    involucrados.
+  - Cláusula final allow read, write: if false para cualquier colección
+    no listada explícitamente.
+
+12.2. Almacenamiento de credenciales y secretos
+---------------------------------------------------------------------------------
+
+  - La API key de Google Maps no se versiona: se lee de local.properties
+    e se inyecta vía manifestPlaceholders["MAPS_API_KEY"].
+  - El keystore de firma (zerohaus-release.jks) está fuera del control
+    de versiones; la contraseña se lee también de local.properties.
+  - Firebase no requiere credenciales en el cliente: el SDK utiliza
+    google-services.json (versionable pero específico del proyecto) y
+    delega la autenticación en Firebase Auth.
+
+12.3. Validación de entrada
+---------------------------------------------------------------------------------
+
+La validación se hace en dos capas:
+
+  - Cliente (UI/ViewModel): formularios con Patterns.EMAIL_ADDRESS,
+    longitud de contraseña >= 8 con letra y dígito, rangos numéricos
+    para superficie (1–5000 m²) y año (1900–2025).
+  - Backend (reglas Firestore): cualquier intento de violar la
+    propiedad de un documento se rechaza por las reglas. Esto incluye
+    intentos de modificar el uid de un documento ajeno, escribir
+    notificaciones leídas por terceros, etc.
+
+
+================================================================================
+13. PRUEBAS Y VALIDACIÓN
+================================================================================
+
+La validación del proyecto se ha llevado a cabo mediante tres
+estrategias complementarias:
+
+  - Pruebas manuales sistemáticas, recorriendo cada caso de uso
+    (registro, login, recuperación, generación de informe, búsqueda,
+    chat, ciclo completo de solicitud, pago, valoración) con dos
+    cuentas (cliente y técnico) en paralelo.
+  - Pruebas instrumentadas con AndroidJUnitRunner y compose-ui-test,
+    cubriendo composables aislados con previews y verificando que el
+    comportamiento de estado no rompa al cambiar de configuración (modo
+    oscuro, idioma).
+  - Pruebas unitarias de JUnit sobre la lógica pura del
+    AlgoritmoEnergetico, comprobando que los tramos A–G se asignan
+    correctamente y que las recomendaciones aparecen para los
+    parámetros esperados.
+
+A lo largo del desarrollo se documentaron varias incidencias resueltas:
+
+  - RepositorioAjustes tenía mal declarado el paquete y fue corregido a
+    Repositorios.
+  - El contador noLeidosPor no se incrementaba al enviar mensajes; se
+    arregló centralizando la lógica en actualizarChatYNotificar().
+  - El nombre del usuario al crear chats venía hardcodeado como
+    "Usuario"; se sustituyó por la lectura real del documento del usuario.
+  - PerfilTecnicoScreen carecía de botón "Contactar" para iniciar chat
+    desde el perfil; se añadió.
+  - La pantalla en blanco entre el SplashScreen y la pantalla de Login
+    se sustituyó por un CircularProgressIndicator mientras se comprueba
+    la sesión.
+  - El registro de Técnico no creaba el documento /tecnicos/{uid}; se
+    añadió la creación automática.
+  - PerfilScreen no permitía editar especialidades ni descripción; se
+    integraron en PerfilViewModel y en la vista.
+  - Icons.Default.ArrowBack quedó deprecado y se sustituyó por
+    Icons.AutoMirrored.Filled.ArrowBack en todas las pantallas con
+    flecha de retroceso.
+  - EditarPerfilTecnicoViewModel.guardar() pasaba defaults vacíos en
+    paypalUsername y bizumTelefono, sobrescribiendo en cada guardado;
+    se corrigió leyendo los valores actuales del estado.
+  - TecnicosViewModel.cargarTecnicos hacía parpadear los ratings a 0.0
+    durante el refresco; se preserva el rating previo hasta llegar el
+    nuevo.
+  - MapaTecnicosScreen mostraba estrellas manuales sin medias estrellas;
+    se sustituyó por el componente FilaEstrellas.
+  - CompartirInforme usaba el nombre del informe directamente como
+    nombre de archivo, lo que daba errores con tildes y caracteres
+    especiales; se introdujo la sanitización mencionada.
+  - Barrido masivo de colores hardcoded para soporte de modo oscuro,
+    sustituyendo Color(0xFFXXXXXX) por slots de MaterialTheme.colorScheme
+    en Login, Registro, Perfil, Rankings, MisViviendas,
+    HistorialInformes, Presupuestos, ChatScreen, GraficasConsumoScreen
+    y EstadisticasTecnicoScreen.
+  - EstadisticasTecnicoScreen mostraba "⭐ 0.0" cuando no había
+    valoraciones; se cambió a "Sin valoraciones".
+
+
+================================================================================
+14. DESPLIEGUE Y EMPAQUETADO
+================================================================================
+
+El despliegue se prepara con un build de release firmado mediante un
+keystore propio. El paso a paso:
+
+  1. Generar el keystore con keytool -genkey -v -keystore
+     zerohaus-release.jks -alias zerohaus -keyalg RSA -keysize 2048
+     -validity 10000. El fichero no se versiona; se almacena en local
+     fuera de Git.
+  2. Configurar las propiedades KEYSTORE_PASSWORD y KEY_PASSWORD en
+     local.properties para que Gradle pueda leerlas en el bloque
+     signingConfigs.
+  3. Ejecutar gradlew :app:bundleRelease para generar el AAB
+     (Android App Bundle), o gradlew :app:assembleRelease para
+     producir un APK firmado.
+  4. R8 ejecuta minificación e isShrinkResources según las reglas
+     declaradas en proguard-rules.pro y los defaults de
+     proguard-android-optimize.txt.
+  5. El bundle resultante se sube a Google Play Console mediante el
+     flujo de Producción, Pruebas internas o Pruebas cerradas según el
+     destinatario.
+
+El SDK 36 fija el targetSdk, lo que permite cumplir los requisitos de
+Google Play para publicación, mientras que el minSdk 26 (Android 8.0)
+da cobertura prácticamente al 100 % del parque de dispositivos en uso a
+fecha de la memoria.
+
+
+================================================================================
+15. RESULTADOS
+================================================================================
+
+El estado final del proyecto consta de:
+
+  - 30+ pantallas Compose funcionales, agrupadas en dos scaffolds
+    (cliente y técnico).
+  - 24 ViewModels desacoplados.
+  - 12 repositorios que abstraen completamente Firestore, Auth y
+    Storage.
+  - 11 colecciones de Firestore con reglas de seguridad declarativas.
+  - 9 idiomas plenamente soportados.
+  - 4 canales de notificaciones locales (Mensajes, Presupuestos,
+    Proyectos, General).
+  - 1 servicio FCM para notificaciones push.
+  - Un ciclo de vida de reforma con 9 estados modelado como máquina de
+    estados explícita.
+  - Mapa con más de 40 ciudades españolas geocodificadas vía
+    diccionario embebido.
+  - Soporte de modo oscuro pleno tras barrido sistemático de colores.
+
+En términos de uso real (validación cualitativa), el flujo completo
+"darme de alta → registrar mi vivienda → generar informe → buscar un
+técnico en mi ciudad → solicitar presupuesto → aceptarlo → recibir
+ficha → aceptarla → recibir aviso de fin → declarar pago → confirmar
+cobro → valorar al técnico" se ha podido cerrar de extremo a extremo
+con dos cuentas reales en menos de 15 minutos, lo que confirma que la
+aplicación cumple su propuesta de valor.
+
+
+================================================================================
+16. CONCLUSIONES
+================================================================================
+
+ZeroHaus demuestra que es viable construir, en el marco de un Trabajo Fin
+de Grado y con herramientas estándar del desarrollo Android moderno, una
+aplicación funcional, multicapa y multilingüe que combina lógica de
+negocio compleja (cálculo energético, máquina de estados de un proceso
+comercial), comunicación en tiempo real (chat, notificaciones), datos
+geolocalizados (mapa de técnicos) y persistencia segura en la nube
+(reglas de Firestore).
+
+La elección de Kotlin con Jetpack Compose ha permitido escribir una
+interfaz declarativa muy concisa y muy mantenible, con un sistema de
+temas y traducciones que se aplica de forma global sin reiniciar la
+Activity. El uso de Firebase como backend completo ha permitido evitar
+montar y mantener un servidor propio, a costa de aceptar las
+limitaciones de Firestore (consultas restringidas, sin joins, modelo
+desnormalizado) y compensarlas con un diseño cuidadoso de las
+colecciones.
+
+El patrón MVVM ha demostrado ser muy adecuado para mantener la
+complejidad acotada por dominios: cada repositorio sólo conoce su
+colección, cada ViewModel sólo conoce su pantalla, y la composición de
+todos ellos en AppNavegacion permite razonar sobre el flujo global de
+la aplicación.
+
+El proyecto, aunque cerrado a efectos del TFG, ha sido pensado para ser
+sostenible: cada nueva pantalla supone añadir un ViewModel, sus
+cadenas a AppCadenas, un destino al NavHost y, eventualmente, una
+colección con sus reglas; cada nueva funcionalidad encaja en este
+esqueleto sin reescritura.
+
+
+================================================================================
+17. LÍNEAS FUTURAS
+================================================================================
+
+Si se continuara desarrollando ZeroHaus tras la entrega del TFG, las
+líneas más naturales serían:
+
+  - Integración con un proveedor real de cálculo certificado (CE3X,
+    CYPETHERM) para emitir certificados oficiales además del informe
+    indicativo actual.
+  - Pasarela de pago integrada (Stripe, Bizum API empresarial) que
+    sustituya el flujo "declaración + verificación" por un cobro real
+    intermediado.
+  - Cloud Functions para mover la creación de notificaciones al
+    servidor, lo que permitiría endurecer las reglas y enviar pushes
+    sólo desde un código auditable.
+  - Verificación oficial del técnico (subida de DNI, comprobación
+    contra censo profesional, badge de verificado).
+  - Sistema de invitaciones / códigos promocionales.
+  - Soporte para varias viviendas con etiquetas personalizadas.
+  - Versión iOS con SwiftUI compartiendo backend.
+  - Panel web del administrador para revisar contenidos y aprobar
+    técnicos.
+  - Geolocalización real opcional del técnico, con permiso explícito,
+    en lugar de la aproximación por ciudad.
+  - Soporte multilingüe automático en el chat con traducción on-the-fly.
+
+
+================================================================================
+18. BIBLIOGRAFÍA Y REFERENCIAS
+================================================================================
+
+[1] España. Real Decreto 390/2021, de 1 de junio, por el que se aprueba
+    el procedimiento básico para la certificación de la eficiencia
+    energética de los edificios. BOE núm. 131, de 2 de junio de 2021.
+
+[2] España. Código Técnico de la Edificación. Documento Básico HE
+    Ahorro de Energía. Ministerio de Transportes, Movilidad y Agenda
+    Urbana.
+
+[3] IDAE. Factores de emisión de CO2 y coeficientes de paso a energía
+    primaria de diferentes fuentes de energía final consumidas en el
+    sector edificios en España. Instituto para la Diversificación y
+    Ahorro de la Energía, 2023.
+
+[4] Google. Documentación oficial de Jetpack Compose:
+    https://developer.android.com/jetpack/compose
+
+[5] Google. Documentación oficial de Firebase:
+    https://firebase.google.com/docs
+
+[6] Google. Material Design 3:
+    https://m3.material.io
+
+[7] JetBrains. Documentación oficial del lenguaje Kotlin:
+    https://kotlinlang.org/docs
+
+[8] Google. Maps Compose Library:
+    https://developers.google.com/maps/documentation/android-sdk/maps-compose
+
+[9] Coil. Documentación oficial:
+    https://coil-kt.github.io/coil/compose/
+
+[10] Firebase Security Rules Language Reference:
+     https://firebase.google.com/docs/rules/rules-language
+
+
+================================================================================
+19. ANEXOS
+================================================================================
+
+A. Estructura del repositorio
+---------------------------------------------------------------------------------
+
+ZeroHaus/
+├── app/
+│   ├── build.gradle.kts
+│   ├── proguard-rules.pro
+│   ├── google-services.json
+│   ├── zerohaus-release.jks   (no versionado)
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── java/com/example/zerohaus/
+│       │   ├── MainActivity.kt
+│       │   ├── ServicioNotificaciones.kt
+│       │   ├── Modelos/
+│       │   │   ├── Usuario.kt
+│       │   │   ├── Tecnico.kt
+│       │   │   ├── Vivienda.kt
+│       │   │   ├── InformeEnergetico.kt
+│       │   │   ├── Proyecto.kt
+│       │   │   ├── SolicitudPresupuesto.kt
+│       │   │   ├── MensajeChat.kt
+│       │   │   ├── Resena.kt
+│       │   │   ├── Notificacion.kt
+│       │   │   ├── Certificado.kt
+│       │   │   └── AjustesUsuario.kt
+│       │   ├── Estados/
+│       │   │   ├── LoginEstado.kt
+│       │   │   └── RegistroEstado.kt
+│       │   ├── Repositorios/
+│       │   │   ├── AlgoritmoEnergetico.kt
+│       │   │   ├── RepositorioAutenticacion.kt
+│       │   │   ├── RepositorioViviendas.kt
+│       │   │   ├── RepositorioInformes.kt
+│       │   │   ├── RepositorioTecnicos.kt
+│       │   │   ├── RepositorioProyectos.kt
+│       │   │   ├── RepositorioChat.kt
+│       │   │   ├── RepositorioResenas.kt
+│       │   │   ├── RepositorioNotificaciones.kt
+│       │   │   ├── RepositorioCertificados.kt
+│       │   │   └── RepositorioAjustes.kt
+│       │   ├── ViewModel/
+│       │   │   ├── SesionViewModel.kt
+│       │   │   ├── LoginViewModel.kt
+│       │   │   ├── RegistroViewModel.kt
+│       │   │   ├── PerfilViewModel.kt
+│       │   │   ├── PerfilTecnicoViewModel.kt
+│       │   │   ├── PanelViewModel.kt
+│       │   │   ├── PanelTecnicoViewModel.kt
+│       │   │   ├── PreestudioViewModel.kt
+│       │   │   ├── InformeViewModel.kt
+│       │   │   ├── HistorialInformesViewModel.kt
+│       │   │   ├── GraficasViewModel.kt
+│       │   │   ├── TecnicosViewModel.kt
+│       │   │   ├── RankingsViewModel.kt
+│       │   │   ├── PresupuestosViewModel.kt
+│       │   │   ├── ProyectosViewModel.kt
+│       │   │   ├── ProyectosAsignadosViewModel.kt
+│       │   │   ├── MisClientesTecnicoViewModel.kt
+│       │   │   ├── ChatViewModel.kt
+│       │   │   ├── ViviendasViewModel.kt
+│       │   │   ├── AjustesViewModel.kt
+│       │   │   ├── CertificadoViewModel.kt
+│       │   │   ├── EditarPerfilTecnicoViewModel.kt
+│       │   │   ├── EstadisticasTecnicoViewModel.kt
+│       │   │   └── ResenasRecibidasViewModel.kt
+│       │   ├── UserInterface/
+│       │   │   ├── SplashScreen.kt
+│       │   │   ├── OnBoardingScreen.kt
+│       │   │   ├── LoginScreen.kt
+│       │   │   ├── RegistroScreen.kt
+│       │   │   ├── RecuperarPasswordScreen.kt
+│       │   │   ├── MainScaffold.kt
+│       │   │   ├── MainScaffoldTecnico.kt
+│       │   │   ├── PanelScreen.kt
+│       │   │   ├── PanelTecnicoScreen.kt
+│       │   │   ├── PerfilScreen.kt
+│       │   │   ├── PerfilTecnicoScreen.kt
+│       │   │   ├── EditarPerfilTecnicoScreen.kt
+│       │   │   ├── PreestudioScreen.kt
+│       │   │   ├── InformeScreen.kt
+│       │   │   ├── HistorialInformesScreen.kt
+│       │   │   ├── GraficasConsumoScreen.kt
+│       │   │   ├── MisViviendasScreen.kt
+│       │   │   ├── MisProyectosScreen.kt
+│       │   │   ├── ProyectosAsignadosScreen.kt
+│       │   │   ├── PresupuestosScreen.kt
+│       │   │   ├── TecnicosScreen.kt
+│       │   │   ├── MapaTecnicosScreen.kt
+│       │   │   ├── MisClientesTecnicoScreen.kt
+│       │   │   ├── RankingsScreen.kt
+│       │   │   ├── EstadisticasTecnicoScreen.kt
+│       │   │   ├── ResenasRecibidasScreen.kt
+│       │   │   ├── ChatListScreen.kt
+│       │   │   ├── ChatScreen.kt
+│       │   │   ├── AjustesScreen.kt
+│       │   │   ├── SobreAppScreen.kt
+│       │   │   ├── CompartirInforme.kt
+│       │   │   ├── EstrellasParciales.kt
+│       │   │   └── ZeroHausLogo.kt
+│       │   ├── Navegacion/
+│       │   │   └── AppNavegacion.kt
+│       │   ├── ui/theme/
+│       │   │   ├── Color.kt
+│       │   │   ├── Theme.kt
+│       │   │   └── Type.kt
+│       │   └── util/
+│       │       ├── AppCadenas.kt
+│       │       ├── Traducciones.kt
+│       │       ├── AppEstado.kt
+│       │       ├── AppPreferencias.kt
+│       │       ├── NotificacionesLocales.kt
+│       │       └── SembradorDatos.kt
+│       └── res/  (recursos: drawables, mipmaps, xml, values)
+├── firestore.rules
+├── build.gradle.kts
+├── settings.gradle.kts
+└── local.properties  (no versionado)
+
+B. Listado de pantallas y ViewModels
+---------------------------------------------------------------------------------
+
+Cada pantalla está asociada a uno o varios ViewModels que aportan su
+estado y sus acciones:
+
+  Splash               (sin VM, dispara onTimeout)
+  OnBoarding           (sin VM)
+  Login                LoginViewModel
+  Registro             RegistroViewModel
+  RecuperarPassword    LoginViewModel (compartido)
+  MainScaffold         PanelViewModel, CertificadoViewModel,
+                       ChatViewModel
+  MainScaffoldTecnico  PanelTecnicoViewModel, PanelViewModel,
+                       CertificadoViewModel, PresupuestosViewModel,
+                       ChatViewModel
+  Panel                PanelViewModel
+  PanelTecnico         PanelTecnicoViewModel
+  Perfil               PerfilViewModel
+  PerfilTecnico        PerfilTecnicoViewModel
+  EditarPerfilTecnico  EditarPerfilTecnicoViewModel
+  Preestudio           PreestudioViewModel
+  Informe              InformeViewModel (compartido con Preestudio)
+  HistorialInformes    HistorialInformesViewModel
+  GraficasConsumo      GraficasViewModel
+  MisViviendas         ViviendasViewModel
+  MisProyectos         ProyectosViewModel
+  ProyectosAsignados   ProyectosAsignadosViewModel
+  Presupuestos         PresupuestosViewModel
+  Tecnicos             TecnicosViewModel (compartido con Mapa)
+  MapaTecnicos         TecnicosViewModel
+  MisClientesTecnico   MisClientesTecnicoViewModel
+  Rankings             RankingsViewModel
+  EstadisticasTecnico  EstadisticasTecnicoViewModel
+  ResenasRecibidas     ResenasRecibidasViewModel
+  ChatList             ChatViewModel (compartido)
+  Chat                 ChatViewModel
+  Ajustes              AjustesViewModel
+  SobreApp             (sin VM)
+
+C. Diagrama de estados de una solicitud
+---------------------------------------------------------------------------------
+
+                  ┌────────────┐
+   cliente crea → │ Pendiente  │
+                  └─────┬──────┘
+                        │ técnico responde con precio
+                        ▼
+                  ┌────────────────┐
+                  │ Presupuestado  │
+                  └─────┬──────┬───┘
+            cliente │      │ cliente
+            acepta  │      │ rechaza
+                    ▼      ▼
+              ┌─────────┐  ┌────────────┐
+              │ Aceptado│  │ Rechazado  │ (terminal)
+              └────┬────┘  └────────────┘
+                   │ técnico envía ficha
+                   ▼
+              ┌──────────────┐
+              │ FichaEnviada │
+              └────┬────┬────┘
+       cliente    │    │  cliente acepta
+       rechaza    │    │  + crea /proyectos
+       (vuelve a  │    ▼
+        Aceptado) │  ┌──────────┐
+                  │  │ EnCurso  │
+                  │  └────┬─────┘
+                  ▼       │ técnico marca terminado
+            (Aceptado)    ▼
+                      ┌────────────────┐
+                      │ PendientePago  │
+                      └─────┬──────────┘
+                            │ cliente declara pago
+                            ▼
+                      ┌─────────────────────┐
+                      │ PagoEnVerificacion  │
+                      └─────┬──────────┬────┘
+                cliente     │          │ técnico
+                cancela     │          │ confirma cobro
+                (vuelve a   ▼          ▼
+                Pendiente   ┌────────────┐ (terminal)
+                Pago)       │ Completado │  + cierra proyecto
+                            └────────────┘  + crea /pagos
+                                  │
+                                  ▼
+                  cliente puede valorar al técnico
+
+D. Glosario
+---------------------------------------------------------------------------------
+
+  ACS          Agua Caliente Sanitaria.
+  Aerotermia   Tecnología de climatización basada en bomba de calor que
+               extrae energía del aire ambiente.
+  AppBar       Barra superior de una pantalla Material 3.
+  Auth UID     Identificador único asignado por Firebase Auth a cada
+               usuario; constante para toda la vida del usuario.
+  Backstack    Pila de destinos previos en Navigation Compose.
+  Bizum        Sistema de transferencia inmediata entre cuentas
+               bancarias en España, mediante el número de teléfono.
+  CTE          Código Técnico de la Edificación.
+  doc id       Identificador del documento dentro de una colección de
+               Firestore; no necesariamente coincide con el Auth UID.
+  Espana       En el contexto de este proyecto, todas las constantes
+               regulatorias y precios se refieren al territorio español.
+  FCM          Firebase Cloud Messaging.
+  FilaEstrellas  Componente Compose de ZeroHaus para mostrar valoración
+               con medias estrellas reales (estrellas parciales).
+  IDAE         Instituto para la Diversificación y Ahorro de la Energía.
+  kWh          Kilovatio-hora; unidad de energía.
+  MVVM         Model-View-ViewModel.
+  Pre-estudio  Cálculo energético indicativo, sin valor certificado, que
+               ZeroHaus genera para una vivienda.
+  Push         Notificación remota enviada por el servidor (FCM) y
+               renderizada por el sistema operativo del dispositivo.
+  R8           Sistema de optimización y minificación de código y
+               recursos integrado en el build de release de Android.
+  RD 390/2021  Real Decreto que regula la certificación de eficiencia
+               energética en España.
+  Storage      Firebase Cloud Storage; almacenamiento de archivos
+               asociado al proyecto Firebase.
+
+================================================================================
+                                FIN DE LA MEMORIA
+================================================================================

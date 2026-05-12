@@ -97,7 +97,7 @@ fun MisViviendasScreen(
                         onClick = { viewModel.seleccionarVivienda(v) },
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (esSeleccionada) Color(0xFFD1FAE5) else Color.White
+                            containerColor = if (esSeleccionada) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface
                         ),
                         border = BorderStroke(1.dp, if (esSeleccionada) verde else borde),
                         modifier = Modifier.fillMaxWidth()
@@ -219,7 +219,7 @@ private fun EditarViviendaDialog(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.9f),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(Modifier.fillMaxSize()) {
                 Row(

@@ -1,4 +1,4 @@
-package com.example.zerohaus.util
+package com.example.zerohaus.Util
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

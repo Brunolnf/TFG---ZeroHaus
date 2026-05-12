@@ -17,7 +17,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.RegistroViewModel
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.LocalCadenas
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,19 +52,19 @@ fun RegistroScreen(
             ZeroHausLogo(size = 56.dp)
             Spacer(Modifier.height(10.dp))
             Text("ZeroHaus", color = verde, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Text(c.registroTitulo, color = Color(0xFF2F3A3A), fontSize = 13.sp)
+            Text(c.registroTitulo, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             Spacer(Modifier.height(18.dp))
 
             Card(
                 Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(Modifier.padding(18.dp)) {
                     Text(c.registroSubtitulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Spacer(Modifier.height(14.dp))
 
-                    Text(c.registroNombre, fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroNombre, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.nombre,
@@ -82,7 +82,7 @@ fun RegistroScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text("Email", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.email,
@@ -101,7 +101,7 @@ fun RegistroScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Text(c.registroTipoUsuario, fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroTipoUsuario, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     val tipoDisplay = when (estado.tipoUsuario) {
                         "Técnico" -> c.tipoTecnico
@@ -134,7 +134,7 @@ fun RegistroScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Text(c.contrasena, fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.contrasena, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.contrasena,
@@ -165,7 +165,7 @@ fun RegistroScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    Text(c.registroConfirmar, fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.registroConfirmar, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.confirmarContrasena,

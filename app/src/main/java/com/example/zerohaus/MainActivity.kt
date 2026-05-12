@@ -11,11 +11,11 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import com.example.zerohaus.Navegacion.AppNavegacion
 import com.example.zerohaus.ui.theme.ZeroHausTheme
-import com.example.zerohaus.util.AppEstado
-import com.example.zerohaus.util.AppPreferencias
-import com.example.zerohaus.util.LocalCadenas
-import com.example.zerohaus.util.NotificacionesLocales
-import com.example.zerohaus.util.getCadenas
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.AppPreferencias
+import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.NotificacionesLocales
+import com.example.zerohaus.Util.getCadenas
 
 class MainActivity : ComponentActivity() {
 

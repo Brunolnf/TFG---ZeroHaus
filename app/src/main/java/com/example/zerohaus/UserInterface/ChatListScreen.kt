@@ -179,7 +179,7 @@ fun ChatsListScreen(
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     chat.ultimoMensaje.ifEmpty { "Sin mensajes" },
-                                    color = if (noLeidos > 0) Color(0xFF111827) else gris,
+                                    color = if (noLeidos > 0) MaterialTheme.colorScheme.onSurface else gris,
                                     fontSize = 13.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,

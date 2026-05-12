@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +42,7 @@ fun GraficasConsumoScreen(
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
     val borde = MaterialTheme.colorScheme.outline
+    val lineaEje = MaterialTheme.colorScheme.outlineVariant
 
     val estado = viewModel.estado
     val sdf = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
@@ -79,10 +82,27 @@ fun GraficasConsumoScreen(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                ) {
+                    Icon(Icons.Default.BarChart, null, tint = gris.copy(0.4f), modifier = Modifier.size(56.dp))
+                    Spacer(Modifier.height(12.dp))
                     Text("Sin datos todavía", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text("Genera un informe energético para ver las gráficas", color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    Text(
+                        "Genera un informe energético para ver las gráficas",
+                        color = gris, fontSize = 13.sp, textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.cargarDatos() },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Reintentar")
+                    }
                 }
             }
             return@Scaffold
@@ -195,7 +215,7 @@ fun GraficasConsumoScreen(
                         val barWidth = size.width / datos.size
                         val barPad = barWidth * 0.2f
 
-                        drawLine(Color(0xFFE5E7EB), Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
+                        drawLine(lineaEje, Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
 
                         datos.forEachIndexed { i, inf ->
                             val valor = inf.consumoEstimado.toFloat()
@@ -254,7 +274,7 @@ fun GraficasConsumoScreen(
                         val chartHeight = size.height - 30f
                         val stepX = if (datos.size > 1) size.width / (datos.size - 1) else size.width / 2
 
-                        drawLine(Color(0xFFE5E7EB), Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
+                        drawLine(lineaEje, Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
 
                         val puntos = datos.mapIndexed { i, inf ->
                             val x = if (datos.size > 1) i * stepX else size.width / 2
@@ -321,7 +341,7 @@ fun GraficasConsumoScreen(
                         val barWidth = size.width / datos.size
                         val barPad = barWidth * 0.2f
 
-                        drawLine(Color(0xFFE5E7EB), Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
+                        drawLine(lineaEje, Offset(0f, chartHeight), Offset(size.width, chartHeight), 2f)
 
                         datos.forEachIndexed { i, inf ->
                             val valor = inf.costeAnual.toFloat()
@@ -360,7 +380,7 @@ fun GraficasConsumoScreen(
 private fun ResumenStat(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = color)
-        Text(label, fontSize = 11.sp, color = Color(0xFF6B7280))
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

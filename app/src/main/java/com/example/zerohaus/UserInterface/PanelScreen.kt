@@ -27,7 +27,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.zerohaus.ViewModel.CertificadoViewModel
 import com.example.zerohaus.ViewModel.PanelViewModel
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.LocalCadenas
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -181,7 +181,7 @@ fun PanelScreen(
             text = {
                 Column(Modifier.fillMaxWidth()) {
                     if (estado.notificaciones.isEmpty()) {
-                        Text(c.panelSinNotificaciones, color = Color(0xFF6B7280))
+                        Text(c.panelSinNotificaciones, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(estado.notificaciones) { n ->

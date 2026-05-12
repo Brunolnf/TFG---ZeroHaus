@@ -17,7 +17,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.LoginViewModel
-import com.example.zerohaus.util.LocalCadenas
+import com.example.zerohaus.Util.LocalCadenas
 
 @Composable
 fun LoginScreen(
@@ -58,14 +58,14 @@ fun LoginScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(0.dp)
             ) {
                 Column(Modifier.padding(20.dp)) {
-                    Text(c.loginTitulo, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color(0xFF111827))
+                    Text(c.loginTitulo, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(18.dp))
 
-                    Text("Email", fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text("Email", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.email,
@@ -89,7 +89,7 @@ fun LoginScreen(
 
                     Spacer(Modifier.height(14.dp))
 
-                    Text(c.contrasena, fontSize = 12.sp, color = Color(0xFF1F2937))
+                    Text(c.contrasena, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = estado.contrasena,

@@ -21,6 +21,49 @@ class RepositorioProyectos {
             .addOnFailureListener { callback(emptyList()) }
     }
 
+    /**
+     * Devuelve los proyectos donde el técnico actual aparece como asignado.
+     * Busca primero por tecnicoUid (campo nuevo, fiable). Si no encuentra nada,
+     * cae en la búsqueda por nombre (compatibilidad con proyectos antiguos).
+     */
+    fun obtenerProyectosAsignados(tecnicoNombre: String, callback: (List<Proyecto>) -> Unit) {
+        val tecnicoUid = uid()
+        if (tecnicoUid.isBlank() && tecnicoNombre.isBlank()) { callback(emptyList()); return }
+
+        // 1) Búsqueda por uid (nuevos proyectos creados desde la ficha)
+        if (tecnicoUid.isNotBlank()) {
+            db.collection("proyectos")
+                .whereEqualTo("tecnicoUid", tecnicoUid)
+                .get()
+                .addOnSuccessListener { snap ->
+                    val porUid = snap.documents.mapNotNull { it.toObject(Proyecto::class.java) }
+                    if (porUid.isNotEmpty() || tecnicoNombre.isBlank()) {
+                        callback(porUid.sortedByDescending { it.fechaCreacion })
+                    } else {
+                        // 2) Fallback al nombre (proyectos creados manualmente, sin tecnicoUid)
+                        buscarPorNombre(tecnicoNombre, callback)
+                    }
+                }
+                .addOnFailureListener { buscarPorNombre(tecnicoNombre, callback) }
+        } else {
+            buscarPorNombre(tecnicoNombre, callback)
+        }
+    }
+
+    private fun buscarPorNombre(tecnicoNombre: String, callback: (List<Proyecto>) -> Unit) {
+        if (tecnicoNombre.isBlank()) { callback(emptyList()); return }
+        db.collection("proyectos")
+            .whereEqualTo("tecnicoNombre", tecnicoNombre)
+            .get()
+            .addOnSuccessListener { snap ->
+                callback(
+                    snap.documents.mapNotNull { it.toObject(Proyecto::class.java) }
+                        .sortedByDescending { it.fechaCreacion }
+                )
+            }
+            .addOnFailureListener { callback(emptyList()) }
+    }
+
     fun crearProyecto(proyecto: Proyecto, callback: (Result<Unit>) -> Unit) {
         val ref = db.collection("proyectos").document()
         val p = proyecto.copy(id = ref.id, uid = uid())

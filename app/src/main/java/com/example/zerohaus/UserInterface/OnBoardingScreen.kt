@@ -37,7 +37,7 @@ fun OnboardingScreen(onCompletar: () -> Unit) {
     val pagerState = rememberPagerState(pageCount = { pags.size })
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { if (pagerState.currentPage < pags.size - 1) TextButton(onClick = onCompletar) { Text("Saltar", color = Color(0xFF6B7280)) } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { if (pagerState.currentPage < pags.size - 1) TextButton(onClick = onCompletar) { Text("Saltar", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
             val p = pags[page]; val vis = pagerState.currentPage == page
             val esc by animateFloatAsState(if (vis) 1f else 0.85f, tween(300), label = "e")

@@ -47,7 +47,7 @@ fun TecnicosScreen(
         "Auditorías", "Rehabilitación", "Biomasa", "Certificación", "Consultoría"
     )
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos(forzar = true) }
+    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(estado.mensajeExito, estado.error) {
@@ -172,8 +172,21 @@ fun TecnicosScreen(
                                     modifier = Modifier.size(48.dp)
                                 )
                                 Spacer(Modifier.height(12.dp))
-                                Text("No se encontraron técnicos", color = gris, fontWeight = FontWeight.Medium)
-                                Text("Prueba con otro término o filtro", color = gris.copy(0.7f), fontSize = 13.sp)
+                                if (estado.busqueda.isBlank() && estado.filtro == null) {
+                                    Text("No se pudieron cargar los técnicos", color = gris, fontWeight = FontWeight.Medium)
+                                    Spacer(Modifier.height(10.dp))
+                                    OutlinedButton(
+                                        onClick = { viewModel.cargarTecnicos(forzar = true) },
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Reintentar")
+                                    }
+                                } else {
+                                    Text("No se encontraron técnicos", color = gris, fontWeight = FontWeight.Medium)
+                                    Text("Prueba con otro término o filtro", color = gris.copy(0.7f), fontSize = 13.sp)
+                                }
                             }
                         }
                     }

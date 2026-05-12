@@ -59,7 +59,11 @@ fun AppNavegacion() {
         composable("login") {
             LoginScreen(
                 viewModel = loginVM,
-                onLoginExitoso = { nav.navigate("main") { popUpTo("login") { inclusive = true } } },
+                onLoginExitoso = {
+                    // Recarga el usuario tras login para que MainScaffold sepa si es técnico o cliente
+                    sesionVM.comprobarSesion()
+                    nav.navigate("main") { popUpTo("login") { inclusive = true } }
+                },
                 onIrARegistro = { nav.navigate("registro") },
                 onIrARecuperar = { nav.navigate("recuperar") }
             )
@@ -76,6 +80,7 @@ fun AppNavegacion() {
         }
         composable("onboarding") {
             OnboardingScreen {
+                sesionVM.comprobarSesion()
                 nav.navigate("main") { popUpTo("onboarding") { inclusive = true } }
             }
         }
@@ -86,33 +91,70 @@ fun AppNavegacion() {
             )
         }
 
-        // Main (Bottom Nav)
+        // Main (Bottom Nav) — bifurca según tipoUsuario
         composable("main") {
-            val panelVM: PanelViewModel = viewModel()
-            val certificadoVM: CertificadoViewModel = viewModel()
-            MainScaffold(
-                panelViewModel = panelVM,
-                certificadoViewModel = certificadoVM,
-                chatViewModel = chatVM,
-                onCerrarSesion = {
-                    sesionVM.logout()
-                    nav.navigate("login") { popUpTo(0) { inclusive = true } }
-                },
-                onNuevoPreestudio      = { nav.navigate("preestudio") },
-                onBuscarTecnicos       = { nav.navigate("tecnicos") },
-                onMisProyectos         = { nav.navigate("proyectos") },
-                onRankings             = { nav.navigate("rankings") },
-                onVerUltimoInforme     = { nav.navigate("informe") },
-                onPerfil               = { nav.navigate("perfil") },
-                onPresupuestos         = { nav.navigate("presupuestos") },
-                onHistorialInformes    = { nav.navigate("historial_informes") },
-                onMisViviendas         = { nav.navigate("mis_viviendas") },
-                onChats                = { id -> nav.navigate("chat/$id") },
-                onGraficas             = { nav.navigate("graficas") },
-                onMapaTecnicos         = { nav.navigate("mapa_tecnicos") },
-                onSobreApp             = { nav.navigate("sobre_app") },
-                onAjustes              = { nav.navigate("ajustes") }
-            )
+            val usuario = sesionVM.usuario.value
+            val esTecnico = usuario?.tipoUsuario == "Técnico"
+
+            // Mientras se carga el usuario tras un login fresco
+            if (usuario == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+                return@composable
+            }
+
+            if (esTecnico) {
+                val panelTecnicoVM: PanelTecnicoViewModel = viewModel()
+                val panelVM: PanelViewModel = viewModel()
+                val certificadoVM: CertificadoViewModel = viewModel()
+                val presupuestosVM: PresupuestosViewModel = viewModel()
+                MainScaffoldTecnico(
+                    panelTecnicoVM = panelTecnicoVM,
+                    panelVM = panelVM,
+                    certificadoVM = certificadoVM,
+                    presupuestosVM = presupuestosVM,
+                    chatVM = chatVM,
+                    onCerrarSesion = {
+                        sesionVM.logout()
+                        nav.navigate("login") { popUpTo(0) { inclusive = true } }
+                    },
+                    onPerfil       = { nav.navigate("perfil") },
+                    onAjustes      = { nav.navigate("ajustes") },
+                    onSobreApp     = { nav.navigate("sobre_app") },
+                    onChats        = { id -> nav.navigate("chat/$id") },
+                    onProyectos    = { nav.navigate("proyectos_tecnico") },
+                    onResenas      = { nav.navigate("resenas_tecnico") },
+                    onEstadisticas = { nav.navigate("estadisticas_tecnico") },
+                    onMisClientes  = { nav.navigate("mis_clientes_tecnico") }
+                )
+            } else {
+                val panelVM: PanelViewModel = viewModel()
+                val certificadoVM: CertificadoViewModel = viewModel()
+                MainScaffold(
+                    panelViewModel = panelVM,
+                    certificadoViewModel = certificadoVM,
+                    chatViewModel = chatVM,
+                    onCerrarSesion = {
+                        sesionVM.logout()
+                        nav.navigate("login") { popUpTo(0) { inclusive = true } }
+                    },
+                    onNuevoPreestudio      = { nav.navigate("preestudio") },
+                    onBuscarTecnicos       = { nav.navigate("tecnicos") },
+                    onMisProyectos         = { nav.navigate("proyectos") },
+                    onRankings             = { nav.navigate("rankings") },
+                    onVerUltimoInforme     = { nav.navigate("informe") },
+                    onPerfil               = { nav.navigate("perfil") },
+                    onPresupuestos         = { nav.navigate("presupuestos") },
+                    onHistorialInformes    = { nav.navigate("historial_informes") },
+                    onMisViviendas         = { nav.navigate("mis_viviendas") },
+                    onChats                = { id -> nav.navigate("chat/$id") },
+                    onGraficas             = { nav.navigate("graficas") },
+                    onMapaTecnicos         = { nav.navigate("mapa_tecnicos") },
+                    onSobreApp             = { nav.navigate("sobre_app") },
+                    onAjustes              = { nav.navigate("ajustes") }
+                )
+            }
         }
 
         // Perfil usuario
@@ -234,6 +276,28 @@ fun AppNavegacion() {
         composable("ajustes") {
             val ajustesVM: AjustesViewModel = viewModel()
             AjustesScreen(viewModel = ajustesVM, onVolver = { nav.popBackStack() })
+        }
+
+        // ── Pantallas exclusivas de técnicos ──
+        composable("mis_clientes_tecnico") {
+            val misClientesVM: MisClientesTecnicoViewModel = viewModel()
+            MisClientesTecnicoScreen(
+                viewModel = misClientesVM,
+                onVolver = { nav.popBackStack() },
+                onAbrirChat = { chatId -> nav.navigate("chat/$chatId") }
+            )
+        }
+        composable("proyectos_tecnico") {
+            val proyectosTecVM: ProyectosAsignadosViewModel = viewModel()
+            ProyectosAsignadosScreen(viewModel = proyectosTecVM, onVolver = { nav.popBackStack() })
+        }
+        composable("resenas_tecnico") {
+            val resenasTecVM: ResenasRecibidasViewModel = viewModel()
+            ResenasRecibidasScreen(viewModel = resenasTecVM, onVolver = { nav.popBackStack() })
+        }
+        composable("estadisticas_tecnico") {
+            val estadisticasTecVM: EstadisticasTecnicoViewModel = viewModel()
+            EstadisticasTecnicoScreen(viewModel = estadisticasTecVM, onVolver = { nav.popBackStack() })
         }
     }
 }

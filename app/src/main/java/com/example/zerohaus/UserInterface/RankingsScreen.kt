@@ -13,9 +13,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -60,7 +63,20 @@ fun RankingsScreen(
             }
         } else if (viewModel.ranking.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
-                Text("No hay técnicos registrados aún", color = gris)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Star, null, tint = gris.copy(0.4f), modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(10.dp))
+                    Text("No hay técnicos registrados aún", color = gris)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.cargarRanking() },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Reintentar")
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -86,7 +102,7 @@ fun RankingsScreen(
 
                     Card(
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(if (index < 3) 2.dp else 1.dp, if (index < 3) medallaColor else borde),
                         modifier = Modifier
                             .fillMaxWidth()

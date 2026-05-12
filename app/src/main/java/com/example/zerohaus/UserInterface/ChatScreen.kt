@@ -57,6 +57,12 @@ fun ChatScreen(
     val sdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var errorLocal by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(errorLocal) {
+        errorLocal?.let { snackbarHostState.showSnackbar(it); errorLocal = null }
+    }
 
     // ───────────── LAUNCHERS ─────────────
 
@@ -77,7 +83,11 @@ fun ChatScreen(
                     if (si >= 0) bytes = c.getLong(si)
                 }
             }
-            viewModel.enviarArchivo(chatId, uri, nombre, bytes)
+            if (bytes > 15 * 1024 * 1024) {
+                errorLocal = "El archivo supera el límite de 15 MB"
+            } else {
+                viewModel.enviarArchivo(chatId, uri, nombre, bytes)
+            }
         }
     }
 
@@ -91,6 +101,7 @@ fun ChatScreen(
 
     Scaffold(
         containerColor = fondo,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -245,7 +256,7 @@ fun ChatScreen(
                             }
                         }
 
-                        HorizontalDivider(color = Color(0xFFF3F4F6))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         // ── Texto + enviar ──
                         Row(
@@ -261,10 +272,10 @@ fun ChatScreen(
                                 placeholder = { Text("Escribe un mensaje…", color = gris) },
                                 shape = RoundedCornerShape(24.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    unfocusedBorderColor = Color(0xFFE5E7EB),
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                                     focusedBorderColor = verde,
-                                    unfocusedContainerColor = Color(0xFFF9FAFB),
-                                    focusedContainerColor = Color.White
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface
                                 ),
                                 maxLines = 4
                             )
@@ -298,7 +309,7 @@ private fun BarraPreviewImagen(
     enviando: Boolean
 ) {
     Column(Modifier.fillMaxWidth()) {
-        HorizontalDivider(color = Color(0xFFE5E7EB))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             modifier = Modifier
                 .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -334,10 +345,10 @@ private fun BarraPreviewImagen(
                 singleLine = true,
                 enabled = !enviando,
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color(0xFFE5E7EB),
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
                     focusedBorderColor = verde,
-                    unfocusedContainerColor = Color(0xFFF9FAFB),
-                    focusedContainerColor = Color.White
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
             Spacer(Modifier.width(8.dp))
@@ -397,7 +408,7 @@ private fun BurbujaMensaje(
                     )
                     if (msg.texto.isNotEmpty()) {
                         Text(
-                            msg.texto, fontSize = 13.sp, color = Color(0xFF374151),
+                            msg.texto, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
                         )
                     }
@@ -448,7 +459,7 @@ private fun BurbujaMensaje(
                     Column(Modifier.weight(1f)) {
                         Text(
                             msg.mediaNombre,
-                            color = if (esMio) Color.White else Color(0xFF111827),
+                            color = if (esMio) Color.White else MaterialTheme.colorScheme.onSurface,
                             fontSize = 13.sp, fontWeight = FontWeight.Medium,
                             maxLines = 2, overflow = TextOverflow.Ellipsis
                         )
@@ -502,7 +513,7 @@ private fun BurbujaMensaje(
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
                         msg.texto,
-                        color = if (esMio) Color.White else Color(0xFF111827),
+                        color = if (esMio) Color.White else MaterialTheme.colorScheme.onSurface,
                         fontSize = 15.sp
                     )
                     Spacer(Modifier.height(2.dp))
