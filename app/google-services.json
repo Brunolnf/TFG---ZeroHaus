@@ -7,31 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:140712303137:android:33c54ada506e61342d6160",
-        "android_client_info": {
-          "package_name": "com.example.zerohaus"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCyBPBibmn3iFoOzIjQ9Zqxy7Y63zjoWfs"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:140712303137:android:33c54ada506e61342d6160",
+        "mobilesdk_app_id": "1:140712303137:android:bdf070ae95ad00512d6160",
         "android_client_info": {
           "package_name": "es.zerohaus.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "140712303137-ptrhtp5nfi7fkju3ctelj935q3d6tlus.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "es.zerohaus.app",
+            "certificate_hash": "c18ff7871af2ebf3fb3dc882c3a82f645d3b4903"
+          }
+        },
+        {
+          "client_id": "140712303137-4jger2cos8hphphqttilca4b2vq8m953.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCyBPBibmn3iFoOzIjQ9Zqxy7Y63zjoWfs"
@@ -39,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "140712303137-4jger2cos8hphphqttilca4b2vq8m953.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -3,6 +3,7 @@ package com.example.zerohaus.Repositorios
 import com.example.zerohaus.Modelos.Resena
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
 class RepositorioResenas {
 
     private val db = FirebaseFirestore.getInstance()
@@ -11,13 +12,10 @@ class RepositorioResenas {
     fun obtenerResenas(tecnicoId: String, callback: (List<Resena>) -> Unit) {
         db.collection("resenas")
             .whereEqualTo("tecnicoId", tecnicoId)
+            .orderBy("fecha", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
-                callback(
-                    snap.documents
-                        .mapNotNull { it.toObject(Resena::class.java) }
-                        .sortedByDescending { it.fecha }
-                )
+                callback(snap.documents.mapNotNull { it.toObject(Resena::class.java) })
             }
             .addOnFailureListener { callback(emptyList()) }
     }

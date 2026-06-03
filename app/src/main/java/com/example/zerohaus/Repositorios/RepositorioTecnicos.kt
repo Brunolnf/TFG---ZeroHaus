@@ -97,18 +97,7 @@ class RepositorioTecnicos {
             .addOnFailureListener { callback(null) }
     }
 
-    fun obtenerRanking(callback: (List<Tecnico>) -> Unit) {
-        db.collection("tecnicos")
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.mapNotNull { doc ->
-                    doc.toObject(Tecnico::class.java)?.let { t ->
-                        if (t.id.isBlank()) t.copy(id = doc.id) else t
-                    }
-                })
-            }
-            .addOnFailureListener { callback(emptyList()) }
-    }
+    fun obtenerRanking(callback: (List<Tecnico>) -> Unit) = obtenerTecnicos(callback)
 
     fun solicitarPresupuesto(solicitud: SolicitudPresupuesto, callback: (Result<Unit>) -> Unit) {
         val ref = db.collection("solicitudes").document()
@@ -204,26 +193,21 @@ class RepositorioTecnicos {
     fun obtenerSolicitudesRecibidas(callback: (List<SolicitudPresupuesto>) -> Unit) {
         db.collection("solicitudes")
             .whereEqualTo("tecnicoUid", uid())
+            .orderBy("fechaCreacion", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
-                callback(
-                    snap.documents.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                        .sortedByDescending { it.fechaCreacion }
-                )
+                callback(snap.documents.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) })
             }
             .addOnFailureListener { callback(emptyList()) }
     }
 
     fun obtenerMisSolicitudes(callback: (List<SolicitudPresupuesto>) -> Unit) {
-        // Sin orderBy para evitar requerir índice compuesto en Firestore
         db.collection("solicitudes")
             .whereEqualTo("uidCliente", uid())
+            .orderBy("fechaCreacion", com.google.firebase.firestore.Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
-                callback(
-                    snap.documents.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                        .sortedByDescending { it.fechaCreacion }
-                )
+                callback(snap.documents.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) })
             }
             .addOnFailureListener { callback(emptyList()) }
     }
@@ -590,15 +574,6 @@ class RepositorioTecnicos {
             .addOnFailureListener { callback(false) }
     }
 
-    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) {
-        val ref = db.collection("notificaciones").document()
-        ref.set(
-            hashMapOf(
-                "id" to ref.id, "uid" to uid,
-                "titulo" to titulo, "detalle" to detalle,
-                "fecha" to System.currentTimeMillis(),
-                "leida" to false, "tipo" to tipo
-            )
-        )
-    }
+    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) =
+        RepositorioNotificaciones.crearRapida(uid, titulo, detalle, tipo)
 }
