@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.HistorialInformesViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -156,8 +157,8 @@ fun HistorialInformesScreen(
                                 FilaComparacion("Etiqueta", a.etiqueta, b.etiqueta, null, verde, gris)
                                 FilaComparacion(
                                     "Consumo",
-                                    "${String.format("%.1f", a.consumoEstimado)} kWh",
-                                    "${String.format("%.1f", b.consumoEstimado)} kWh",
+                                    Formato.formatEnergia(a.consumoEstimado),
+                                    Formato.formatEnergia(b.consumoEstimado),
                                     b.consumoEstimado - a.consumoEstimado,
                                     verde, gris
                                 )
@@ -170,8 +171,8 @@ fun HistorialInformesScreen(
                                 )
                                 FilaComparacion(
                                     "Coste",
-                                    "${String.format("%.1f", a.costeAnual)} €",
-                                    "${String.format("%.1f", b.costeAnual)} €",
+                                    Formato.formatMoneda(a.costeAnual, 1),
+                                    Formato.formatMoneda(b.costeAnual, 1),
                                     b.costeAnual - a.costeAnual,
                                     verde, gris
                                 )
@@ -180,8 +181,8 @@ fun HistorialInformesScreen(
                                 val mejora = a.consumoEstimado - b.consumoEstimado
                                 val mejoraColor = if (mejora > 0) verde else if (mejora < 0) Color(0xFFDC2626) else gris
                                 val mejoraTexto = when {
-                                    mejora > 0 -> "Mejora de ${String.format("%.1f", mejora)} kWh entre informes"
-                                    mejora < 0 -> "Aumento de ${String.format("%.1f", -mejora)} kWh entre informes"
+                                    mejora > 0 -> "Mejora de ${Formato.formatEnergia(mejora)} entre informes"
+                                    mejora < 0 -> "Aumento de ${Formato.formatEnergia(-mejora)} entre informes"
                                     else -> "Sin cambio en consumo"
                                 }
                                 Text(mejoraTexto, color = mejoraColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -232,9 +233,9 @@ fun HistorialInformesScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${String.format("%.1f", informe.consumoEstimado)} kWh/año", color = gris, fontSize = 13.sp)
+                                Text(Formato.formatEnergiaAnual(informe.consumoEstimado), color = gris, fontSize = 13.sp)
                                 Text("${String.format("%.1f", informe.emisiones)} kg CO₂", color = gris, fontSize = 13.sp)
-                                Text("${String.format("%.1f", informe.costeAnual)} €/año", color = gris, fontSize = 13.sp)
+                                Text(Formato.formatMonedaAnual(informe.costeAnual, 1), color = gris, fontSize = 13.sp)
                             }
                         }
                     }

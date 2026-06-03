@@ -47,6 +47,8 @@ fun PerfilScreen(
         uri?.let { viewModel.subirFotoPerfil(it) }
     }
 
+    var confirmarCierre by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) { viewModel.cargarPerfil() }
 
     Scaffold(
@@ -131,7 +133,7 @@ fun PerfilScreen(
                             leadingIcon = { Icon(Icons.Default.Person, null, tint = gris) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -140,7 +142,7 @@ fun PerfilScreen(
                             value = estado.email, onValueChange = {}, readOnly = true,
                             leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
                             singleLine = true, shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, unfocusedContainerColor = Color(0xFFF9FAFB), focusedContainerColor = Color(0xFFF9FAFB)),
+                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -153,7 +155,7 @@ fun PerfilScreen(
                             value = tipoDisplay, onValueChange = {}, readOnly = true,
                             leadingIcon = { Icon(if (estado.tipoUsuario == "Técnico") Icons.Default.Build else Icons.Default.Home, null, tint = gris) },
                             singleLine = true, shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, unfocusedContainerColor = Color(0xFFF9FAFB), focusedContainerColor = Color(0xFFF9FAFB)),
+                            colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -175,7 +177,7 @@ fun PerfilScreen(
                                 onValueChange = { viewModel.cambiarEspecialidades(it) },
                                 placeholder = { Text(c.perfilEspecialidadesPlaceholder) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -185,7 +187,7 @@ fun PerfilScreen(
                                 onValueChange = { viewModel.cambiarDescripcion(it) },
                                 placeholder = { Text(c.perfilDescripcionPlaceholder) },
                                 minLines = 3, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -196,7 +198,7 @@ fun PerfilScreen(
                                 placeholder = { Text(c.perfilTelefonoPlaceholder) },
                                 leadingIcon = { Icon(Icons.Default.Phone, null, tint = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -207,7 +209,7 @@ fun PerfilScreen(
                                 placeholder = { Text(c.perfilEmailContactoPlaceholder) },
                                 leadingIcon = { Icon(Icons.Default.MailOutline, null, tint = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -218,7 +220,7 @@ fun PerfilScreen(
                                 placeholder = { Text("Tu ciudad de trabajo") },
                                 leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -249,7 +251,7 @@ fun PerfilScreen(
                                 leadingIcon = { Icon(Icons.Default.AccountBalance, null, tint = gris) },
                                 supportingText = { Text("Tu enlace será paypal.me/${estado.paypalUsername.ifEmpty { "tu_usuario" }}", fontSize = 11.sp) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -261,7 +263,7 @@ fun PerfilScreen(
                                 leadingIcon = { Icon(Icons.Default.Smartphone, null, tint = gris) },
                                 supportingText = { Text("El cliente lo usará para enviarte un Bizum", fontSize = 11.sp) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde, unfocusedContainerColor = Color.White, focusedContainerColor = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -309,7 +311,7 @@ fun PerfilScreen(
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(c.perfilCuenta, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         OutlinedButton(
-                            onClick = onCerrarSesion,
+                            onClick = { confirmarCierre = true },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFDC2626)))
@@ -324,5 +326,23 @@ fun PerfilScreen(
                 Spacer(Modifier.height(20.dp))
             }
         }
+    }
+
+    if (confirmarCierre) {
+        AlertDialog(
+            onDismissRequest = { confirmarCierre = false },
+            title = { Text(c.cerrarSesion, fontWeight = FontWeight.SemiBold) },
+            text = { Text("¿Seguro que quieres cerrar sesión?") },
+            confirmButton = {
+                TextButton(onClick = { confirmarCierre = false; onCerrarSesion() }) {
+                    Text(c.cerrarSesion, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarCierre = false }) {
+                    Text(c.cancelar)
+                }
+            }
+        )
     }
 }

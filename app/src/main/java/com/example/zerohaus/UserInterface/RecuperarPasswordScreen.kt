@@ -1,4 +1,4 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.LoginViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -22,6 +23,7 @@ fun RecuperarPasswordScreen(
     viewModel: LoginViewModel,
     onVolver: () -> Unit
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
@@ -40,7 +42,7 @@ fun RecuperarPasswordScreen(
                 title = {},
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = fondo)
@@ -57,7 +59,7 @@ fun RecuperarPasswordScreen(
             Spacer(Modifier.height(32.dp))
 
             if (enviado) {
-                // ── Estado éxito ──
+                // ── Estado éxito (mensaje neutro: no revela si existe) ──
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = verde.copy(alpha = 0.10f),
@@ -74,13 +76,13 @@ fun RecuperarPasswordScreen(
                 }
                 Spacer(Modifier.height(24.dp))
                 Text(
-                    "Correo enviado",
+                    c.recuperarExitoTitulo,
                     fontWeight = FontWeight.Bold,
                     fontSize = 22.sp
                 )
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Hemos enviado un enlace a\n$email\npara que puedas restablecer tu contraseña.",
+                    c.recuperarExitoMensaje,
                     color = gris,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
@@ -88,7 +90,7 @@ fun RecuperarPasswordScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Revisa también tu carpeta de spam.",
+                    c.recuperarSpam,
                     color = gris.copy(alpha = 0.7f),
                     fontSize = 13.sp,
                     textAlign = TextAlign.Center
@@ -100,14 +102,14 @@ fun RecuperarPasswordScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = verde),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Volver al inicio de sesión", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(c.recuperarVolver, color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = {
                     enviado = false
                     error = null
                 }) {
-                    Text("¿No lo has recibido? Reenviar", color = verde, fontSize = 13.sp)
+                    Text(c.recuperarReenviar, color = verde, fontSize = 13.sp)
                 }
             } else {
                 // ── Formulario ──
@@ -126,10 +128,10 @@ fun RecuperarPasswordScreen(
                     }
                 }
                 Spacer(Modifier.height(24.dp))
-                Text("¿Olvidaste tu contraseña?", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                Text(c.recuperarTitulo, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Introduce tu correo electrónico y te enviaremos un enlace para restablecerla.",
+                    c.recuperarSubtitulo,
                     color = gris,
                     fontSize = 14.sp,
                     textAlign = TextAlign.Center,
@@ -140,8 +142,8 @@ fun RecuperarPasswordScreen(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it.trim(); error = null },
-                    label = { Text("Correo electrónico") },
-                    placeholder = { Text("ejemplo@correo.com") },
+                    label = { Text(c.emailPlaceholder) },
+                    placeholder = { Text(c.emailPlaceholder) },
                     leadingIcon = { Icon(Icons.Default.MailOutline, null) },
                     singleLine = true,
                     isError = error != null || (email.isNotEmpty() && !emailValido),
@@ -149,7 +151,7 @@ fun RecuperarPasswordScreen(
                         when {
                             error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
                             email.isNotEmpty() && !emailValido ->
-                                Text("Introduce un correo válido", color = MaterialTheme.colorScheme.error)
+                                Text(c.emailError, color = MaterialTheme.colorScheme.error)
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
@@ -186,15 +188,15 @@ fun RecuperarPasswordScreen(
                             strokeWidth = 2.dp
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text("Enviando…", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(c.recuperarEnviando, color = Color.White, fontWeight = FontWeight.SemiBold)
                     } else {
-                        Text("Enviar enlace de recuperación", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(c.recuperarBoton, color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
                 TextButton(onClick = onVolver) {
-                    Text("Volver al inicio de sesión", color = gris)
+                    Text(c.recuperarVolver, color = gris)
                 }
             }
         }

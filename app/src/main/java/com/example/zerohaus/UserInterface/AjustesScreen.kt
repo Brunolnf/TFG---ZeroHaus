@@ -39,6 +39,29 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
 
     LaunchedEffect(Unit) { viewModel.cargarAjustes() }
 
+    // Sincroniza preferencias locales y AppEstado con los valores remotos al cargar
+    LaunchedEffect(estado.cargando) {
+        if (!estado.cargando) {
+            val a = estado.ajustes
+            if (AppEstado.unidadEnergia != a.unidadEnergia) {
+                AppEstado.unidadEnergia = a.unidadEnergia
+                prefs.setUnidadEnergia(a.unidadEnergia)
+            }
+            if (AppEstado.unidadMoneda != a.unidadMoneda) {
+                AppEstado.unidadMoneda = a.unidadMoneda
+                prefs.setUnidadMoneda(a.unidadMoneda)
+            }
+            if (AppEstado.notificacionesPush != a.notificacionesPush) {
+                AppEstado.notificacionesPush = a.notificacionesPush
+                prefs.setNotificacionesPush(a.notificacionesPush)
+            }
+            if (AppEstado.notificacionesSonido != a.notificacionesSonido) {
+                AppEstado.notificacionesSonido = a.notificacionesSonido
+                prefs.setNotificacionesSonido(a.notificacionesSonido)
+            }
+        }
+    }
+
     val temaDisplay = when (AppEstado.tema) {
         "Claro" -> c.ajustesTemaClaro
         "Oscuro" -> c.ajustesTemaDark
@@ -90,15 +113,15 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                                 Text(c.ajustesPush, fontSize = 15.sp)
                                 Text(c.ajustesPushSub, color = gris, fontSize = 12.sp)
                             }
-                            Switch(checked = estado.ajustes.notificacionesPush, onCheckedChange = { viewModel.cambiarPush(it) }, colors = SwitchDefaults.colors(checkedTrackColor = verde))
-                        }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.3f))
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Email", fontSize = 15.sp)
-                                Text(c.ajustesEmailSub, color = gris, fontSize = 12.sp)
-                            }
-                            Switch(checked = estado.ajustes.notificacionesEmail, onCheckedChange = { viewModel.cambiarEmail(it) }, colors = SwitchDefaults.colors(checkedTrackColor = verde))
+                            Switch(
+                                checked = estado.ajustes.notificacionesPush,
+                                onCheckedChange = {
+                                    viewModel.cambiarPush(it)
+                                    AppEstado.notificacionesPush = it
+                                    prefs.setNotificacionesPush(it)
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = verde)
+                            )
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.3f))
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -106,7 +129,15 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                                 Text(c.ajustesSonido, fontSize = 15.sp)
                                 Text(c.ajustesSonidoSub, color = gris, fontSize = 12.sp)
                             }
-                            Switch(checked = estado.ajustes.notificacionesSonido, onCheckedChange = { viewModel.cambiarSonido(it) }, colors = SwitchDefaults.colors(checkedTrackColor = verde))
+                            Switch(
+                                checked = estado.ajustes.notificacionesSonido,
+                                onCheckedChange = {
+                                    viewModel.cambiarSonido(it)
+                                    AppEstado.notificacionesSonido = it
+                                    prefs.setNotificacionesSonido(it)
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = verde)
+                            )
                         }
                     }
                 }
@@ -198,7 +229,12 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                             )
                             ExposedDropdownMenu(expanded = expE, onDismissRequest = { expE = false }) {
                                 listOf("kWh", "MJ", "kcal").forEach { o ->
-                                    DropdownMenuItem(text = { Text(o) }, onClick = { viewModel.cambiarUnidadEnergia(o); expE = false })
+                                    DropdownMenuItem(text = { Text(o) }, onClick = {
+                                        viewModel.cambiarUnidadEnergia(o)
+                                        AppEstado.unidadEnergia = o
+                                        prefs.setUnidadEnergia(o)
+                                        expE = false
+                                    })
                                 }
                             }
                         }
@@ -212,7 +248,12 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                             )
                             ExposedDropdownMenu(expanded = expM, onDismissRequest = { expM = false }) {
                                 listOf("EUR", "USD", "GBP").forEach { o ->
-                                    DropdownMenuItem(text = { Text(o) }, onClick = { viewModel.cambiarUnidadMoneda(o); expM = false })
+                                    DropdownMenuItem(text = { Text(o) }, onClick = {
+                                        viewModel.cambiarUnidadMoneda(o)
+                                        AppEstado.unidadMoneda = o
+                                        prefs.setUnidadMoneda(o)
+                                        expM = false
+                                    })
                                 }
                             }
                         }

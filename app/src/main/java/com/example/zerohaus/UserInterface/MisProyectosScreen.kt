@@ -179,14 +179,7 @@ private fun TarjetaProyecto(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                AssistChip(
-                    onClick = {},
-                    label = { Text(proyecto.estado, fontSize = 11.sp) },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = estadoColor.copy(0.12f),
-                        labelColor = estadoColor
-                    )
-                )
+                EstadoChip(proyecto.estado, estadoColor)
                 IconButton(onClick = onEliminar, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Default.Delete,
@@ -354,14 +347,7 @@ private fun DetalleProyectoDialog(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(proyecto.estado) },
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = estadoColor.copy(0.12f),
-                            labelColor = estadoColor
-                        )
-                    )
+                    EstadoChip(proyecto.estado, estadoColor, fontSize = 12)
 
                     if (proyecto.descripcion.isNotEmpty()) {
                         Column {

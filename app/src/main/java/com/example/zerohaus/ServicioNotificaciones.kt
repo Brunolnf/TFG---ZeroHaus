@@ -1,5 +1,6 @@
 package com.example.zerohaus
 
+import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -16,10 +17,14 @@ class ServicioNotificaciones : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+
+        val prefs = AppPreferencias(this)
+        if (!prefs.getNotificacionesPush()) return
+
         val titulo = message.notification?.title ?: message.data["titulo"] ?: "ZeroHaus"
         val cuerpo  = message.notification?.body  ?: message.data["detalle"] ?: ""
         val tipo    = message.data["tipo"] ?: "general"
-        NotificacionesLocales.mostrar(this, titulo, cuerpo, tipo)
+        NotificacionesLocales.mostrar(this, titulo, cuerpo, tipo, conSonido = prefs.getNotificacionesSonido())
     }
 
     private fun guardarToken(token: String) {
@@ -36,7 +41,7 @@ class ServicioNotificaciones : FirebaseMessagingService() {
                     val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@addOnSuccessListener
                     FirebaseFirestore.getInstance()
                         .collection("usuarios").document(uid)
-                        .update("tokenFCM", token)
+                        .set(mapOf("tokenFCM" to token), SetOptions.merge())
                 }
         }
     }

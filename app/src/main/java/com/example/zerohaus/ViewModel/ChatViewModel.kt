@@ -4,7 +4,10 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Modelos.SolicitudPresupuesto
+import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Repositorios.RepositorioChat
+import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -36,6 +39,8 @@ class ChatViewModel : ViewModel() {
         private set
 
     private val repo = RepositorioChat()
+    private val repoTecnicos = RepositorioTecnicos()
+    private val repoAuth = RepositorioAutenticacion()
     private val db = FirebaseFirestore.getInstance()
 
     val miUid get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
@@ -195,6 +200,38 @@ class ChatViewModel : ViewModel() {
 
     fun cerrarChat() {
         listenerMensajes?.remove()
+    }
+
+    // ───────────── SOLICITAR PRESUPUESTO DESDE CHAT ─────────────
+
+    /**
+     * Envía una solicitud de presupuesto al técnico con el que estoy chateando.
+     * El chat debe ser con un técnico (`otroTecnicoDocId` no vacío).
+     */
+    fun solicitarPresupuestoAlTecnico(
+        descripcion: String,
+        callback: (Result<Unit>) -> Unit
+    ) {
+        val tecnicoDocId = chatEstado.otroTecnicoDocId
+        val tecnicoUid = chatEstado.otroUid
+        val tecnicoNombre = chatEstado.nombreOtroUsuario
+
+        if (tecnicoDocId.isEmpty()) {
+            callback(Result.failure(Exception("Este chat no es con un técnico")))
+            return
+        }
+
+        repoAuth.obtenerUsuario { u ->
+            val solicitud = SolicitudPresupuesto(
+                uidCliente = repoAuth.getUid() ?: "",
+                nombreCliente = u?.nombre ?: "Usuario",
+                tecnicoId = tecnicoDocId,
+                tecnicoUid = tecnicoUid,
+                tecnicoNombre = tecnicoNombre,
+                descripcion = descripcion.ifBlank { "Solicitud de presupuesto" }
+            )
+            repoTecnicos.solicitarPresupuesto(solicitud, callback)
+        }
     }
 
     override fun onCleared() {
