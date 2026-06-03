@@ -241,7 +241,9 @@ fun AppNavegacion() {
                 onVolver = { nav.popBackStack() },
                 onContactar = { tecnicoUid, tecnicoNombre ->
                     chatVM.iniciarChatConTecnico(tecnicoUid, tecnicoNombre) { chatId ->
-                        nav.navigate("chat/$chatId")
+                        // chatId vacío = error creando/encontrando el chat;
+                        // simplemente no navegamos para que el usuario reintente.
+                        if (chatId.isNotBlank()) nav.navigate("chat/$chatId")
                     }
                 }
             )

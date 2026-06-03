@@ -104,22 +104,14 @@ class RepositorioTecnicos {
         val s = solicitud.copy(id = ref.id, uidCliente = uid())
         ref.set(s)
             .addOnSuccessListener {
-                // Notificación de confirmación para el cliente
+                // Notif para el cliente (self-notif). La notif al técnico la genera
+                // la Cloud Function `on_solicitud_created` para evitar duplicados.
                 crearNotif(
                     uid = uid(),
                     titulo = "Solicitud enviada a ${solicitud.tecnicoNombre}",
                     detalle = "Tu solicitud de presupuesto ha sido enviada. Recibirás una notificación cuando el técnico responda.",
                     tipo = "presupuesto"
                 )
-                // Notificación para el técnico (usamos tecnicoUid = Auth UID real)
-                if (solicitud.tecnicoUid.isNotEmpty()) {
-                    crearNotif(
-                        uid = solicitud.tecnicoUid,
-                        titulo = "Nueva solicitud de presupuesto",
-                        detalle = "${solicitud.nombreCliente} te ha enviado una solicitud de presupuesto.",
-                        tipo = "presupuesto"
-                    )
-                }
                 callback(Result.success(Unit))
             }
             .addOnFailureListener { e ->
@@ -216,33 +208,17 @@ class RepositorioTecnicos {
         solicitudId: String, precio: Double, respuesta: String,
         callback: (Result<Unit>) -> Unit
     ) {
+        // La Cloud Function `on_solicitud_estado_cambiado` notifica al cliente.
         val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val uidCliente = doc.getString("uidCliente") ?: ""
-            val tecnicoNombre = doc.getString("tecnicoNombre") ?: "Técnico"
-            ref.update(
-                mapOf(
-                    "estado" to "Presupuestado",
-                    "precioPresupuesto" to precio,
-                    "respuestaTecnico" to respuesta,
-                    "fechaRespuesta" to System.currentTimeMillis()
-                )
-            ).addOnSuccessListener {
-                if (uidCliente.isNotEmpty()) {
-                    crearNotif(
-                        uid = uidCliente,
-                        titulo = "Presupuesto recibido de $tecnicoNombre",
-                        detalle = "$tecnicoNombre ha respondido con un presupuesto de ${precio.toInt()} €. Ábrelo en Presupuestos para aceptarlo.",
-                        tipo = "presupuesto"
-                    )
-                }
-                callback(Result.success(Unit))
-            }.addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error respondiendo")))
-            }
-        }.addOnFailureListener { e ->
-            callback(Result.failure(Exception(e.message ?: "Error obteniendo solicitud")))
-        }
+        ref.update(
+            mapOf(
+                "estado" to "Presupuestado",
+                "precioPresupuesto" to precio,
+                "respuestaTecnico" to respuesta,
+                "fechaRespuesta" to System.currentTimeMillis()
+            )
+        ).addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error respondiendo"))) }
     }
 
     fun aceptarPresupuesto(solicitudId: String, callback: (Result<Unit>) -> Unit) {
@@ -292,31 +268,18 @@ class RepositorioTecnicos {
         tareas: List<String>,
         callback: (Result<Unit>) -> Unit
     ) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val uidCliente = doc.getString("uidCliente") ?: ""
-            val tecnicoNombre = doc.getString("tecnicoNombre") ?: "Técnico"
-            ref.update(
-                mapOf(
-                    "estado" to "FichaEnviada",
-                    "fichaFechaInicio" to fechaInicio,
-                    "fichaFechaFinEstimada" to fechaFinEstimada,
-                    "fichaDescripcion" to descripcionFicha,
-                    "fichaPrecioFinal" to precioFinal,
-                    "fichaTareas" to tareas
-                )
-            ).addOnSuccessListener {
-                if (uidCliente.isNotEmpty()) {
-                    crearNotif(
-                        uid = uidCliente,
-                        titulo = "Ficha de inicio recibida",
-                        detalle = "$tecnicoNombre te ha enviado los detalles del trabajo. Revísalos y confirma para empezar.",
-                        tipo = "presupuesto"
-                    )
-                }
-                callback(Result.success(Unit))
-            }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error enviando ficha"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
+        // La notif al cliente la genera `on_solicitud_estado_cambiado` (plantilla "FichaEnviada").
+        db.collection("solicitudes").document(solicitudId).update(
+            mapOf(
+                "estado" to "FichaEnviada",
+                "fichaFechaInicio" to fechaInicio,
+                "fichaFechaFinEstimada" to fechaFinEstimada,
+                "fichaDescripcion" to descripcionFicha,
+                "fichaPrecioFinal" to precioFinal,
+                "fichaTareas" to tareas
+            )
+        ).addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error enviando ficha"))) }
     }
 
     /** CLIENTE — acepta la ficha de inicio. Crea automáticamente el documento /proyectos. */
@@ -348,20 +311,11 @@ class RepositorioTecnicos {
 
             refProy.set(proyecto)
                 .addOnSuccessListener {
+                    // La notif al técnico la genera `on_solicitud_estado_cambiado` (plantilla "EnCurso").
                     refSol.update(
                         mapOf("estado" to "EnCurso", "proyectoId" to refProy.id)
-                    ).addOnSuccessListener {
-                        // Notificación al técnico
-                        if (sol.tecnicoUid.isNotEmpty()) {
-                            crearNotif(
-                                uid = sol.tecnicoUid,
-                                titulo = "Reforma iniciada ✓",
-                                detalle = "${sol.nombreCliente} ha aceptado la ficha. El proyecto ya está en marcha.",
-                                tipo = "proyecto"
-                            )
-                        }
-                        callback(Result.success(refProy.id))
-                    }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error actualizando solicitud"))) }
+                    ).addOnSuccessListener { callback(Result.success(refProy.id)) }
+                        .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error actualizando solicitud"))) }
                 }
                 .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error creando proyecto"))) }
         }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
@@ -391,25 +345,11 @@ class RepositorioTecnicos {
 
     /** TÉCNICO — marca el trabajo como terminado, pendiente de pago. */
     fun marcarTrabajoTerminado(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val uidCliente = doc.getString("uidCliente") ?: ""
-            val tecnicoNombre = doc.getString("tecnicoNombre") ?: "Técnico"
-            val precioFinal = doc.getDouble("fichaPrecioFinal") ?: 0.0
-            ref.update("estado", "PendientePago")
-                .addOnSuccessListener {
-                    if (uidCliente.isNotEmpty()) {
-                        crearNotif(
-                            uid = uidCliente,
-                            titulo = "Trabajo terminado ✓",
-                            detalle = "$tecnicoNombre ha finalizado el trabajo. Importe a pagar: ${precioFinal.toInt()} €.",
-                            tipo = "presupuesto"
-                        )
-                    }
-                    callback(Result.success(Unit))
-                }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
+        // La notif al cliente la genera `on_solicitud_estado_cambiado` (plantilla "PendientePago").
+        db.collection("solicitudes").document(solicitudId)
+            .update("estado", "PendientePago")
+            .addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
     }
 
     /**
@@ -422,37 +362,16 @@ class RepositorioTecnicos {
         referencia: String,
         callback: (Result<Unit>) -> Unit
     ) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val tecnicoUid = doc.getString("tecnicoUid") ?: ""
-            val nombreCliente = doc.getString("nombreCliente") ?: "Cliente"
-            val precio = doc.getDouble("fichaPrecioFinal") ?: 0.0
-            val ahora = System.currentTimeMillis()
-
-            ref.update(
-                mapOf(
-                    "estado" to "PagoEnVerificacion",
-                    "metodoPago" to metodo,
-                    "referenciaPago" to referencia,
-                    "fechaPagoCliente" to ahora
-                )
-            ).addOnSuccessListener {
-                if (tecnicoUid.isNotEmpty()) {
-                    val medio = when (metodo) {
-                        "paypal" -> "PayPal"
-                        "bizum"  -> "Bizum"
-                        else     -> "transferencia"
-                    }
-                    crearNotif(
-                        uid = tecnicoUid,
-                        titulo = "Pago en verificación",
-                        detalle = "$nombreCliente dice haber pagado ${precio.toInt()} € por $medio. Verifica la recepción y confirma el cobro.",
-                        tipo = "presupuesto"
-                    )
-                }
-                callback(Result.success(Unit))
-            }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
+        // La notif al técnico la genera `on_solicitud_estado_cambiado` (plantilla "PagoEnVerificacion").
+        db.collection("solicitudes").document(solicitudId).update(
+            mapOf(
+                "estado" to "PagoEnVerificacion",
+                "metodoPago" to metodo,
+                "referenciaPago" to referencia,
+                "fechaPagoCliente" to System.currentTimeMillis()
+            )
+        ).addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
     }
 
     /**
@@ -495,16 +414,8 @@ class RepositorioTecnicos {
                         "fechaConfirmacion" to ahora
                     )
                 )
-                // Notificación al cliente
-                if (sol.uidCliente.isNotEmpty()) {
-                    crearNotif(
-                        uid = sol.uidCliente,
-                        titulo = "Pago confirmado ✓",
-                        detalle = "${sol.tecnicoNombre} ha confirmado la recepción del pago. Ya puedes valorarlo.",
-                        tipo = "reforma"
-                    )
-                }
-                // Notificación al técnico
+                // La notif al cliente la genera `on_solicitud_estado_cambiado` (plantilla "Completado").
+                // Self-notif para el técnico de confirmación.
                 crearNotif(
                     uid = uid(),
                     titulo = "Cobro confirmado",
@@ -537,25 +448,16 @@ class RepositorioTecnicos {
         val ref = db.collection("solicitudes").document(solicitudId)
         ref.get().addOnSuccessListener { doc ->
             val tecnicoNombre = doc.getString("tecnicoNombre") ?: "Técnico"
-            // tecnicoUid = Auth UID real; tecnicoId = doc ID de Firestore (no sirve para notif.)
-            val tecnicoUid = doc.getString("tecnicoUid") ?: ""
-            val nombreCliente = doc.getString("nombreCliente") ?: "Cliente"
             ref.update("estado", "Completado")
                 .addOnSuccessListener {
+                    // Self-notif para el cliente. La notif al técnico la genera la
+                    // Cloud Function (plantilla "Completado" en on_solicitud_estado_cambiado).
                     crearNotif(
                         uid = uid(),
                         titulo = "Reforma completada ✓",
                         detalle = "Has marcado la reforma con $tecnicoNombre como completada. Ya puedes valorarlo.",
                         tipo = "reforma"
                     )
-                    if (tecnicoUid.isNotEmpty()) {
-                        crearNotif(
-                            uid = tecnicoUid,
-                            titulo = "Reforma completada",
-                            detalle = "$nombreCliente ha marcado la reforma como completada.",
-                            tipo = "reforma"
-                        )
-                    }
                     callback(Result.success(Unit))
                 }
                 .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error completando"))) }

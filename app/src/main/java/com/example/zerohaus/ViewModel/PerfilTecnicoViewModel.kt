@@ -37,8 +37,10 @@ class PerfilTecnicoViewModel : ViewModel() {
                 val realOpiniones = resenas.size
                 val realRating = if (resenas.isEmpty()) 0.0
                                  else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
+                // Mostramos la cifra calculada en tiempo real sobre lo que vemos.
+                // El recálculo persistente en /tecnicos lo gestiona la Cloud
+                // Function `on_resena_changed` cuando cambian las reseñas.
                 val tecnicoCorregido = tecnico?.copy(opiniones = realOpiniones, rating = realRating)
-                repoResenas.actualizarRatingTecnico(tecnicoId)
                 repoResenas.yaValorado(tecnicoId) { yaValorado ->
                     repoTecnicos.puedeValorar(tecnicoId) { puede ->
                         estado = estado.copy(

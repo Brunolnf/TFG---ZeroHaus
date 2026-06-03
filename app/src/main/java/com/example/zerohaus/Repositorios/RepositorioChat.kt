@@ -48,11 +48,17 @@ class RepositorioChat {
 
     // ───────────── HELPER PRIVADO ─────────────
 
+    /**
+     * Actualiza el doc del chat con el último mensaje y el contador de no leídos
+     * para cada receptor. NO crea la entrada en `/notificaciones` ni envía push:
+     * de eso se encarga la Cloud Function `on_message_created`, que se dispara
+     * al crearse el doc de mensaje. Hacerlo aquí también duplicaría la notif.
+     */
     private fun actualizarChatYNotificar(
         chatId: String,
         ultimoMensaje: String,
         miUid: String,
-        emisorNombre: String
+        @Suppress("UNUSED_PARAMETER") emisorNombre: String
     ) {
         db.collection("chats").document(chatId).get()
             .addOnSuccessListener { chatDoc ->
@@ -66,12 +72,6 @@ class RepositorioChat {
 
                 participantes.filter { it != miUid }.forEach { receptorUid ->
                     updates["noLeidosPor.$receptorUid"] = FieldValue.increment(1)
-                    crearNotif(
-                        uid = receptorUid,
-                        titulo = "Nuevo mensaje de $emisorNombre",
-                        detalle = if (ultimoMensaje.length > 100) ultimoMensaje.take(100) + "…" else ultimoMensaje,
-                        tipo = "mensaje"
-                    )
                 }
 
                 db.collection("chats").document(chatId).update(updates)
@@ -87,12 +87,14 @@ class RepositorioChat {
         callback: (String) -> Unit
     ) {
         val miUid = uid()
+        if (miUid.isBlank() || otroUid.isBlank()) {
+            callback(""); return
+        }
 
         db.collection("chats")
             .whereArrayContains("participantes", miUid)
             .get()
             .addOnSuccessListener { snap ->
-
                 val existente = snap.documents.firstOrNull { doc ->
                     val p = doc.get("participantes") as? List<*>
                     p?.contains(otroUid) == true
@@ -102,7 +104,6 @@ class RepositorioChat {
                     callback(existente.id)
                 } else {
                     val ref = db.collection("chats").document()
-
                     val chat = Chat(
                         id = ref.id,
                         participantes = listOf(miUid, otroUid),
@@ -112,12 +113,15 @@ class RepositorioChat {
                         ),
                         noLeidosPor = mapOf(miUid to 0, otroUid to 0)
                     )
-
-                    ref.set(chat).addOnSuccessListener {
-                        callback(ref.id)
-                    }
+                    ref.set(chat)
+                        .addOnSuccessListener { callback(ref.id) }
+                        // Si falla el set, devolvemos cadena vacía para que la UI
+                        // pueda salir del estado de carga sin colgarse.
+                        .addOnFailureListener { callback("") }
                 }
             }
+            // Si la query inicial falla, hay que devolver algo o la UI se cuelga.
+            .addOnFailureListener { callback("") }
     }
 
     // ───────────── ESCUCHAR CHATS ─────────────
@@ -285,8 +289,4 @@ class RepositorioChat {
             .update("noLeidosPor.$miUid", 0)
     }
 
-    // ───────────── NOTIFICACIONES ─────────────
-
-    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) =
-        RepositorioNotificaciones.crearRapida(uid, titulo, detalle, tipo)
 }

@@ -81,15 +81,20 @@ service cloud.firestore {
     }
 
     // ─── NOTIFICACIONES ───
-    // Cada usuario lee y marca leídas las suyas. Logueados pueden crear notificaciones
-    // para OTROS (no para sí mismos) — evita auto-spam y reduce ruido.
+    // Cada usuario lee y marca leídas las suyas. Se permiten tanto
+    // self-notifications (confirmaciones de acciones propias del cliente
+    // al actor) como notificaciones a OTROS (notificación de evento a
+    // contraparte). Las Cloud Functions cubren la mayoría de las cross-user;
+    // las self-notifs vienen del cliente y antes esta regla las bloqueaba.
     match /notificaciones/{docId} {
       allow read, update, delete: if logueado() && resource.data.uid == uid();
       allow create: if logueado()
                     && request.resource.data.uid is string
-                    && request.resource.data.uid != uid()
+                    && request.resource.data.uid.size() > 0
                     && request.resource.data.titulo is string
-                    && request.resource.data.titulo.size() <= 200;
+                    && request.resource.data.titulo.size() <= 200
+                    && request.resource.data.detalle is string
+                    && request.resource.data.detalle.size() <= 1000;
     }
 
     // ─── SOLICITUDES ───

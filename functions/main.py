@@ -230,11 +230,29 @@ def _crear_notificacion_in_app(db, uid: str, titulo: str, detalle: str, tipo: st
     })
 
 
+def _canal_para_tipo(tipo: str) -> str:
+    """Mapea el tipo de notificación al channel_id que la app Android crea
+    en NotificacionesLocales.crearCanales. Si el canal no existe en el
+    dispositivo (versión vieja de la app), Android cae al canal default."""
+    return {
+        "chat":        "zerohaus_chat",
+        "mensaje":     "zerohaus_chat",
+        "presupuesto": "zerohaus_presupuesto",
+        "proyecto":    "zerohaus_proyecto",
+        "reforma":     "zerohaus_proyecto",
+        "valoracion":  "zerohaus_general",
+    }.get(tipo, "zerohaus_general")
+
+
 def _enviar_push(token, titulo: str, cuerpo: str, data: dict = None) -> None:
     """Envía una push notification vía FCM. Silencia errores de token inválido
-    (común si el usuario reinstaló o desinstaló la app)."""
+    (común si el usuario reinstaló o desinstaló la app). El channel_id se
+    deriva del `tipo` del data, así Android usa el canal correcto cuando la
+    app está en background."""
     if not token:
         return
+    tipo = (data or {}).get("tipo", "general")
+    canal = _canal_para_tipo(str(tipo))
     msg = messaging.Message(
         token=token,
         notification=messaging.Notification(title=titulo, body=cuerpo),
@@ -242,7 +260,7 @@ def _enviar_push(token, titulo: str, cuerpo: str, data: dict = None) -> None:
         android=messaging.AndroidConfig(
             priority="high",
             notification=messaging.AndroidNotification(
-                channel_id="zerohaus_default",
+                channel_id=canal,
                 sound="default",
             ),
         ),

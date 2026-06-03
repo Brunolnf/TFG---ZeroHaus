@@ -21,28 +21,16 @@ class RepositorioResenas {
     }
 
     fun publicarResena(resena: Resena, callback: (Result<Unit>) -> Unit) {
+        // El rating del técnico lo recalcula la Cloud Function `on_resena_changed`
+        // de forma transaccional cuando se crea/edita/borra una reseña. No lo
+        // hacemos desde el cliente para evitar race conditions (la query inmediata
+        // tras crear el doc puede no incluirlo por consistencia eventual).
         val ref = db.collection("resenas").document()
         val r = resena.copy(id = ref.id, uid = auth.currentUser?.uid ?: "")
         ref.set(r)
-            .addOnSuccessListener {
-                actualizarRatingTecnico(resena.tecnicoId)
-                callback(Result.success(Unit))
-            }
+            .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
                 callback(Result.failure(Exception(e.message ?: "Error publicando reseña")))
-            }
-    }
-
-    fun actualizarRatingTecnico(tecnicoId: String) {
-        db.collection("resenas")
-            .whereEqualTo("tecnicoId", tecnicoId)
-            .get()
-            .addOnSuccessListener { snap ->
-                val resenas = snap.documents.mapNotNull { it.toObject(Resena::class.java) }
-                val media = if (resenas.isEmpty()) 0.0
-                            else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
-                db.collection("tecnicos").document(tecnicoId)
-                    .update(mapOf("rating" to media, "opiniones" to resenas.size))
             }
     }
 

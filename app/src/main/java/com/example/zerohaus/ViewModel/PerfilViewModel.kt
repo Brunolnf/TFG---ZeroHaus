@@ -141,6 +141,12 @@ class PerfilViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Sube la foto a Storage y **persiste inmediatamente** la URL en
+     * Firestore (`/usuarios/{uid}.fotoPerfil`). Antes esto solo se reflejaba
+     * en el estado en memoria hasta que el usuario pulsaba "Guardar", lo que
+     * dejaba la imagen huérfana si cerraba la pantalla sin guardar.
+     */
     fun subirFotoPerfil(uri: Uri) {
         val uid = auth.currentUser?.uid ?: return
         estado = estado.copy(subiendoFoto = true, error = null)
@@ -148,7 +154,20 @@ class PerfilViewModel : ViewModel() {
         ref.putFile(uri)
             .addOnSuccessListener {
                 ref.downloadUrl.addOnSuccessListener { url ->
-                    estado = estado.copy(fotoPerfil = url.toString(), subiendoFoto = false)
+                    val urlString = url.toString()
+                    val usuario = estado.usuario
+                    if (usuario != null) {
+                        val actualizado = usuario.copy(fotoPerfil = urlString)
+                        repo.actualizarUsuario(actualizado) { _ ->
+                            estado = estado.copy(
+                                fotoPerfil = urlString,
+                                usuario = actualizado,
+                                subiendoFoto = false
+                            )
+                        }
+                    } else {
+                        estado = estado.copy(fotoPerfil = urlString, subiendoFoto = false)
+                    }
                 }
             }
             .addOnFailureListener { e ->

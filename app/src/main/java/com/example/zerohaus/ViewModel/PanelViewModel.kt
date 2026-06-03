@@ -6,7 +6,6 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
-import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -30,13 +29,11 @@ class PanelViewModel : ViewModel() {
     private val repoNotificaciones = RepositorioNotificaciones()
 
     private var listenerNotifs: ListenerRegistration? = null
-    private var notifIdsVistos = emptySet<String>()
 
     private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
         if (auth.currentUser == null) {
             listenerNotifs?.remove()
             listenerNotifs = null
-            notifIdsVistos = emptySet()
         }
     }
 
@@ -58,15 +55,15 @@ class PanelViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Listener de notificaciones in-app. Solo actualiza el estado para la campana.
+     * NO dispara `NotificacionesLocales.mostrar`: las notificaciones push en la
+     * bandeja del sistema las gestiona FCM vía `ServicioNotificaciones`, así
+     * evitamos disparar el mismo aviso dos veces al usuario en foreground.
+     */
     private fun arrancarListenerNotificaciones() {
         listenerNotifs?.remove()
         listenerNotifs = repoNotificaciones.escucharNotificaciones { notifs ->
-            // Si ya teníamos notifs cargadas, mostrar push local para las nuevas no leídas
-            if (notifIdsVistos.isNotEmpty()) {
-                notifs.filter { !it.leida && it.id !in notifIdsVistos }
-                    .forEach { n -> NotificacionesLocales.mostrar(n.titulo, n.detalle, n.tipo) }
-            }
-            notifIdsVistos = notifs.map { it.id }.toSet()
             estado = estado.copy(
                 notificaciones = notifs,
                 hayNoLeidas = notifs.any { !it.leida }
