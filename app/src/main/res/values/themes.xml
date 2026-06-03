@@ -2,4 +2,16 @@
 <resources>
 
     <style name="Theme.ZeroHaus" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+      Splash screen del sistema (Android 12+, backport vía core-splashscreen).
+      Se aplica a la Activity en el manifest. Tras installSplashScreen() en
+      MainActivity, el sistema lo sustituye automáticamente por nuestro
+      Theme.ZeroHaus.
+    -->
+    <style name="Theme.ZeroHaus.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/zerohaus_splash_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.ZeroHaus</item>
+    </style>
 </resources>

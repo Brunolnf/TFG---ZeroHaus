@@ -15,3 +15,39 @@ claude.exe
 .externalNativeBuild
 .cxx
 local.properties
+
+# Firebase admin credentials — NUNCA commitear
+firebase-*-admin*.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# Android keystores
+*.jks
+*.keystore
+
+# Backups generados por scripts
+*.bak
+
+# Output de Firebase CLI
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Cloud Functions (Python): el venv lo recrea el CLI / Cloud Build,
+# no tiene que viajar al repo. Son miles de archivos.
+functions/venv/
+functions/__pycache__/
+functions/**/__pycache__/
+functions/*.pyc
+
+# Logs de Kotlin auto-generados por Android Studio
+.kotlin/
+
+# Previews / scratch HTML que generan asistentes
+logo_*.html
+preview_*.html
+
+# Android Studio device manager (per-machine)
+.idea/deviceManager.xml
+.idea/appInsightsSettings.xml
