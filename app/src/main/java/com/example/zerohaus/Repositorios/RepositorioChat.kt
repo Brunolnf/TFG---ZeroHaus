@@ -18,6 +18,34 @@ class RepositorioChat {
 
     private fun uid() = auth.currentUser?.uid ?: ""
 
+    // ───────────── CACHÉ NOMBRE EMISOR ─────────────
+
+    companion object {
+        @Volatile private var nombreCacheado: String? = null
+        @Volatile private var uidCacheado: String? = null
+
+        /** Invalida la caché del nombre — llamar en logout. */
+        fun limpiarCacheNombre() {
+            nombreCacheado = null
+            uidCacheado = null
+        }
+    }
+
+    private fun obtenerNombre(callback: (String) -> Unit) {
+        val miUid = uid()
+        if (uidCacheado == miUid && nombreCacheado != null) {
+            callback(nombreCacheado!!); return
+        }
+        db.collection("usuarios").document(miUid).get()
+            .addOnSuccessListener { userDoc ->
+                val nombre = userDoc.getString("nombre") ?: "Usuario"
+                uidCacheado = miUid
+                nombreCacheado = nombre
+                callback(nombre)
+            }
+            .addOnFailureListener { callback("Usuario") }
+    }
+
     // ───────────── HELPER PRIVADO ─────────────
 
     private fun actualizarChatYNotificar(
@@ -144,32 +172,28 @@ class RepositorioChat {
         callback: (Boolean) -> Unit
     ) {
         val miUid = uid()
+        obtenerNombre { nombre ->
+            val ref = db.collection("chats")
+                .document(chatId)
+                .collection("mensajes")
+                .document()
 
-        db.collection("usuarios").document(miUid).get()
-            .addOnSuccessListener { userDoc ->
-                val nombre = userDoc.getString("nombre") ?: "Usuario"
+            val mensaje = MensajeChat(
+                id = ref.id,
+                chatId = chatId,
+                emisorUid = miUid,
+                emisorNombre = nombre,
+                texto = texto,
+                tipo = "texto"
+            )
 
-                val ref = db.collection("chats")
-                    .document(chatId)
-                    .collection("mensajes")
-                    .document()
-
-                val mensaje = MensajeChat(
-                    id = ref.id,
-                    chatId = chatId,
-                    emisorUid = miUid,
-                    emisorNombre = nombre,
-                    texto = texto,
-                    tipo = "texto"
-                )
-
-                ref.set(mensaje)
-                    .addOnSuccessListener {
-                        actualizarChatYNotificar(chatId, texto, miUid, nombre)
-                        callback(true)
-                    }
-                    .addOnFailureListener { callback(false) }
-            }
+            ref.set(mensaje)
+                .addOnSuccessListener {
+                    actualizarChatYNotificar(chatId, texto, miUid, nombre)
+                    callback(true)
+                }
+                .addOnFailureListener { callback(false) }
+        }
     }
 
     // ───────────── ENVIAR IMAGEN ─────────────
@@ -186,30 +210,25 @@ class RepositorioChat {
             }
             .addOnSuccessListener { downloadUri ->
                 val url = downloadUri.toString()
+                obtenerNombre { nombre ->
+                    val mensaje = MensajeChat(
+                        id = ref.id,
+                        chatId = chatId,
+                        emisorUid = miUid,
+                        emisorNombre = nombre,
+                        texto = caption,
+                        tipo = "imagen",
+                        mediaUrl = url
+                    )
 
-                db.collection("usuarios").document(miUid).get()
-                    .addOnSuccessListener { userDoc ->
-                        val nombre = userDoc.getString("nombre") ?: "Usuario"
-
-                        val mensaje = MensajeChat(
-                            id = ref.id,
-                            chatId = chatId,
-                            emisorUid = miUid,
-                            emisorNombre = nombre,
-                            texto = caption,
-                            tipo = "imagen",
-                            mediaUrl = url
-                        )
-
-                        ref.set(mensaje)
-                            .addOnSuccessListener {
-                                val resumen = if (caption.isNotEmpty()) "📷 $caption" else "📷 Foto"
-                                actualizarChatYNotificar(chatId, resumen, miUid, nombre)
-                                callback(true)
-                            }
-                            .addOnFailureListener { callback(false) }
-                    }
-                    .addOnFailureListener { callback(false) }
+                    ref.set(mensaje)
+                        .addOnSuccessListener {
+                            val resumen = if (caption.isNotEmpty()) "📷 $caption" else "📷 Foto"
+                            actualizarChatYNotificar(chatId, resumen, miUid, nombre)
+                            callback(true)
+                        }
+                        .addOnFailureListener { callback(false) }
+                }
             }
             .addOnFailureListener { callback(false) }
     }
@@ -234,31 +253,26 @@ class RepositorioChat {
             }
             .addOnSuccessListener { downloadUri ->
                 val url = downloadUri.toString()
+                obtenerNombre { emisorNombre ->
+                    val mensaje = MensajeChat(
+                        id = ref.id,
+                        chatId = chatId,
+                        emisorUid = miUid,
+                        emisorNombre = emisorNombre,
+                        texto = "",
+                        tipo = "archivo",
+                        mediaUrl = url,
+                        mediaNombre = nombre,
+                        mediaBytes = bytes
+                    )
 
-                db.collection("usuarios").document(miUid).get()
-                    .addOnSuccessListener { userDoc ->
-                        val emisorNombre = userDoc.getString("nombre") ?: "Usuario"
-
-                        val mensaje = MensajeChat(
-                            id = ref.id,
-                            chatId = chatId,
-                            emisorUid = miUid,
-                            emisorNombre = emisorNombre,
-                            texto = "",
-                            tipo = "archivo",
-                            mediaUrl = url,
-                            mediaNombre = nombre,
-                            mediaBytes = bytes
-                        )
-
-                        ref.set(mensaje)
-                            .addOnSuccessListener {
-                                actualizarChatYNotificar(chatId, "📎 $nombre", miUid, emisorNombre)
-                                callback(true)
-                            }
-                            .addOnFailureListener { callback(false) }
-                    }
-                    .addOnFailureListener { callback(false) }
+                    ref.set(mensaje)
+                        .addOnSuccessListener {
+                            actualizarChatYNotificar(chatId, "📎 $nombre", miUid, emisorNombre)
+                            callback(true)
+                        }
+                        .addOnFailureListener { callback(false) }
+                }
             }
             .addOnFailureListener { callback(false) }
     }
@@ -273,15 +287,6 @@ class RepositorioChat {
 
     // ───────────── NOTIFICACIONES ─────────────
 
-    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) {
-        val ref = db.collection("notificaciones").document()
-        ref.set(
-            hashMapOf(
-                "id" to ref.id, "uid" to uid,
-                "titulo" to titulo, "detalle" to detalle,
-                "fecha" to System.currentTimeMillis(),
-                "leida" to false, "tipo" to tipo
-            )
-        )
-    }
+    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) =
+        RepositorioNotificaciones.crearRapida(uid, titulo, detalle, tipo)
 }

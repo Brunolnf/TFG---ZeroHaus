@@ -13,7 +13,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.UserInterface.*
+import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.ViewModel.*
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun AppNavegacion() {
@@ -51,7 +53,30 @@ fun AppNavegacion() {
         if (logueado) ServicioNotificaciones.registrarToken()
     }
 
-    val start = if (logueado) "main" else "login"
+    // Logout reactivo: cuando la sesión se cierra desde cualquier pantalla,
+    // limpiamos por completo el back stack y vamos a "login". Centralizar esto
+    // evita que un composable activo (p.ej. "main") se quede mostrando un
+    // spinner por tener `usuario == null` durante la transición.
+    LaunchedEffect(logueado) {
+        if (!logueado) {
+            nav.navigate("login") {
+                popUpTo(nav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val cerrarSesion: () -> Unit = { sesionVM.logout() }
+
+    // Si el usuario logueado es el admin, va directo al panel de administración.
+    // Comprobamos por email (único admin, hardcodeado en AdminConfig).
+    val emailActual = FirebaseAuth.getInstance().currentUser?.email
+    val esAdmin = logueado && AdminConfig.esAdmin(emailActual)
+    val start = when {
+        esAdmin -> "admin"
+        logueado -> "main"
+        else -> "login"
+    }
 
     NavHost(navController = nav, startDestination = start) {
 
@@ -60,9 +85,12 @@ fun AppNavegacion() {
             LoginScreen(
                 viewModel = loginVM,
                 onLoginExitoso = {
-                    // Recarga el usuario tras login para que MainScaffold sepa si es técnico o cliente
+                    // Recarga el usuario tras login para que MainScaffold sepa si es técnico o cliente.
                     sesionVM.comprobarSesion()
-                    nav.navigate("main") { popUpTo("login") { inclusive = true } }
+                    // Si es el admin, va a su panel; si no, al main normal.
+                    val destino = if (AdminConfig.esAdmin(FirebaseAuth.getInstance().currentUser?.email))
+                        "admin" else "main"
+                    nav.navigate(destino) { popUpTo("login") { inclusive = true } }
                 },
                 onIrARegistro = { nav.navigate("registro") },
                 onIrARecuperar = { nav.navigate("recuperar") }
@@ -91,15 +119,28 @@ fun AppNavegacion() {
             )
         }
 
+        // Panel exclusivo del administrador (único admin: AdminConfig.ADMIN_EMAIL).
+        composable("admin") {
+            val adminVM: AdminViewModel = viewModel()
+            AdminScreen(
+                viewModel = adminVM,
+                onCerrarSesion = cerrarSesion
+            )
+        }
+
         // Main (Bottom Nav) — bifurca según tipoUsuario
         composable("main") {
             val usuario = sesionVM.usuario.value
             val esTecnico = usuario?.tipoUsuario == "Técnico"
 
-            // Mientras se carga el usuario tras un login fresco
+            // Mientras se carga el usuario tras un login fresco.
+            // Si ya no hay sesión activa (logout en curso), no mostramos spinner:
+            // el LaunchedEffect raíz nos llevará a "login" inmediatamente.
             if (usuario == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                if (sesionVM.logueado.value == true) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
                 return@composable
             }
@@ -115,10 +156,7 @@ fun AppNavegacion() {
                     certificadoVM = certificadoVM,
                     presupuestosVM = presupuestosVM,
                     chatVM = chatVM,
-                    onCerrarSesion = {
-                        sesionVM.logout()
-                        nav.navigate("login") { popUpTo(0) { inclusive = true } }
-                    },
+                    onCerrarSesion = cerrarSesion,
                     onPerfil       = { nav.navigate("perfil") },
                     onAjustes      = { nav.navigate("ajustes") },
                     onSobreApp     = { nav.navigate("sobre_app") },
@@ -135,10 +173,7 @@ fun AppNavegacion() {
                     panelViewModel = panelVM,
                     certificadoViewModel = certificadoVM,
                     chatViewModel = chatVM,
-                    onCerrarSesion = {
-                        sesionVM.logout()
-                        nav.navigate("login") { popUpTo(0) { inclusive = true } }
-                    },
+                    onCerrarSesion = cerrarSesion,
                     onNuevoPreestudio      = { nav.navigate("preestudio") },
                     onBuscarTecnicos       = { nav.navigate("tecnicos") },
                     onMisProyectos         = { nav.navigate("proyectos") },
@@ -163,10 +198,7 @@ fun AppNavegacion() {
             PerfilScreen(
                 viewModel = perfilVM,
                 onVolver = { nav.popBackStack() },
-                onCerrarSesion = {
-                    sesionVM.logout()
-                    nav.navigate("login") { popUpTo(0) { inclusive = true } }
-                }
+                onCerrarSesion = cerrarSesion
             )
         }
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Proyecto
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.ProyectosAsignadosViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -210,7 +211,7 @@ private fun DialogoDetalleProyecto(
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(proyecto.descripcion, color = gris, fontSize = 13.sp)
                 if (proyecto.precio > 0) {
-                    Text("Importe acordado: ${"%.2f".format(proyecto.precio)} €",
+                    Text("Importe acordado: ${Formato.formatMoneda(proyecto.precio)}",
                         fontSize = 13.sp, color = verde, fontWeight = FontWeight.SemiBold)
                 }
                 HorizontalDivider()

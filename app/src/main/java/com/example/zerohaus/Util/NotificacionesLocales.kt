@@ -43,12 +43,12 @@ object NotificacionesLocales {
     }
 
     // Versión sin Context — usa el appContext guardado en crearCanales
-    fun mostrar(titulo: String, cuerpo: String, tipo: String = "general") {
+    fun mostrar(titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
         val ctx = appContext ?: return
-        mostrar(ctx, titulo, cuerpo, tipo)
+        mostrar(ctx, titulo, cuerpo, tipo, conSonido)
     }
 
-    fun mostrar(context: Context, titulo: String, cuerpo: String, tipo: String = "general") {
+    fun mostrar(context: Context, titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
         val canalId = when (tipo) {
             "chat"        -> CANAL_CHAT
             "presupuesto" -> CANAL_PRESUPUESTO
@@ -72,6 +72,9 @@ object NotificacionesLocales {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
+            .apply {
+                if (!conSonido) setSilent(true)
+            }
             .build()
 
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)

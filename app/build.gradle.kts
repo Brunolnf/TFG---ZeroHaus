@@ -5,6 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+    id("com.google.firebase.firebase-perf")
 }
 
 val localProps = Properties().apply {
@@ -46,6 +48,17 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
         }
+        debug {
+            // Nota: NO añadir applicationIdSuffix aquí — google-services.json
+            // solo tiene config para "es.zerohaus.app" y un suffix rompería
+            // la inicialización de Firebase. Si en el futuro quieres debug y
+            // release instaladas en paralelo, hay que registrar
+            // "es.zerohaus.app.debug" como app aparte en Firebase Console.
+            // Evita ensuciar Crashlytics / Performance con builds locales
+            configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
+                mappingFileUploadEnabled = false
+            }
+        }
     }
 
     compileOptions {
@@ -78,6 +91,12 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    debugImplementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
+    implementation("com.google.firebase:firebase-perf-ktx")
+    implementation("com.google.firebase:firebase-functions-ktx")
 
     // Google Maps
     implementation("com.google.maps.android:maps-compose:6.2.1")
@@ -103,6 +122,7 @@ dependencies {
 
     // Core
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-splashscreen:1.0.1")
 
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")

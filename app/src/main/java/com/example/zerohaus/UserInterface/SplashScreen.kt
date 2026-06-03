@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,19 +25,47 @@ import kotlinx.coroutines.delay
 fun SplashScreen(onTerminado: () -> Unit) {
     val c = LocalCadenas.current
     var iniciar by remember { mutableStateOf(false) }
+    var saltado by remember { mutableStateOf(false) }
     val escala by animateFloatAsState(targetValue = if (iniciar) 1f else 0.4f, animationSpec = tween(700, easing = EaseOutBack), label = "e")
     val opacidad by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(600), label = "o")
     val opTexto by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(500, delayMillis = 400), label = "ot")
 
-    LaunchedEffect(Unit) { iniciar = true; delay(2200); onTerminado() }
+    LaunchedEffect(Unit) {
+        iniciar = true
+        delay(2200)
+        if (!saltado) onTerminado()
+    }
 
     Box(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(listOf(Color(0xFF16A34A), Color(0xFF059669), Color(0xFF047857)))
-        ),
-        contentAlignment = Alignment.Center
+        )
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.scale(escala).alpha(opacidad)) {
+        // Botón Saltar
+        TextButton(
+            onClick = {
+                if (!saltado) {
+                    saltado = true
+                    onTerminado()
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(end = 12.dp, top = 8.dp),
+            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+        ) {
+            Text("Saltar", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+
+        // Contenido central
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .scale(escala)
+                .alpha(opacidad)
+        ) {
             Box(
                 modifier = Modifier.size(100.dp).background(Color.White.copy(0.15f), RoundedCornerShape(26.dp)),
                 contentAlignment = Alignment.Center

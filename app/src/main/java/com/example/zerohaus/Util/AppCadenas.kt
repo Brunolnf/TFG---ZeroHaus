@@ -49,6 +49,11 @@ data class AppCadenas(
     val recuperarBoton: String,
     val recuperarExito: String,
     val recuperarVolver: String,
+    val recuperarExitoTitulo: String,
+    val recuperarExitoMensaje: String,
+    val recuperarSpam: String,
+    val recuperarReenviar: String,
+    val recuperarEnviando: String,
 
     // Splash
     val splashSlogan: String,

@@ -103,6 +103,11 @@ fun RegistroScreen(
 
                     Text(c.registroTipoUsuario, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
+                    // Default = "Propietario" (definido en RegistroEstado). Si por algún
+                    // motivo viniera vacío, lo forzamos al cargar la pantalla.
+                    LaunchedEffect(Unit) {
+                        if (estado.tipoUsuario.isBlank()) viewModel.cambiarTipoUsuario("Propietario")
+                    }
                     val tipoDisplay = when (estado.tipoUsuario) {
                         "Técnico" -> c.tipoTecnico
                         else -> c.tipoPropietario
@@ -113,6 +118,8 @@ fun RegistroScreen(
                     ) {
                         OutlinedTextField(
                             value = tipoDisplay, onValueChange = {}, readOnly = true,
+                            leadingIcon = { Icon(Icons.Default.Person, null, tint = gris) },
+                            placeholder = { Text(c.tipoPropietario) },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandirTipo) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),

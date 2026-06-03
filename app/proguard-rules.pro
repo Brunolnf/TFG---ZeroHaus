@@ -1,21 +1,58 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ════════════════════════════════════════════════════════════════════════
+# ZeroHaus — reglas R8/ProGuard
+# ════════════════════════════════════════════════════════════════════════
+# isMinifyEnabled = true en buildType release. Sin estas reglas R8 destruye
+# campos de los data classes que Firestore deserializa por reflexión y la
+# app crashea al primer toObject() en producción.
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# ── Preserva números de línea para stack traces legibles ────────────────
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ── Modelos de Firestore: reflexión vía getters/setters ─────────────────
+# Firestore usa toObject<T>() / DocumentSnapshot.toObject(T::class.java) que
+# llama a getters por nombre. R8 los renombraría → null en todos los campos.
+-keep class com.example.zerohaus.Modelos.** { *; }
+-keepclassmembers class com.example.zerohaus.Modelos.** { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Anotaciones de Firestore (PropertyName, Exclude, IgnoreExtraProperties)
+-keepattributes *Annotation*
+-keep class com.google.firebase.firestore.** { *; }
+-dontwarn com.google.firebase.firestore.**
+
+# ── Firebase Auth / FCM ──────────────────────────────────────────────────
+-keep class com.google.firebase.auth.** { *; }
+-keep class com.google.firebase.messaging.** { *; }
+
+# ── Firebase Functions: callable wrappers ────────────────────────────────
+-keep class com.google.firebase.functions.** { *; }
+
+# ── Coil: usa kotlin reflection en algunos módulos ───────────────────────
+-dontwarn coil.**
+
+# ── Google Maps Compose ──────────────────────────────────────────────────
+-keep class com.google.android.gms.maps.** { *; }
+-keep class com.google.android.gms.common.** { *; }
+-dontwarn com.google.android.gms.**
+
+# ── Coroutines: evita warnings de DebugProbesKt ──────────────────────────
+-dontwarn kotlinx.coroutines.debug.**
+
+# ── Compose runtime / lifecycle: defaults seguros ────────────────────────
+-keepclassmembers class * {
+    @androidx.compose.runtime.Composable <methods>;
+}
+
+# ── Kotlin metadata: reflexión y data class copy()/toString() ────────────
+-keep class kotlin.Metadata { *; }
+-keepclassmembers class **$WhenMappings { <fields>; }
+-keepclassmembers class kotlinx.** { volatile <fields>; }
+
+# ── Enums: serialización Firestore ───────────────────────────────────────
+-keepclassmembers,allowoptimization enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# ── Activities/Receivers/Services del manifest ya los protege R8 ─────────
+# (com.example.zerohaus.ServicioNotificaciones, MainActivity)

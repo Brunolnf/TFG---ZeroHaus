@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import com.example.zerohaus.Navegacion.AppNavegacion
@@ -16,6 +17,9 @@ import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.example.zerohaus.Util.getCadenas
+import com.google.firebase.appcheck.AppCheckProviderFactory
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -24,10 +28,16 @@ class MainActivity : ComponentActivity() {
     ) { /* resultado gestionado por el sistema */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Splash Screen API: muestra el icono adaptativo sobre fondo blanco
+        // mientras inicializamos. Backport a Android < 12 vía core-splashscreen.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         AppEstado.inicializar(AppPreferencias(this))
         NotificacionesLocales.crearCanales(this)
         pedirPermisoNotificaciones()
+        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+            appCheckFactory()
+        )
         setContent {
             val systemDark = isSystemInDarkTheme()
             val darkTheme = when (AppEstado.tema) {
@@ -42,6 +52,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Selecciona la factory de App Check según el build type.
+     * - Debug: DebugAppCheckProviderFactory (solo en classpath debug).
+     *   Cargada por reflexión para que el compilador no la exija en release.
+     * - Release: PlayIntegrityAppCheckProviderFactory.
+     */
+    private fun appCheckFactory(): AppCheckProviderFactory {
+        if (BuildConfig.DEBUG) {
+            runCatching {
+                val clazz = Class.forName(
+                    "com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory"
+                )
+                return clazz.getMethod("getInstance").invoke(null) as AppCheckProviderFactory
+            }
+            // Si la clase no existe (build raro), caemos al provider de prod.
+        }
+        return PlayIntegrityAppCheckProviderFactory.getInstance()
     }
 
     private fun pedirPermisoNotificaciones() {

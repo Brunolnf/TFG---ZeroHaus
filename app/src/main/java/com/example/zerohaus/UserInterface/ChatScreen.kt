@@ -60,6 +60,11 @@ fun ChatScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var errorLocal by remember { mutableStateOf<String?>(null) }
 
+    // Estado del diálogo "solicitar presupuesto"
+    var mostrarDialogoPresupuesto by remember { mutableStateOf(false) }
+    var descripcionPresupuesto by remember { mutableStateOf("") }
+    var enviandoPresupuesto by remember { mutableStateOf(false) }
+
     LaunchedEffect(errorLocal) {
         errorLocal?.let { snackbarHostState.showSnackbar(it); errorLocal = null }
     }
@@ -136,6 +141,20 @@ fun ChatScreen(
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                    }
+                },
+                actions = {
+                    if (estado.otroTecnicoDocId.isNotEmpty()) {
+                        IconButton(onClick = {
+                            descripcionPresupuesto = ""
+                            mostrarDialogoPresupuesto = true
+                        }) {
+                            Icon(
+                                Icons.Default.RequestQuote,
+                                contentDescription = "Solicitar presupuesto",
+                                tint = verde
+                            )
+                        }
                     }
                 }
             )
@@ -292,6 +311,76 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    // ───────────── DIÁLOGO SOLICITAR PRESUPUESTO ─────────────
+
+    if (mostrarDialogoPresupuesto) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!enviandoPresupuesto) mostrarDialogoPresupuesto = false
+            },
+            icon = { Icon(Icons.Default.RequestQuote, null, tint = verde) },
+            title = { Text("Solicitar presupuesto", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Técnico: ${estado.nombreOtroUsuario}",
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    OutlinedTextField(
+                        value = descripcionPresupuesto,
+                        onValueChange = { descripcionPresupuesto = it },
+                        label = { Text("Describe lo que necesitas") },
+                        placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6,
+                        enabled = !enviandoPresupuesto
+                    )
+                    Text(
+                        "El técnico recibirá tu solicitud y podrás seguir el estado en la sección Presupuestos.",
+                        fontSize = 12.sp,
+                        color = gris
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        enviandoPresupuesto = true
+                        viewModel.solicitarPresupuestoAlTecnico(descripcionPresupuesto) { result ->
+                            enviandoPresupuesto = false
+                            result
+                                .onSuccess {
+                                    mostrarDialogoPresupuesto = false
+                                    descripcionPresupuesto = ""
+                                    errorLocal = "Solicitud enviada a ${estado.nombreOtroUsuario}"
+                                }
+                                .onFailure { e ->
+                                    errorLocal = e.message ?: "Error al enviar la solicitud"
+                                }
+                        }
+                    },
+                    enabled = !enviandoPresupuesto,
+                    colors = ButtonDefaults.buttonColors(containerColor = verde)
+                ) {
+                    if (enviandoPresupuesto) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Enviar solicitud", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { mostrarDialogoPresupuesto = false },
+                    enabled = !enviandoPresupuesto
+                ) { Text("Cancelar") }
+            }
+        )
     }
 }
 

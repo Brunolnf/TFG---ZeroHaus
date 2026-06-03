@@ -1,0 +1,41 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Imágenes y archivos del chat — solo participantes del chat
+    // Usamos cross-service rules para consultar la membresía en Firestore.
+    match /chat/{chatId}/{archivo=**} {
+      allow read: if request.auth != null
+                  && request.auth.uid in firestore.get(
+                       /databases/(default)/documents/chats/$(chatId)
+                     ).data.participantes;
+      allow write: if request.auth != null
+                   && request.auth.uid in firestore.get(
+                        /databases/(default)/documents/chats/$(chatId)
+                      ).data.participantes
+                   && request.resource.size < 15 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*|application/pdf|video/.*');
+    }
+
+    // Fotos de perfil — lectura por logueados, escritura solo del propio uid, solo imágenes
+    match /perfiles/{uid}/{archivo=**} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Certificados de técnicos — PDF/imagen, escritura solo del propio uid
+    match /certificados/{uid}/{archivo=**} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('application/pdf|image/.*');
+    }
+
+    // Cualquier otra ruta queda denegada
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

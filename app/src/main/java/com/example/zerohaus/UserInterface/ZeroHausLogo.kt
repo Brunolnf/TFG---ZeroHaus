@@ -1,4 +1,3 @@
-
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.Canvas
@@ -13,10 +12,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -62,53 +61,77 @@ fun EtiquetaBadge(etiqueta: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Logo ZeroHaus profesional.
+ *
+ * Construcción geométrica:
+ *  - Casa = tejado a dos aguas + cuerpo, dibujado como UNA sola silueta cerrada,
+ *    con esquinas inferiores redondeadas para anclar visualmente la forma.
+ *  - Gradiente sutil de 2 stops (verde medio → verde oscuro) para dar
+ *    profundidad sin saturar.
+ *  - Hoja: forma botánica con punta superior e inferior (no teardrop), colocada
+ *    como "puerta" en el centro inferior — integrada, no flotando.
+ *  - Una sola nervadura central en la hoja, trazo limpio.
+ *
+ *  Filosofía: cero ruido visual. Sin destellos, sombras ni nervaduras laterales.
+ */
 @Composable
 fun ZeroHausLogo(size: Dp = 32.dp, color: Color = Color(0xFF16A34A)) {
     Canvas(modifier = Modifier.size(size)) {
         val w = this.size.width
         val h = this.size.height
-        val verde = color
-        val verdeClaro = Color(0xFF4ADE80)
 
-        // Casa: tejado triangular
-        val tejado = Path().apply {
-            moveTo(w * 0.5f, h * 0.08f)
-            lineTo(w * 0.1f, h * 0.45f)
-            lineTo(w * 0.9f, h * 0.45f)
+        val verdeOscuro = Color(0xFF065F46)
+        val verdeMedio = color
+        val verdeHoja = Color(0xFF86EFAC)
+
+        // ─── 1) Silueta de la casa: tejado a dos aguas + cuerpo + esquinas inferiores redondeadas ───
+        val casa = Path().apply {
+            moveTo(w * 0.50f, h * 0.08f)                                            // cima del tejado
+            lineTo(w * 0.92f, h * 0.42f)                                            // alero derecho
+            lineTo(w * 0.92f, h * 0.85f)                                            // bajada por la derecha
+            quadraticBezierTo(w * 0.92f, h * 0.92f, w * 0.85f, h * 0.92f)            // esquina inf-der redondeada
+            lineTo(w * 0.15f, h * 0.92f)                                            // base de la casa
+            quadraticBezierTo(w * 0.08f, h * 0.92f, w * 0.08f, h * 0.85f)            // esquina inf-izq redondeada
+            lineTo(w * 0.08f, h * 0.42f)                                            // subida por la izquierda
+            close()                                                                  // diagonal del tejado izquierdo
+        }
+        val gradiente = Brush.linearGradient(
+            colors = listOf(verdeMedio, verdeOscuro),
+            start = Offset(w * 0.20f, h * 0.10f),
+            end = Offset(w * 0.80f, h * 0.95f)
+        )
+        drawPath(casa, brush = gradiente, style = Fill)
+
+        // ─── 2) Hoja como "puerta" central: forma botánica con doble punta ───
+        val hoja = Path().apply {
+            moveTo(w * 0.50f, h * 0.46f)                                  // punta superior
+            cubicTo(
+                w * 0.74f, h * 0.55f,
+                w * 0.74f, h * 0.80f,
+                w * 0.50f, h * 0.89f                                       // base
+            )
+            cubicTo(
+                w * 0.26f, h * 0.80f,
+                w * 0.26f, h * 0.55f,
+                w * 0.50f, h * 0.46f                                       // vuelta a la punta
+            )
             close()
         }
-        drawPath(tejado, verde, style = Fill)
+        drawPath(hoja, color = verdeHoja, style = Fill)
 
-        // Casa: cuerpo
-        drawRect(
-            color = verde,
-            topLeft = Offset(w * 0.18f, h * 0.45f),
-            size = androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.47f)
-        )
-
-        // Hoja ecológica dentro de la casa (símbolo eco)
-        val hoja = Path().apply {
-            moveTo(w * 0.38f, h * 0.78f)
-            cubicTo(w * 0.38f, h * 0.55f, w * 0.62f, h * 0.50f, w * 0.62f, h * 0.50f)
-            cubicTo(w * 0.62f, h * 0.50f, w * 0.55f, h * 0.65f, w * 0.38f, h * 0.78f)
+        // ─── 3) Nervadura central de la hoja, un solo trazo ───
+        val nervadura = Path().apply {
+            moveTo(w * 0.50f, h * 0.49f)
+            quadraticBezierTo(w * 0.49f, h * 0.68f, w * 0.50f, h * 0.86f)
         }
-        drawPath(hoja, verdeClaro, style = Fill)
-
-        // Tallo de la hoja
-        drawLine(
-            color = verdeClaro,
-            start = Offset(w * 0.38f, h * 0.78f),
-            end = Offset(w * 0.50f, h * 0.60f),
-            strokeWidth = w * 0.03f,
-            cap = StrokeCap.Round
-        )
-
-        // Barra inferior (base "zero")
-        drawRoundRect(
-            color = verdeClaro,
-            topLeft = Offset(w * 0.15f, h * 0.92f),
-            size = androidx.compose.ui.geometry.Size(w * 0.7f, h * 0.06f),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.03f)
+        drawPath(
+            nervadura,
+            color = verdeOscuro,
+            style = Stroke(
+                width = w * 0.018f,
+                cap = StrokeCap.Round
+            )
         )
     }
 }

@@ -27,6 +27,8 @@ import android.content.Intent
 import android.net.Uri
 import com.example.zerohaus.Modelos.SolicitudPresupuesto
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.PresupuestosViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -259,11 +261,7 @@ private fun TarjetaEnviada(
         Column(Modifier.padding(14.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(s.tecnicoNombre, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                AssistChip(
-                    onClick = {},
-                    label = { Text(etiquetaEstado, fontSize = 11.sp) },
-                    colors = AssistChipDefaults.assistChipColors(containerColor = colorEstado.copy(0.12f), labelColor = colorEstado)
-                )
+                EstadoChip(etiquetaEstado, colorEstado)
             }
             Spacer(Modifier.height(4.dp))
             Text("Enviado: ${sdf.format(Date(s.fechaCreacion))}", color = gris, fontSize = 12.sp)
@@ -275,11 +273,11 @@ private fun TarjetaEnviada(
             // Bloque de presupuesto recibido del técnico
             if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
                 Spacer(Modifier.height(10.dp))
-                Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF))) {
+                Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Presupuesto del técnico", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF1E40AF))
                         Spacer(Modifier.height(4.dp))
-                        Text("${"%.2f".format(s.precioPresupuesto)} €", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("${Formato.formatMoneda(s.precioPresupuesto)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         if (s.respuestaTecnico.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text(s.respuestaTecnico, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp)
@@ -291,7 +289,7 @@ private fun TarjetaEnviada(
             // Bloque de la ficha de inicio (cuando ya existe)
             if (s.estado in listOf("FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado") && s.fichaPrecioFinal > 0) {
                 Spacer(Modifier.height(10.dp))
-                Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF))) {
+                Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f))) {
                     Column(Modifier.padding(12.dp)) {
                         Text("Ficha de inicio", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Color(0xFF6D28D9))
                         Spacer(Modifier.height(4.dp))
@@ -302,7 +300,7 @@ private fun TarjetaEnviada(
                             Text("Fin estimado: ${sdf.format(Date(s.fichaFechaFinEstimada))}", fontSize = 12.sp, color = gris)
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text("Importe final: ${"%.2f".format(s.fichaPrecioFinal)} €", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("Importe final: ${Formato.formatMoneda(s.fichaPrecioFinal)}", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
             }
@@ -370,7 +368,7 @@ private fun TarjetaEnviada(
                     ) {
                         Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Pagar ${"%.0f".format(s.fichaPrecioFinal)} €", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Pagar ${Formato.formatMoneda(s.fichaPrecioFinal, 0)}", color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 "PagoEnVerificacion" -> {
@@ -447,11 +445,7 @@ private fun TarjetaRecibida(
                     Text(s.nombreCliente, fontWeight = FontWeight.SemiBold)
                     Text("Recibido: ${sdf.format(Date(s.fechaCreacion))}", color = gris, fontSize = 12.sp)
                 }
-                AssistChip(
-                    onClick = {},
-                    label = { Text(etiquetaEstado, fontSize = 11.sp) },
-                    colors = AssistChipDefaults.assistChipColors(containerColor = colorEstado.copy(0.12f), labelColor = colorEstado)
-                )
+                EstadoChip(etiquetaEstado, colorEstado)
             }
             if (s.descripcion.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -461,7 +455,7 @@ private fun TarjetaRecibida(
             // Presupuesto enviado
             if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
                 Spacer(Modifier.height(8.dp))
-                Text("Tu presupuesto: ${"%.2f".format(s.precioPresupuesto)} €", color = verde, fontWeight = FontWeight.SemiBold)
+                Text("Tu presupuesto: ${Formato.formatMoneda(s.precioPresupuesto)}", color = verde, fontWeight = FontWeight.SemiBold)
                 if (s.respuestaTecnico.isNotEmpty()) {
                     Text(s.respuestaTecnico, color = gris, fontSize = 13.sp)
                 }
@@ -470,7 +464,7 @@ private fun TarjetaRecibida(
             // Ficha (si la enviaste)
             if (s.estado in listOf("FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado") && s.fichaPrecioFinal > 0) {
                 Spacer(Modifier.height(6.dp))
-                Text("Importe final acordado: ${"%.2f".format(s.fichaPrecioFinal)} €", fontSize = 13.sp, color = Color(0xFF6D28D9), fontWeight = FontWeight.SemiBold)
+                Text("Importe final acordado: ${Formato.formatMoneda(s.fichaPrecioFinal)}", fontSize = 13.sp, color = Color(0xFF6D28D9), fontWeight = FontWeight.SemiBold)
             }
 
             // Acciones según estado
@@ -551,7 +545,7 @@ private fun TarjetaRecibida(
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Verifica que has recibido los ${"%.2f".format(s.fichaPrecioFinal)} € antes de confirmar.",
+                                "Verifica que has recibido los ${Formato.formatMoneda(s.fichaPrecioFinal)} antes de confirmar.",
                                 fontSize = 11.sp, color = Color(0xFF0C4A6E)
                             )
                         }
@@ -630,7 +624,7 @@ private fun ResponderDialog(
                 OutlinedTextField(
                     value = precio,
                     onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$"))) precio = it },
-                    label = { Text("Precio (€)") },
+                    label = { Text("Precio (${Formato.simboloMoneda()})") },
                     leadingIcon = { Icon(Icons.Default.Euro, null) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -758,7 +752,7 @@ private fun FichaInicioDialog(
                     OutlinedTextField(
                         value = precio,
                         onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$"))) precio = it },
-                        label = { Text("Precio final acordado (€) *") },
+                        label = { Text("Precio final acordado (${Formato.simboloMoneda()}) *") },
                         leadingIcon = { Icon(Icons.Default.Euro, null) },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -881,7 +875,7 @@ private fun VerFichaDialog(
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Euro, null, tint = verde)
                         Spacer(Modifier.width(8.dp))
-                        Text("Importe final: ${"%.2f".format(solicitud.fichaPrecioFinal)} €", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = verde)
+                        Text("Importe final: ${Formato.formatMoneda(solicitud.fichaPrecioFinal)}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = verde)
                     }
                 }
                 if (solicitud.fichaTareas.isNotEmpty()) {
@@ -971,7 +965,7 @@ private fun PagarDialog(
                     Column(Modifier.padding(16.dp)) {
                         Text("Importe a pagar", color = Color.White.copy(0.85f), fontSize = 13.sp)
                         Spacer(Modifier.height(2.dp))
-                        Text("${"%.2f".format(solicitud.fichaPrecioFinal)} €", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                        Text("${Formato.formatMoneda(solicitud.fichaPrecioFinal)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp)
                     }
                 }
 
@@ -1054,7 +1048,7 @@ private fun PagarDialog(
                     if (esPayPal) {
                         Text("Pulsa el botón para abrir PayPal con el importe pre-rellenado. Cuando completes el pago, vuelve aquí y confirma.", fontSize = 12.sp, color = gris)
                     } else {
-                        Text("Pulsa el botón para abrir tu app del banco con un Bizum a $bizum por ${"%.2f".format(solicitud.fichaPrecioFinal)} €. Cuando completes el pago, vuelve aquí y confirma.", fontSize = 12.sp, color = gris)
+                        Text("Pulsa el botón para abrir tu app del banco con un Bizum a $bizum por ${Formato.formatMoneda(solicitud.fichaPrecioFinal)}. Cuando completes el pago, vuelve aquí y confirma.", fontSize = 12.sp, color = gris)
                     }
 
                     Button(
