@@ -201,7 +201,10 @@ fun PanelTecnicoScreen(
                     if (panelEstado.notificaciones.isEmpty()) {
                         Text(c.panelSinNotificaciones, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 340.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             items(panelEstado.notificaciones) { n ->
                                 val bgColor = if (!n.leida)
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)

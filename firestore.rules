@@ -2,81 +2,181 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /usuarios/{uid} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid;
+    // ─── helpers ───
+    function logueado() { return request.auth != null; }
+    function esMio(uid) { return logueado() && request.auth.uid == uid; }
+    function uid()      { return request.auth.uid; }
+    function noMuta(campo) {
+      return !(campo in request.resource.data.keys()) || request.resource.data[campo] == resource.data[campo];
+    }
+    // Único admin: identificado por email del token JWT (no es modificable
+    // sin re-autenticación, y mantiene la regla "solo brulinf9 es admin").
+    function esAdmin() {
+      return logueado() && request.auth.token.email == 'brulinf9@gmail.com';
     }
 
+    // ─── USUARIOS ───
+    // Lectura abierta a logueados (necesario para ver nombre en chats, listas de técnicos).
+    // El admin puede crear/editar/eliminar cualquier usuario desde el panel.
+    match /usuarios/{userId} {
+      allow read:                   if logueado();
+      allow create, update, delete: if esMio(userId) || esAdmin();
+    }
+
+    // ─── VIVIENDAS ───
     match /viviendas/{docId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read:           if logueado() && resource.data.uid == uid();
+      allow create:         if logueado() && request.resource.data.uid == uid();
+      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
     }
 
+    // ─── INFORMES ENERGÉTICOS ───
     match /informes/{docId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read:           if logueado() && resource.data.uid == uid();
+      allow create:         if logueado() && request.resource.data.uid == uid();
+      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
     }
 
+    // ─── PROYECTOS ───
     match /proyectos/{docId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read: if logueado() && (
+        resource.data.uid == uid() ||
+        resource.data.tecnicoUid == uid()
+      );
+      allow create: if logueado() && (
+        request.resource.data.uid == uid() ||
+        request.resource.data.tecnicoUid == uid()
+      );
+      // En update, ni cliente ni técnico pueden mutar uid/tecnicoUid del otro
+      allow update: if logueado() && (
+        resource.data.uid == uid() ||
+        resource.data.tecnicoUid == uid()
+      ) && noMuta('uid') && noMuta('tecnicoUid');
+      allow delete: if logueado() && resource.data.uid == uid();
     }
 
+    // ─── TÉCNICOS (perfil público) ───
+    // El admin puede crear/actualizar/eliminar cualquier perfil técnico (necesario
+    // al crear usuario tipo Técnico o eliminar uno desde el panel admin).
+    // Self-claim: como el docId siempre coincide con el uid del dueño, permitimos
+    // que ese usuario escriba sobre su propio slot aunque el campo `uid` actual
+    // esté vacío o corrupto (autocura de perfiles huérfanos de versiones antiguas),
+    // siempre que el `uid` final sea el suyo.
     match /tecnicos/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null &&
-        (request.auth.uid == resource.data.uid || resource.data.uid == "");
+      allow read:   if logueado();
+      allow create: if (logueado() && request.resource.data.uid == uid())
+                    || esAdmin();
+      allow update: if (logueado() && resource.data.uid == uid() && noMuta('uid'))
+                    || (logueado() && docId == uid() && request.resource.data.uid == uid())
+                    // Self-claim por email: si el doc tiene emailContacto == mi email
+                    // y el uid estaba vacío, permito vincular mi uid (autocura login).
+                    || (logueado()
+                        && resource.data.emailContacto == request.auth.token.email
+                        && (resource.data.uid == '' || resource.data.uid == null)
+                        && request.resource.data.uid == uid())
+                    || esAdmin();
+      allow delete: if (logueado() && resource.data.uid == uid())
+                    || (logueado() && docId == uid())
+                    || esAdmin();
     }
 
-    // Lectura/actualización/borrado solo del destinatario.
-    // Creación abierta a cualquier usuario autenticado: permite que un técnico
-    // cree una notificación para su cliente y viceversa.
+    // ─── NOTIFICACIONES ───
+    // Cada usuario lee y marca leídas las suyas. Logueados pueden crear notificaciones
+    // para OTROS (no para sí mismos) — evita auto-spam y reduce ruido.
     match /notificaciones/{docId} {
-      allow read, update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
-      allow create: if request.auth != null;
+      allow read, update, delete: if logueado() && resource.data.uid == uid();
+      allow create: if logueado()
+                    && request.resource.data.uid is string
+                    && request.resource.data.uid != uid()
+                    && request.resource.data.titulo is string
+                    && request.resource.data.titulo.size() <= 200;
     }
 
+    // ─── SOLICITUDES ───
     match /solicitudes/{docId} {
-      allow read: if request.auth != null &&
-        (request.auth.uid == resource.data.uidCliente ||
-         request.auth.uid == resource.data.tecnicoId);
-      allow create: if request.auth != null;
-      allow update: if request.auth != null &&
-        (request.auth.uid == resource.data.uidCliente ||
-         request.auth.uid == resource.data.tecnicoId);
+      allow read: if logueado() && (
+        resource.data.uidCliente == uid() ||
+        resource.data.tecnicoUid == uid()
+      );
+      allow create: if logueado()
+                    && request.resource.data.uidCliente == uid()
+                    && request.resource.data.tecnicoUid != uid();  // no auto-asignación
+      allow update: if logueado() && (
+        resource.data.uidCliente == uid() ||
+        resource.data.tecnicoUid == uid()
+      ) && noMuta('uidCliente') && noMuta('tecnicoUid');
+      allow delete: if logueado() && resource.data.uidCliente == uid();
     }
 
+    // ─── CERTIFICADOS ───
     match /certificados/{docId} {
-      allow read: if request.auth != null && resource.data.uid == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow read:           if logueado() && resource.data.uid == uid();
+      allow create:         if logueado() && request.resource.data.uid == uid();
+      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
     }
 
+    // ─── RESEÑAS ───
+    // Lectura pública (cualquiera logueado ve opiniones). Solo escribe quien firma.
+    // Validamos rating 1-5, longitud razonable, y campos esperados.
     match /resenas/{docId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
+      allow read: if logueado();
+      allow create: if logueado()
+                    && request.resource.data.uid == uid()
+                    && request.resource.data.tecnicoId is string
+                    && request.resource.data.tecnicoId.size() > 0
+                    && request.resource.data.tecnicoId != uid()  // no auto-reseñas
+                    && request.resource.data.puntuacion is number
+                    && request.resource.data.puntuacion >= 1
+                    && request.resource.data.puntuacion <= 5
+                    && (!('comentario' in request.resource.data.keys())
+                        || request.resource.data.comentario.size() <= 1000);
+      allow update: if logueado() && resource.data.uid == uid()
+                    && noMuta('uid') && noMuta('tecnicoId')
+                    && request.resource.data.puntuacion is number
+                    && request.resource.data.puntuacion >= 1
+                    && request.resource.data.puntuacion <= 5;
+      allow delete: if logueado() && resource.data.uid == uid();
     }
 
+    // ─── CHATS Y MENSAJES ───
     match /chats/{chatId} {
-      allow read, update, delete: if request.auth != null
-        && request.auth.uid in resource.data.participantes;
-      allow create: if request.auth != null
-        && request.auth.uid in request.resource.data.participantes;
+      allow read, update, delete: if logueado() && uid() in resource.data.participantes;
+      allow create: if logueado() && uid() in request.resource.data.participantes;
 
       match /mensajes/{mensajeId} {
-        allow read, write: if request.auth != null
-          && request.auth.uid in
-            get(/databases/$(database)/documents/chats/$(chatId)).data.participantes;
+        allow read, create: if logueado() &&
+          uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes;
+        allow update, delete: if logueado() && resource.data.emisorUid == uid();
       }
     }
 
+    // ─── AJUSTES ───
     match /ajustes/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if esMio(userId);
+    }
+
+    // ─── PAGOS ───
+    // El técnico crea el registro al confirmar cobro; el cliente también puede leer/ver.
+    // Auditabilidad: no se permite delete; los updates no mutan partes contables.
+    match /pagos/{docId} {
+      allow read: if logueado() && (
+        resource.data.uidCliente == uid() ||
+        resource.data.tecnicoUid == uid()
+      );
+      allow create: if logueado()
+                    && (request.resource.data.uidCliente == uid() ||
+                        request.resource.data.tecnicoUid == uid())
+                    && request.resource.data.uidCliente != request.resource.data.tecnicoUid;
+      allow update: if logueado()
+                    && (resource.data.uidCliente == uid() ||
+                        resource.data.tecnicoUid == uid())
+                    && noMuta('uidCliente') && noMuta('tecnicoUid')
+                    && noMuta('importe') && noMuta('fecha');
+    }
+
+    // ─── DENY ALL para cualquier colección no listada ───
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

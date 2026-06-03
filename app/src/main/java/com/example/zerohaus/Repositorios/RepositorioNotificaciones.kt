@@ -4,6 +4,7 @@ import com.example.zerohaus.Modelos.Notificacion
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 
 class RepositorioNotificaciones {
 
@@ -15,13 +16,10 @@ class RepositorioNotificaciones {
     fun obtenerNotificaciones(callback: (List<Notificacion>) -> Unit) {
         db.collection("notificaciones")
             .whereEqualTo("uid", uid())
+            .orderBy("fecha", Query.Direction.DESCENDING)
             .get()
             .addOnSuccessListener { snap ->
-                callback(
-                    snap.documents
-                        .mapNotNull { it.toObject(Notificacion::class.java) }
-                        .sortedByDescending { it.fecha }
-                )
+                callback(snap.documents.mapNotNull { it.toObject(Notificacion::class.java) })
             }
             .addOnFailureListener { callback(emptyList()) }
     }
@@ -29,10 +27,10 @@ class RepositorioNotificaciones {
     fun escucharNotificaciones(callback: (List<Notificacion>) -> Unit): ListenerRegistration {
         return db.collection("notificaciones")
             .whereEqualTo("uid", uid())
+            .orderBy("fecha", Query.Direction.DESCENDING)
             .addSnapshotListener { snap, _ ->
                 val lista = snap?.documents
                     ?.mapNotNull { it.toObject(Notificacion::class.java) }
-                    ?.sortedByDescending { it.fecha }
                     ?: emptyList()
                 callback(lista)
             }
@@ -72,5 +70,24 @@ class RepositorioNotificaciones {
     fun crearNotificacionParaUid(uidDestino: String, notificacion: Notificacion) {
         val ref = db.collection("notificaciones").document()
         ref.set(notificacion.copy(id = ref.id, uid = uidDestino))
+    }
+
+    companion object {
+        /**
+         * Crea una notificación con campos básicos para [uid]. Helper compartido
+         * para que repositorios distintos no dupliquen el mismo `hashMapOf`.
+         */
+        fun crearRapida(uid: String, titulo: String, detalle: String, tipo: String) {
+            val db = FirebaseFirestore.getInstance()
+            val ref = db.collection("notificaciones").document()
+            ref.set(
+                hashMapOf(
+                    "id" to ref.id, "uid" to uid,
+                    "titulo" to titulo, "detalle" to detalle,
+                    "fecha" to System.currentTimeMillis(),
+                    "leida" to false, "tipo" to tipo
+                )
+            )
+        }
     }
 }

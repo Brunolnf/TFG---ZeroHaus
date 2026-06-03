@@ -2,6 +2,7 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.InformeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -147,7 +149,7 @@ fun InformeScreen(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column {
                                 Text("Consumo", color = gris, fontSize = 12.sp)
-                                Text("${informe.consumoEstimado} kWh/año", fontWeight = FontWeight.Medium)
+                                Text(Formato.formatEnergiaAnual(informe.consumoEstimado), fontWeight = FontWeight.Medium)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("Emisiones", color = gris, fontSize = 12.sp)
@@ -156,7 +158,7 @@ fun InformeScreen(
                         }
                         Spacer(Modifier.height(10.dp))
                         Text("Coste anual", color = gris, fontSize = 12.sp)
-                        Text("${informe.costeAnual} €/año", fontWeight = FontWeight.Medium)
+                        Text(Formato.formatMonedaAnual(informe.costeAnual), fontWeight = FontWeight.Medium)
                     }
                 }
 
@@ -214,3 +216,4 @@ fun InformeScreen(
     }
 
 }
+

@@ -27,6 +27,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.zerohaus.ViewModel.CertificadoViewModel
 import com.example.zerohaus.ViewModel.PanelViewModel
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import java.text.SimpleDateFormat
 import java.util.*
@@ -141,9 +142,9 @@ fun PanelScreen(
                             Spacer(Modifier.height(14.dp))
                             if (informe != null) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.consumoEstimado} kWh", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatEnergia(informe.consumoEstimado), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
                                     Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.emisiones} kg CO₂", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.costeAnual} €/año", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatMonedaAnual(informe.costeAnual), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
                                 }
                             } else {
                                 Text(c.panelSinDatos, color = Color.White.copy(0.8f))
@@ -183,7 +184,10 @@ fun PanelScreen(
                     if (estado.notificaciones.isEmpty()) {
                         Text(c.panelSinNotificaciones, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 340.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             items(estado.notificaciones) { n ->
                                 val bgColor = if (!n.leida)
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)

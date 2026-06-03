@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Util.Formato
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -104,9 +105,9 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     // ─── 3 CAJAS DE ESTADÍSTICAS ───
     val boxW = (pageWidth - 48f - 16f) / 3f
     val stats = listOf(
-        Triple("CONSUMO", "%.0f kWh/año".format(informe.consumoEstimado), "Energía primaria"),
+        Triple("CONSUMO", Formato.formatEnergiaAnual(informe.consumoEstimado, 0), "Energía primaria"),
         Triple("EMISIONES", "%.1f kg CO₂/año".format(informe.emisiones), "CO₂ equivalente"),
-        Triple("COSTE", "%.0f €/año".format(informe.costeAnual), "Estimación anual")
+        Triple("COSTE", Formato.formatMonedaAnual(informe.costeAnual, 0), "Estimación anual")
     )
     stats.forEachIndexed { i, (titulo, valor, desc) ->
         val bx = 24f + i * (boxW + 8f)
@@ -214,9 +215,9 @@ private fun buildTextoInforme(informe: InformeEnergetico): String {
         appendLine("Fecha: ${sdf.format(Date(informe.fechaGeneracion))}"); appendLine()
         appendLine("CALIFICACIÓN: ${informe.etiqueta} — ${informe.estadoEficiencia}"); appendLine()
         appendLine("INDICADORES:")
-        appendLine("  Consumo: ${informe.consumoEstimado} kWh/año")
+        appendLine("  Consumo: ${Formato.formatEnergiaAnual(informe.consumoEstimado)}")
         appendLine("  Emisiones: ${informe.emisiones} kg CO₂/año")
-        appendLine("  Coste: ${informe.costeAnual} €/año"); appendLine()
+        appendLine("  Coste: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
         if (informe.recomendaciones.isNotEmpty()) {
             appendLine("RECOMENDACIONES:")
             informe.recomendaciones.forEach { r -> appendLine("  • ${r.titulo} (ahorro ${r.ahorroEstimado}%)") }

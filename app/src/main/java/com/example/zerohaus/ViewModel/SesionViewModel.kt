@@ -4,6 +4,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
+import com.example.zerohaus.Repositorios.RepositorioChat
 import com.google.firebase.auth.FirebaseAuth
 
 class SesionViewModel : ViewModel() {
@@ -28,6 +29,7 @@ class SesionViewModel : ViewModel() {
 
     fun logout() {
         auth.signOut()
+        RepositorioChat.limpiarCacheNombre()
         usuario.value = null
         logueado.value = false
     }

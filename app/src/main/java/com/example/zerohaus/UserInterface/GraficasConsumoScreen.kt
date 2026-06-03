@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.GraficasViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -133,16 +135,16 @@ fun GraficasConsumoScreen(
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         ResumenStat("Informes", "${datos.size}", gris)
-                        ResumenStat("Consumo actual", "${String.format("%.1f", ultimo.consumoEstimado)} kWh", gris)
+                        ResumenStat("Consumo actual", Formato.formatEnergia(ultimo.consumoEstimado), gris)
                         ResumenStat("Etiqueta", ultimo.etiqueta, etiquetaColor(ultimo.etiqueta))
                     }
                     if (datos.size >= 2) {
                         Spacer(Modifier.height(10.dp))
                         val mejoraColor = if (mejora >= 0) verde else Color(0xFFDC2626)
                         val mejoraTexto = if (mejora >= 0)
-                            "Reducción de ${String.format("%.1f", mejora)} kWh respecto al primer informe"
+                            "Reducción de ${Formato.formatEnergia(mejora)} respecto al primer informe"
                         else
-                            "Aumento de ${String.format("%.1f", -mejora)} kWh respecto al primer informe"
+                            "Aumento de ${Formato.formatEnergia(-mejora)} respecto al primer informe"
                         Text(mejoraTexto, color = mejoraColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 }
@@ -192,7 +194,7 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Consumo energético (kWh/año)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Consumo energético (${AppEstado.unidadEnergia}/año)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
 
                     val maxConsumo = datos.maxOf { it.consumoEstimado }.toFloat().coerceAtLeast(1f)
@@ -229,7 +231,7 @@ fun GraficasConsumoScreen(
                                 size = Size(barW, h)
                             )
                             drawContext.canvas.nativeCanvas.drawText(
-                                "${String.format("%.0f", valor)}",
+                                Formato.formatEnergia(inf.consumoEstimado, 0),
                                 left + barW / 2,
                                 chartHeight - h - 6f,
                                 valuePaint
@@ -318,7 +320,7 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Coste anual estimado (€)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Coste anual estimado (${Formato.simboloMoneda()})", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
 
                     val max = datos.maxOf { it.costeAnual }.toFloat().coerceAtLeast(1f)
@@ -355,7 +357,7 @@ fun GraficasConsumoScreen(
                                 size = Size(barW, h)
                             )
                             drawContext.canvas.nativeCanvas.drawText(
-                                "${String.format("%.0f", valor)}€",
+                                Formato.formatMoneda(inf.costeAnual, 0),
                                 left + barW / 2,
                                 chartHeight - h - 6f,
                                 valuePaint

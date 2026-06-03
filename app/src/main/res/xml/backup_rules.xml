@@ -1,13 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reglas de Auto Backup (API < 31).
+  android:allowBackup="false" en el manifest desactiva el backup por completo,
+  así que este archivo no se utiliza en la práctica. Lo mantenemos por
+  compatibilidad y para excluir explícitamente datos sensibles en caso de
+  reactivar el backup en el futuro.
+
+  Datos a EXCLUIR siempre que se reactive el backup:
+    - sharedpref "ajustes" → puede contener tokens FCM
+    - cualquier credencial de Firebase Auth
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="ajustes.xml" />
+    <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
+    <exclude domain="file" path="firebase-installations-store" />
 </full-backup-content>

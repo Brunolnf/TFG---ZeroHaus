@@ -113,14 +113,7 @@ fun MisViviendasScreen(
                                         Text(v.nombre, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                                         if (esSeleccionada) {
                                             Spacer(Modifier.width(8.dp))
-                                            AssistChip(
-                                                onClick = {},
-                                                label = { Text("Activa", fontSize = 10.sp) },
-                                                colors = AssistChipDefaults.assistChipColors(
-                                                    containerColor = verde.copy(0.15f),
-                                                    labelColor = verde
-                                                )
-                                            )
+                                            EstadoChip("Activa", verde, fontSize = 10)
                                         }
                                     }
                                     if (v.direccion.isNotEmpty()) {

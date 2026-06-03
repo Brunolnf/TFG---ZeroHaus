@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Estados.LoginEstado
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
+import com.example.zerohaus.Util.AppEstado
 
 class LoginViewModel : ViewModel() {
 
@@ -51,7 +52,7 @@ class LoginViewModel : ViewModel() {
     }
 
     fun recuperarContrasena(email: String, callback: (Result<Unit>) -> Unit) {
-        repo.recuperarPassword(email, callback)
+        repo.recuperarPassword(email, AppEstado.idioma, callback)
     }
 
     fun limpiarError() {

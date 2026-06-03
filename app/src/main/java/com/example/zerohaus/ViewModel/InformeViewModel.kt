@@ -25,7 +25,6 @@ class InformeViewModel : ViewModel() {
     }
 
     fun cargarInforme(inf: InformeEnergetico) {
-
         informe = inf
         cargando = false
     }
