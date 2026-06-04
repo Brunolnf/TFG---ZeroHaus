@@ -622,7 +622,7 @@ private fun BurbujaMensaje(
 private fun archivoColor(ext: String, fallback: Color): Color = when (ext) {
     "PDF" -> Color(0xFFDC2626)
     "DOC", "DOCX" -> Color(0xFF2563EB)
-    "XLS", "XLSX" -> Color(0xFF16A34A)
+    "XLS", "XLSX" -> Color(0xFF9FBA42)
     "PPT", "PPTX" -> Color(0xFFEA580C)
     "ZIP", "RAR", "7Z" -> Color(0xFFF59E0B)
     "MP4", "MOV", "AVI", "MKV", "WEBM" -> Color(0xFF9333EA)

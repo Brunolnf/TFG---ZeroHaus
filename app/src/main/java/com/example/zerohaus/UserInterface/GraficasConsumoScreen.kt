@@ -387,7 +387,7 @@ private fun ResumenStat(label: String, value: String, color: Color) {
 }
 
 private fun etiquetaColor(etiqueta: String): Color = when (etiqueta) {
-    "A" -> Color(0xFF16A34A)
+    "A" -> Color(0xFF9FBA42)
     "B" -> Color(0xFF65A30D)
     "C" -> Color(0xFFCA8A04)
     "D" -> Color(0xFFEA580C)

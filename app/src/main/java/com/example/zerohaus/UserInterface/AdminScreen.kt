@@ -20,7 +20,7 @@ import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.ViewModel.AdminViewModel
 
-private val VERDE = Color(0xFF16A34A)
+private val VERDE = Color(0xFF9FBA42)
 private val ROJO = Color(0xFFDC2626)
 private val NARANJA = Color(0xFFD97706)
 private val AZUL = Color(0xFF2563EB)

@@ -8,22 +8,30 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Paleta basada en el branding oficial de ZeroHaus (Vista Logos):
+ *  - Verde lima de marca:  #9FBA42  (rgb 159,186,66)
+ *  - Verde lima oscuro:    #6E8728
+ *  - Verde lima muy claro: #E5F0C5
+ *  - Gris texto:           #3E3E3E
+ *  - Blanco off:           #FCFCFB
+ */
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF16A34A),
+    primary = Color(0xFF9FBA42),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD1FAE5),
-    onPrimaryContainer = Color(0xFF15803D),
+    primaryContainer = Color(0xFFE5F0C5),
+    onPrimaryContainer = Color(0xFF4A5818),
     secondary = Color(0xFF2563EB),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFDBEAFE),
     onSecondaryContainer = Color(0xFF1E40AF),
     tertiary = Color(0xFF7C3AED),
     onTertiary = Color.White,
-    background = Color(0xFFF6F7F9),
-    onBackground = Color(0xFF111827),
+    background = Color(0xFFFCFCFB),
+    onBackground = Color(0xFF3E3E3E),
     surface = Color.White,
-    onSurface = Color(0xFF111827),
-    surfaceVariant = Color(0xFFF3F4F6),
+    onSurface = Color(0xFF3E3E3E),
+    surfaceVariant = Color(0xFFF3F4F2),
     onSurfaceVariant = Color(0xFF6B7280),
     outline = Color(0xFFE5E7EB),
     outlineVariant = Color(0xFFD1D5DB),
@@ -34,10 +42,10 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF4ADE80),
-    onPrimary = Color(0xFF052E16),
-    primaryContainer = Color(0xFF15803D),
-    onPrimaryContainer = Color(0xFFD1FAE5),
+    primary = Color(0xFFBFD675),
+    onPrimary = Color(0xFF2A3308),
+    primaryContainer = Color(0xFF4A5818),
+    onPrimaryContainer = Color(0xFFE5F0C5),
     secondary = Color(0xFF93B5F8),
     onSecondary = Color(0xFF0A1D3D),
     secondaryContainer = Color(0xFF1E3A5F),

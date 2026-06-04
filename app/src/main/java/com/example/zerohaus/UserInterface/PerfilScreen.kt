@@ -291,7 +291,7 @@ fun PerfilScreen(
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CheckCircle, null, tint = verde)
                             Spacer(Modifier.width(8.dp))
-                            Text(c.perfilGuardado, color = Color(0xFF065F46))
+                            Text(c.perfilGuardado, color = Color(0xFF6E8728))
                         }
                     }
                 }

@@ -30,7 +30,7 @@ fun OnboardingScreen(onCompletar: () -> Unit) {
     val verde = MaterialTheme.colorScheme.primary; val scope = rememberCoroutineScope()
     data class P(val ic: ImageVector, val cI: Color, val cF: Color, val t: String, val d: String)
     val pags = listOf(
-        P(Icons.Default.Home, Color(0xFF059669), Color(0xFFD1FAE5), "Analiza tu vivienda", "Rellena los datos de tu hogar y obtén un informe energético con tu etiqueta, consumo estimado y recomendaciones personalizadas."),
+        P(Icons.Default.Home, Color(0xFF6E8728), Color(0xFFD1FAE5), "Analiza tu vivienda", "Rellena los datos de tu hogar y obtén un informe energético con tu etiqueta, consumo estimado y recomendaciones personalizadas."),
         P(Icons.Default.Place, Color(0xFF2563EB), Color(0xFFDBEAFE), "Encuentra técnicos", "Busca profesionales certificados cerca de ti, consulta valoraciones reales y solicita presupuestos directamente desde la app."),
         P(Icons.Default.ShowChart, Color(0xFFDB2777), Color(0xFFFCE7F3), "Mejora y ahorra", "Compara informes, visualiza tu evolución con gráficas y gestiona proyectos de reforma para reducir tu consumo y emisiones.")
     )

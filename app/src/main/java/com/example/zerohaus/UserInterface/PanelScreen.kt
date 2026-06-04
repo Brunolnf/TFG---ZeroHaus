@@ -164,11 +164,11 @@ fun PanelScreen(
                 }
 
                 item { Text(c.panelAccionesRapidas, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground) }
-                item { TarjetaAccion(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF059669), c.panelNuevoPreestudio, c.panelNuevoPreestudioSub, onNuevoPreestudio) }
+                item { TarjetaAccion(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF6E8728), c.panelNuevoPreestudio, c.panelNuevoPreestudioSub, onNuevoPreestudio) }
                 item { TarjetaAccion(Icons.Default.Home, Color(0xFFE0F2FE), Color(0xFF0284C7), c.masViviendas, c.panelMisViviendasSub, onMisViviendas) }
                 item { TarjetaAccion(Icons.Default.Menu, Color(0xFFEDE9FE), Color(0xFF7C3AED), c.masProyectos, c.panelMisProyectosSub, onMisProyectos) }
                 item { TarjetaAccion(Icons.Default.Description, Color(0xFFDBEAFE), Color(0xFF2563EB), c.masPresupuestos, c.panelPresupuestosSub, onPresupuestos) }
-                item { TarjetaAccion(Icons.Default.Assessment, Color(0xFFD1FAE5), Color(0xFF059669), c.explorarHistorial, c.panelHistorialInformesSub, onHistorialInformes) }
+                item { TarjetaAccion(Icons.Default.Assessment, Color(0xFFD1FAE5), Color(0xFF6E8728), c.explorarHistorial, c.panelHistorialInformesSub, onHistorialInformes) }
                 item { TarjetaAccion(Icons.Default.ShowChart, Color(0xFFFCE7F3), Color(0xFFDB2777), c.explorarGraficas, c.panelGraficasSub, onGraficas) }
                 item { Spacer(Modifier.height(16.dp)) }
             }

@@ -339,7 +339,7 @@ fun PerfilTecnicoScreen(
                             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.CheckCircle, null, tint = verde)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Valoración publicada", color = Color(0xFF065F46))
+                                Text("Valoración publicada", color = Color(0xFF6E8728))
                             }
                         }
                     }
@@ -430,7 +430,7 @@ fun PerfilTecnicoScreen(
     // ---- DIÁLOGO RESEÑA ----
     if (mostrarFormResena) {
         val labelColor = when (puntuacion) {
-            5 -> Color(0xFF16A34A)
+            5 -> Color(0xFF9FBA42)
             4 -> Color(0xFF2563EB)
             3 -> Color(0xFFD97706)
             2 -> Color(0xFFDC2626)
@@ -482,7 +482,7 @@ fun PerfilTecnicoScreen(
                         minLines = 2
                     )
                     if (estado.enviandoResena) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color(0xFF16A34A))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color(0xFF9FBA42))
                     }
                     estado.error?.let {
                         Text(it, color = MaterialTheme.colorScheme.error)
@@ -498,7 +498,7 @@ fun PerfilTecnicoScreen(
                         puntuacion = 5
                     },
                     enabled = !estado.enviandoResena,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9FBA42))
                 ) { Text("Publicar", color = Color.White) }
             },
             dismissButton = {

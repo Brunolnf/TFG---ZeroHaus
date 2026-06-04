@@ -183,7 +183,7 @@ fun PresupuestosScreen(
             confirmButton = {
                 Button(
                     onClick = { viewModel.completarSolicitud(s.id); solicitudCompletar = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9FBA42))
                 ) { Text("Confirmar", color = Color.White) }
             },
             dismissButton = {
@@ -352,9 +352,9 @@ private fun TarjetaEnviada(
                     Spacer(Modifier.height(12.dp))
                     Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Build, null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Build, null, tint = Color(0xFF6E8728), modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Reforma en curso · míralo en \"Mis proyectos\"", fontSize = 12.sp, color = Color(0xFF065F46))
+                            Text("Reforma en curso · míralo en \"Mis proyectos\"", fontSize = 12.sp, color = Color(0xFF6E8728))
                         }
                     }
                 }
@@ -364,7 +364,7 @@ private fun TarjetaEnviada(
                         onClick = onPagar,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6E8728))
                     ) {
                         Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -393,13 +393,13 @@ private fun TarjetaEnviada(
                     Spacer(Modifier.height(12.dp))
                     Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF6E8728), modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 if (s.pagado) "Reforma completada y pagada · ya puedes valorar"
                                 else "Reforma completada · ya puedes valorar",
                                 fontSize = 12.sp,
-                                color = Color(0xFF065F46)
+                                color = Color(0xFF6E8728)
                             )
                         }
                     }
@@ -507,8 +507,8 @@ private fun TarjetaRecibida(
                         onClick = onMarcarTerminado,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, Color(0xFF059669)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF059669))
+                        border = BorderStroke(1.dp, Color(0xFF6E8728)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6E8728))
                     ) {
                         Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -555,7 +555,7 @@ private fun TarjetaRecibida(
                         onClick = onConfirmarCobro,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6E8728))
                     ) {
                         Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -566,9 +566,9 @@ private fun TarjetaRecibida(
                     Spacer(Modifier.height(12.dp))
                     Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF6E8728), modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Reforma completada y cobrada ✓", fontSize = 12.sp, color = Color(0xFF065F46), fontWeight = FontWeight.SemiBold)
+                            Text("Reforma completada y cobrada ✓", fontSize = 12.sp, color = Color(0xFF6E8728), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -587,7 +587,7 @@ private fun colorEstado(estado: String, verde: Color, gris: Color): Color = when
     "EnCurso" -> Color(0xFF0EA5E9)
     "PendientePago" -> Color(0xFFD97706)
     "PagoEnVerificacion" -> Color(0xFF0284C7)
-    "Completado" -> Color(0xFF059669)
+    "Completado" -> Color(0xFF6E8728)
     "Rechazado" -> Color(0xFFDC2626)
     else -> gris
 }

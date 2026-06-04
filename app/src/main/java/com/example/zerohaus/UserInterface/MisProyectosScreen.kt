@@ -280,7 +280,7 @@ private fun TarjetaProyecto(
                         Checkbox(
                             checked = t.completada,
                             onCheckedChange = { checked -> onToggleTarea(index, checked) },
-                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF16A34A))
+                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF9FBA42))
                         )
                         Text(
                             t.nombre,

@@ -115,7 +115,7 @@ fun EstadisticasTecnicoScreen(
                     FilaContador("Pendientes", estado.solicitudesPendientes, Color(0xFFD97706))
                     FilaContador("Presupuestadas", estado.solicitudesPresupuestadas, Color(0xFF2563EB))
                     FilaContador("Aceptadas", estado.solicitudesAceptadas, verde)
-                    FilaContador("Completadas", estado.solicitudesCompletadas, Color(0xFF059669))
+                    FilaContador("Completadas", estado.solicitudesCompletadas, Color(0xFF6E8728))
                     FilaContador("Rechazadas", estado.solicitudesRechazadas, Color(0xFFDC2626))
                 }
             }

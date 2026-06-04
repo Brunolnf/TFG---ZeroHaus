@@ -48,7 +48,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     val canvas = page.canvas
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
-    val verde = Color.parseColor("#16A34A")
+    val verde = Color.parseColor("#9FBA42")
     val verdeFondo = Color.parseColor("#DCFCE7")
     val gris = Color.parseColor("#6B7280")
     val grisClaro = Color.parseColor("#F3F4F6")
@@ -198,7 +198,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
 
 private fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
     "A" -> Color.parseColor("#15803D")
-    "B" -> Color.parseColor("#16A34A")
+    "B" -> Color.parseColor("#9FBA42")
     "C" -> Color.parseColor("#84CC16")
     "D" -> Color.parseColor("#EAB308")
     "E" -> Color.parseColor("#F97316")
