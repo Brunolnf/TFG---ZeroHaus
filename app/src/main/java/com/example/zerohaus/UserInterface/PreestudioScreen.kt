@@ -63,7 +63,7 @@ fun PreestudioScreen(
                 // Datos básicos
                 Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
-                        CabeceraSeccion(Color(0xFFD1FAE5), Color(0xFF6E8728), Icons.Default.Info, "Datos básicos")
+                        CabeceraSeccion(Color(0xFFD1FAE5), Color(0xFF065F46), Icons.Default.Info, "Datos básicos")
                         Spacer(Modifier.height(10.dp))
                         EtiquetaCampo("Nombre de la vivienda")
                         CampoTexto(estado.nombreVivienda, { viewModel.cambiarNombre(it) }, "Ej: Mi casa", borde)

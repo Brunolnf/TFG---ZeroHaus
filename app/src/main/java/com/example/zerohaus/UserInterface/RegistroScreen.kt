@@ -29,7 +29,7 @@ fun RegistroScreen(
     val c = LocalCadenas.current
     val estado = viewModel.estado
     val verde = MaterialTheme.colorScheme.primary
-    val fondo = Color(0xFFF5FAE8)
+    val fondo = Color(0xFFEEF8F5)
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val borde = Color(0xFFD1D5DB)
     var expandirTipo by remember { mutableStateOf(false) }

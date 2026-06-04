@@ -179,7 +179,7 @@ fun PanelTecnicoScreen(
                 // Estadísticas
                 ResumenCard(
                     icono = Icons.Default.BarChart,
-                    color = Color(0xFF6E8728),
+                    color = Color(0xFF065F46),
                     titulo = "Estadísticas",
                     subtitulo = "Ingresos, tasa de aceptación y rendimiento",
                     badge = null,

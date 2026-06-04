@@ -8,9 +8,8 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Branding ZeroHaus oficial (Vista Logos). Verde lima como color de marca. -->
-    <color name="zerohaus_green">#FF9FBA42</color>
-    <color name="zerohaus_green_dark">#FF6E8728</color>
-    <color name="zerohaus_green_light">#FFE5F0C5</color>
-    <color name="zerohaus_splash_bg">#FFFCFCFB</color>
+    <!-- Branding ZeroHaus para el system splash screen (Android 12+) -->
+    <color name="zerohaus_green">#FF16A34A</color>
+    <color name="zerohaus_green_dark">#FF065F46</color>
+    <color name="zerohaus_splash_bg">#FFFFFFFF</color>
 </resources>

@@ -284,7 +284,7 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                         Row(Modifier.padding(12.dp)) {
                             Icon(Icons.Default.CheckCircle, null, tint = verde)
                             Spacer(Modifier.width(8.dp))
-                            Text(c.ajustesGuardados, color = Color(0xFF6E8728))
+                            Text(c.ajustesGuardados, color = Color(0xFF065F46))
                         }
                     }
                 }

@@ -243,7 +243,7 @@ private fun DialogoDetalleProyecto(
                         onClick = onMarcarTerminado,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6E8728))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF065F46))
                     ) {
                         Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))

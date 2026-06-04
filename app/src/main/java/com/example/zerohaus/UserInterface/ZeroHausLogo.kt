@@ -68,7 +68,7 @@ fun EtiquetaBadge(etiqueta: String, modifier: Modifier = Modifier) {
 @Composable
 fun ZeroHausLogo(
     size: Dp = 32.dp,
-    @Suppress("UNUSED_PARAMETER") color: Color = Color(0xFF9FBA42)
+    @Suppress("UNUSED_PARAMETER") color: Color = Color(0xFF16A34A)
 ) {
     Image(
         painter = painterResource(id = R.drawable.zerohaus_logo),

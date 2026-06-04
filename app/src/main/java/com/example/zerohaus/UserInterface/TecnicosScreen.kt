@@ -401,7 +401,7 @@ fun TecnicosScreen(
                         )
                         tecnicoParaPresupuesto = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF9FBA42))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
                 ) { Text("Enviar solicitud", color = Color.White) }
             },
             dismissButton = {
