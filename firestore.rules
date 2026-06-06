@@ -25,16 +25,18 @@ service cloud.firestore {
 
     // ─── VIVIENDAS ───
     match /viviendas/{docId} {
-      allow read:           if logueado() && resource.data.uid == uid();
-      allow create:         if logueado() && request.resource.data.uid == uid();
-      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow create: if (logueado() && request.resource.data.uid == uid()) || esAdmin();
+      allow update: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
     // ─── INFORMES ENERGÉTICOS ───
     match /informes/{docId} {
-      allow read:           if logueado() && resource.data.uid == uid();
-      allow create:         if logueado() && request.resource.data.uid == uid();
-      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow create: if (logueado() && request.resource.data.uid == uid()) || esAdmin();
+      allow update: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
     // ─── PROYECTOS ───
@@ -42,17 +44,17 @@ service cloud.firestore {
       allow read: if logueado() && (
         resource.data.uid == uid() ||
         resource.data.tecnicoUid == uid()
-      );
+      ) || esAdmin();
       allow create: if logueado() && (
         request.resource.data.uid == uid() ||
         request.resource.data.tecnicoUid == uid()
-      );
+      ) || esAdmin();
       // En update, ni cliente ni técnico pueden mutar uid/tecnicoUid del otro
       allow update: if logueado() && (
         resource.data.uid == uid() ||
         resource.data.tecnicoUid == uid()
       ) && noMuta('uid') && noMuta('tecnicoUid');
-      allow delete: if logueado() && resource.data.uid == uid();
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
     // ─── TÉCNICOS (perfil público) ───
@@ -87,7 +89,7 @@ service cloud.firestore {
     // contraparte). Las Cloud Functions cubren la mayoría de las cross-user;
     // las self-notifs vienen del cliente y antes esta regla las bloqueaba.
     match /notificaciones/{docId} {
-      allow read, update, delete: if logueado() && resource.data.uid == uid();
+      allow read, update, delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
       allow create: if logueado()
                     && request.resource.data.uid is string
                     && request.resource.data.uid.size() > 0
@@ -102,22 +104,24 @@ service cloud.firestore {
       allow read: if logueado() && (
         resource.data.uidCliente == uid() ||
         resource.data.tecnicoUid == uid()
-      );
-      allow create: if logueado()
+      ) || esAdmin();
+      allow create: if (logueado()
                     && request.resource.data.uidCliente == uid()
-                    && request.resource.data.tecnicoUid != uid();  // no auto-asignación
+                    && request.resource.data.tecnicoUid != uid())
+                    || esAdmin();
       allow update: if logueado() && (
         resource.data.uidCliente == uid() ||
         resource.data.tecnicoUid == uid()
       ) && noMuta('uidCliente') && noMuta('tecnicoUid');
-      allow delete: if logueado() && resource.data.uidCliente == uid();
+      allow delete: if (logueado() && resource.data.uidCliente == uid()) || esAdmin();
     }
 
     // ─── CERTIFICADOS ───
     match /certificados/{docId} {
-      allow read:           if logueado() && resource.data.uid == uid();
-      allow create:         if logueado() && request.resource.data.uid == uid();
-      allow update, delete: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow read:   if logueado() && resource.data.uid == uid();
+      allow create: if logueado() && request.resource.data.uid == uid();
+      allow update: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
     // ─── RESEÑAS ───
@@ -125,7 +129,7 @@ service cloud.firestore {
     // Validamos rating 1-5, longitud razonable, y campos esperados.
     match /resenas/{docId} {
       allow read: if logueado();
-      allow create: if logueado()
+      allow create: if (logueado()
                     && request.resource.data.uid == uid()
                     && request.resource.data.tecnicoId is string
                     && request.resource.data.tecnicoId.size() > 0
@@ -134,30 +138,32 @@ service cloud.firestore {
                     && request.resource.data.puntuacion >= 1
                     && request.resource.data.puntuacion <= 5
                     && (!('comentario' in request.resource.data.keys())
-                        || request.resource.data.comentario.size() <= 1000);
+                        || request.resource.data.comentario.size() <= 1000))
+                    || esAdmin();
       allow update: if logueado() && resource.data.uid == uid()
                     && noMuta('uid') && noMuta('tecnicoId')
                     && request.resource.data.puntuacion is number
                     && request.resource.data.puntuacion >= 1
                     && request.resource.data.puntuacion <= 5;
-      allow delete: if logueado() && resource.data.uid == uid();
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
     // ─── CHATS Y MENSAJES ───
     match /chats/{chatId} {
-      allow read, update, delete: if logueado() && uid() in resource.data.participantes;
-      allow create: if logueado() && uid() in request.resource.data.participantes;
+      allow read, update, delete: if (logueado() && uid() in resource.data.participantes) || esAdmin();
+      allow create: if (logueado() && uid() in request.resource.data.participantes) || esAdmin();
 
       match /mensajes/{mensajeId} {
-        allow read, create: if logueado() &&
-          uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes;
-        allow update, delete: if logueado() && resource.data.emisorUid == uid();
+        allow read, create: if (logueado() &&
+          uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes)
+          || esAdmin();
+        allow update, delete: if (logueado() && resource.data.emisorUid == uid()) || esAdmin();
       }
     }
 
     // ─── AJUSTES ───
     match /ajustes/{userId} {
-      allow read, write: if esMio(userId);
+      allow read, write: if esMio(userId) || esAdmin();
     }
 
     // ─── PAGOS ───
@@ -167,7 +173,8 @@ service cloud.firestore {
       allow read: if logueado() && (
         resource.data.uidCliente == uid() ||
         resource.data.tecnicoUid == uid()
-      );
+      ) || esAdmin();
+      allow delete: if esAdmin();
       allow create: if logueado()
                     && (request.resource.data.uidCliente == uid() ||
                         request.resource.data.tecnicoUid == uid())

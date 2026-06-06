@@ -7,7 +7,6 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.functions.FirebaseFunctions
 
 /**
  * Operaciones reservadas al administrador.
@@ -26,8 +25,6 @@ import com.google.firebase.functions.FirebaseFunctions
 class RepositorioAdmin {
 
     private val db = FirebaseFirestore.getInstance()
-    // Cloud Functions desplegadas en europe-west1 (más cerca de España = menor latencia).
-    private val functions = FirebaseFunctions.getInstance("europe-west1")
 
     /** Lista todos los usuarios (incluidos bloqueados y eliminados). */
     fun listarUsuarios(callback: (List<Usuario>) -> Unit) {
@@ -172,79 +169,98 @@ class RepositorioAdmin {
     }
 
     /**
-     * "Elimina" el usuario marcándolo como eliminado y borrando datos no críticos.
-     * La cuenta Auth no se puede tocar desde el cliente — queda huérfana pero
-     * el flag `eliminado=true` impide cualquier login posterior.
+     * Eliminación completa desde el cliente: borra en cascada todos los datos
+     * del usuario en Firestore. La cuenta Auth no se puede borrar desde el
+     * cliente (requiere Admin SDK), pero quedará huérfana sin datos.
      */
     fun eliminarUsuario(uid: String, callback: (Result<Unit>) -> Unit) {
-        // Marcamos eliminado=true en lugar de borrar el doc, así el login
-        // detecta la cuenta como muerta aunque la cuenta Auth siga existiendo.
-        db.collection("usuarios").document(uid)
-            .set(mapOf("eliminado" to true, "bloqueado" to true), SetOptions.merge())
-            .addOnSuccessListener {
-                // Borramos perfil de técnico si existía (para que no aparezca en búsquedas).
-                db.collection("tecnicos").document(uid).delete()
-                    .addOnCompleteListener { callback(Result.success(Unit)) }
-            }
-            .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error eliminando")))
-            }
-    }
+        // Colecciones con campo "uid"
+        val colSimples = listOf("viviendas", "informes", "certificados", "notificaciones")
+        // Colecciones con dos posibles campos
+        val colDobles = listOf(
+            "proyectos" to listOf("uid", "tecnicoUid"),
+            "solicitudes" to listOf("uidCliente", "tecnicoUid"),
+            "pagos" to listOf("uidCliente", "tecnicoUid"),
+            "resenas" to listOf("uid", "tecnicoId")
+        )
 
-    /**
-     * Borrado **definitivo total** delegado a la Cloud Function
-     * `eliminar_usuario_completo` (region europe-west1).
-     *
-     * La function (Admin SDK, server-side):
-     *   1. Verifica que el token JWT del caller pertenece al admin.
-     *   2. Borra en cascada los datos del usuario en todas las colecciones
-     *      (viviendas, informes, proyectos, certificados, notificaciones,
-     *      reseñas, solicitudes, pagos, chats + mensajes, ajustes).
-     *   3. Borra los docs principales (/usuarios, /tecnicos).
-     *   4. Borra la cuenta de Firebase Auth de verdad.
-     *
-     * Devuelve un Result<Map<String,Any>> con el conteo por colección
-     * para mostrar feedback útil en la UI.
-     */
-    fun eliminarDefinitivamente(
-        uid: String,
-        callback: (Result<Map<String, Any>>) -> Unit
-    ) {
-        val datos = hashMapOf<String, Any>("uid" to uid)
-        functions.getHttpsCallable("eliminar_usuario_completo").call(datos)
-            .addOnSuccessListener { result ->
-                @Suppress("UNCHECKED_CAST")
-                val data = result.getData() as? Map<String, Any> ?: emptyMap()
-                callback(Result.success(data))
-            }
-            .addOnFailureListener { e ->
-                callback(Result.failure(Exception(traducirErrorFunction(e))))
-            }
-    }
+        var pendientes = colSimples.size + colDobles.size + 1 // +1 para chats
+        var hayError = false
 
-    private fun traducirErrorFunction(e: Exception): String {
-        val msg = e.message?.lowercase().orEmpty()
-        return when {
-            "unauthenticated" in msg -> "Debes iniciar sesión."
-            "permission_denied" in msg || "permission-denied" in msg ->
-                "Solo el administrador puede ejecutar esta operación."
-            "failed_precondition" in msg || "failed-precondition" in msg ->
-                "El administrador no puede eliminarse a sí mismo."
-            "invalid_argument" in msg || "invalid-argument" in msg ->
-                "Datos inválidos."
-            "unavailable" in msg || "deadline" in msg ->
-                "Sin conexión con el servidor. Inténtalo de nuevo."
-            else -> e.message ?: "Error en el borrado definitivo"
+        fun checkDone() {
+            pendientes--
+            if (pendientes <= 0) {
+                // Al final borrar docs por ID: usuarios, tecnicos, ajustes
+                val docsBorrar = listOf("usuarios", "tecnicos", "ajustes")
+                var pendDocs = docsBorrar.size
+                docsBorrar.forEach { col ->
+                    db.collection(col).document(uid).delete()
+                        .addOnCompleteListener {
+                            pendDocs--
+                            if (pendDocs <= 0) {
+                                if (hayError) callback(Result.failure(Exception("Eliminado con algunos errores")))
+                                else callback(Result.success(Unit))
+                            }
+                        }
+                }
+            }
         }
+
+        // 1) Colecciones simples
+        colSimples.forEach { col ->
+            borrarQuery(db.collection(col).whereEqualTo("uid", uid)) { checkDone() }
+        }
+
+        // 2) Colecciones dobles
+        colDobles.forEach { (col, campos) ->
+            var subPend = campos.size
+            campos.forEach { campo ->
+                borrarQuery(db.collection(col).whereEqualTo(campo, uid)) {
+                    subPend--
+                    if (subPend <= 0) checkDone()
+                }
+            }
+        }
+
+        // 3) Chats (incluye subcolección mensajes)
+        db.collection("chats").whereArrayContains("participantes", uid).get()
+            .addOnSuccessListener { snap ->
+                if (snap.isEmpty) { checkDone(); return@addOnSuccessListener }
+                var chatsPend = snap.size()
+                snap.documents.forEach { chatDoc ->
+                    // Primero borrar mensajes
+                    chatDoc.reference.collection("mensajes").get()
+                        .addOnSuccessListener { msgs ->
+                            val batch = db.batch()
+                            msgs.documents.forEach { batch.delete(it.reference) }
+                            batch.delete(chatDoc.reference)
+                            batch.commit().addOnCompleteListener {
+                                chatsPend--
+                                if (chatsPend <= 0) checkDone()
+                            }
+                        }
+                        .addOnFailureListener {
+                            chatDoc.reference.delete()
+                            chatsPend--
+                            if (chatsPend <= 0) checkDone()
+                        }
+                }
+            }
+            .addOnFailureListener { hayError = true; checkDone() }
     }
 
-    /** Restaura un usuario eliminado (opcional, útil si se elimina por error). */
-    fun restaurarUsuario(uid: String, callback: (Result<Unit>) -> Unit) {
-        db.collection("usuarios").document(uid)
-            .set(mapOf("eliminado" to false, "bloqueado" to false), SetOptions.merge())
-            .addOnSuccessListener { callback(Result.success(Unit)) }
-            .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error restaurando")))
+    private fun borrarQuery(
+        query: com.google.firebase.firestore.Query,
+        onDone: () -> Unit
+    ) {
+        query.get()
+            .addOnSuccessListener { snap ->
+                if (snap.isEmpty) { onDone(); return@addOnSuccessListener }
+                val batch = db.batch()
+                snap.documents.forEach { batch.delete(it.reference) }
+                batch.commit().addOnCompleteListener { onDone() }
             }
+            .addOnFailureListener { onDone() }
     }
+
 }

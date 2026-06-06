@@ -55,7 +55,7 @@ class RepositorioAutenticacion {
                     }
             }
             .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error al iniciar sesión")))
+                callback(Result.failure(Exception(traducirError(e.message))))
             }
     }
 
@@ -172,11 +172,16 @@ class RepositorioAutenticacion {
                 "Error de conexión. Comprueba tu internet e inténtalo de nuevo."
             "too many requests" in m || "quota" in m ->
                 "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
-            "password" in m || "credential" in m || "wrong-password" in m ->
-                "Contraseña incorrecta."
+            "no user record" in m || "user-not-found" in m ->
+                "No existe ninguna cuenta con ese correo."
+            "password" in m || "credential" in m || "wrong-password" in m
+                || "malformed" in m || "expired" in m ->
+                "Email o contraseña incorrectos."
             "email already" in m || "already in use" in m ->
                 "Ya existe una cuenta con ese correo."
-            else -> "Error al enviar el correo. Inténtalo de nuevo."
+            "user-disabled" in m || "disabled" in m ->
+                "Esta cuenta ha sido deshabilitada."
+            else -> "No se pudo iniciar sesión. Inténtalo de nuevo."
         }
     }
 }

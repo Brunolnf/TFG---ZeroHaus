@@ -22,9 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.platform.LocalContext
-import android.content.Intent
-import android.net.Uri
 import com.example.zerohaus.Modelos.SolicitudPresupuesto
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Util.AppEstado
@@ -46,17 +43,11 @@ fun PresupuestosScreen(
     val estado = viewModel.estado
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
-    // Los técnicos solo ven solicitudes recibidas; los clientes ven ambas pestañas
-    var tabSeleccionado by remember { mutableIntStateOf(if (esTecnico) 1 else 0) }
-    val tabs = if (esTecnico) listOf("Solicitudes recibidas") else listOf("Enviadas", "Recibidas")
-
     var solicitudResponder by remember { mutableStateOf<SolicitudPresupuesto?>(null) }
     var solicitudCompletar by remember { mutableStateOf<SolicitudPresupuesto?>(null) }
     var solicitudFicha by remember { mutableStateOf<SolicitudPresupuesto?>(null) }     // técnico: enviar ficha
     var solicitudVerFicha by remember { mutableStateOf<SolicitudPresupuesto?>(null) }  // cliente: ver y aceptar ficha
     var solicitudPagar by remember { mutableStateOf<SolicitudPresupuesto?>(null) }     // cliente: pagar
-    var mostrarRechazadas by remember { mutableStateOf(false) }                        // toggle archivadas
-
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(estado.mensaje, estado.error) {
         estado.mensaje?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
@@ -70,8 +61,15 @@ fun PresupuestosScreen(
         topBar = {
             TopAppBar(
                 title = {
+                    val lista = if (esTecnico) estado.recibidas else estado.enviadas
+                    val pendientes = lista.count { it.estado == "Pendiente" }
                     Column {
-                        Text("Presupuestos", fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Presupuestos", fontWeight = FontWeight.SemiBold)
+                            if (pendientes > 0) {
+                                Badge { Text("$pendientes") }
+                            }
+                        }
                         Text("Gestiona tus solicitudes", color = gris, fontSize = 12.sp)
                     }
                 },
@@ -81,78 +79,55 @@ fun PresupuestosScreen(
             )
         }
     ) { pv ->
-        Column(Modifier.padding(pv).fillMaxSize()) {
-            TabRow(selectedTabIndex = tabSeleccionado, containerColor = MaterialTheme.colorScheme.surface, contentColor = verde) {
-                tabs.forEachIndexed { i, titulo ->
-                    // Para técnicos hay solo 1 tab (recibidas); para clientes: 0=enviadas, 1=recibidas
-                    val count = if (esTecnico || i == 1) estado.recibidas.size else estado.enviadas.size
-                    Tab(
-                        selected = tabSeleccionado == i,
-                        onClick = { tabSeleccionado = i },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(titulo)
-                                if (count > 0) {
-                                    Badge { Text("$count") }
-                                }
-                            }
-                        }
-                    )
-                }
+        if (estado.cargando) {
+            Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = verde)
             }
-
-            if (estado.cargando) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = verde)
+        } else {
+            val lista = if (esTecnico) estado.recibidas else estado.enviadas
+            if (lista.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(
+                            if (esTecnico) Icons.Default.Inbox else Icons.Default.Send,
+                            null, tint = gris.copy(alpha = 0.4f), modifier = Modifier.size(52.dp)
+                        )
+                        Text(
+                            if (esTecnico) "No tienes solicitudes recibidas"
+                            else "No has enviado solicitudes aún",
+                            color = gris, fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            if (esTecnico) "Aquí aparecerán las solicitudes de clientes"
+                            else "Busca técnicos y solicita un presupuesto",
+                            color = gris.copy(alpha = 0.7f), fontSize = 13.sp
+                        )
+                    }
                 }
             } else {
-                // Si es técnico, tabSeleccionado == 1 siempre (solo tiene "Solicitudes recibidas")
-                val esRecibidas = esTecnico || tabSeleccionado == 1
-                val lista = if (esRecibidas) estado.recibidas else estado.enviadas
-                if (lista.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(
-                                if (esRecibidas) Icons.Default.Inbox else Icons.Default.Send,
-                                null, tint = gris.copy(alpha = 0.4f), modifier = Modifier.size(52.dp)
+                LazyColumn(
+                    modifier = Modifier.padding(pv).fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(lista) { s ->
+                        if (esTecnico) {
+                            TarjetaRecibida(s, sdf, verde, gris,
+                                onResponder = { solicitudResponder = s },
+                                onEnviarFicha = { solicitudFicha = s },
+                                onMarcarTerminado = { viewModel.marcarTrabajoTerminado(s.id) },
+                                onConfirmarCobro = { viewModel.confirmarCobro(s.id) }
                             )
-                            Text(
-                                if (esRecibidas) "No tienes solicitudes recibidas"
-                                else "No has enviado solicitudes aún",
-                                color = gris, fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                if (esRecibidas) "Aquí aparecerán las solicitudes de clientes"
-                                else "Busca técnicos y solicita un presupuesto",
-                                color = gris.copy(alpha = 0.7f), fontSize = 13.sp
+                        } else {
+                            TarjetaEnviada(s, sdf, verde, gris,
+                                onAceptar = { viewModel.aceptarPresupuesto(s.id) },
+                                onRechazar = { viewModel.rechazarPresupuesto(s.id) },
+                                onCompletar = { solicitudCompletar = s },
+                                onVerFicha = { solicitudVerFicha = s },
+                                onPagar = { solicitudPagar = s }
                             )
                         }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(lista) { s ->
-                            if (esRecibidas) {
-                                TarjetaRecibida(s, sdf, verde, gris,
-                                    onResponder = { solicitudResponder = s },
-                                    onEnviarFicha = { solicitudFicha = s },
-                                    onMarcarTerminado = { viewModel.marcarTrabajoTerminado(s.id) },
-                                    onConfirmarCobro = { viewModel.confirmarCobro(s.id) }
-                                )
-                            } else {
-                                TarjetaEnviada(s, sdf, verde, gris,
-                                    onAceptar = { viewModel.aceptarPresupuesto(s.id) },
-                                    onRechazar = { viewModel.rechazarPresupuesto(s.id) },
-                                    onCompletar = { solicitudCompletar = s },
-                                    onVerFicha = { solicitudVerFicha = s },
-                                    onPagar = { solicitudPagar = s }
-                                )
-                            }
-                        }
-                        item { Spacer(Modifier.height(16.dp)) }
-                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
             }
         }
@@ -381,7 +356,9 @@ private fun TarjetaEnviada(
                                 val medio = when (s.metodoPago) {
                                     "paypal" -> "PayPal"
                                     "bizum" -> "Bizum"
-                                    else -> "transferencia"
+                                    "tarjeta" -> "tarjeta"
+                                    "efectivo" -> "efectivo"
+                                    else -> "transferencia / efectivo"
                                 }
                                 Text("Pago por $medio en verificación", fontSize = 12.sp, color = Color(0xFF92400E), fontWeight = FontWeight.SemiBold)
                                 Text("Esperando que ${s.tecnicoNombre} confirme la recepción.", fontSize = 11.sp, color = Color(0xFF92400E))
@@ -402,15 +379,6 @@ private fun TarjetaEnviada(
                                 color = Color(0xFF065F46)
                             )
                         }
-                    }
-                    // Mantengo onCompletar por si hace falta para solicitudes legacy sin pago
-                    if (!s.pagado) {
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = onCompletar,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text("Marcar como completada (legacy)", fontSize = 12.sp) }
                     }
                 }
             }
@@ -928,7 +896,7 @@ private fun VerFichaDialog(
 }
 
 /* =================================================================== */
-/* === DIÁLOGO CLIENTE: Pagar con PayPal o Bizum                     === */
+/* === DIÁLOGO CLIENTE: Pagar con tarjeta o en efectivo              === */
 /* =================================================================== */
 @Composable
 private fun PagarDialog(
@@ -940,18 +908,47 @@ private fun PagarDialog(
 ) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val context = LocalContext.current
 
-    val paypal = tecnico?.paypalUsername?.trim().orEmpty()
-    val bizum = tecnico?.bizumTelefono?.trim().orEmpty()
-    val hayMetodos = paypal.isNotEmpty() || bizum.isNotEmpty()
+    // null = selección de método, "tarjeta" = form tarjeta, "efectivo" = confirmar efectivo
+    var metodoElegido by remember { mutableStateOf<String?>(null) }
 
-    var metodoElegido by remember { mutableStateOf<String?>(null) }   // "paypal" / "bizum" / "otro"
-    var pagoIniciado by remember { mutableStateOf(false) }            // true tras abrir la URL
-    var referencia by remember { mutableStateOf("") }
+    // Campos de tarjeta
+    var numTarjeta by remember { mutableStateOf("") }
+    var caducidad by remember { mutableStateOf("") }
+    var cvv by remember { mutableStateOf("") }
+    var titular by remember { mutableStateOf("") }
+    var procesandoTarjeta by remember { mutableStateOf(false) }
+    var pagoTarjetaOk by remember { mutableStateOf(false) }
+    var errorTarjeta by remember { mutableStateOf<String?>(null) }
+
+    // Validaciones tarjeta
+    val numLimpio = numTarjeta.filter { it.isDigit() }
+    val numValido = numLimpio.length in 13..19
+    val cadValida = caducidad.matches(Regex("^(0[1-9]|1[0-2])/\\d{2}$"))
+    val cvvValido = cvv.length in 3..4
+    val titularValido = titular.isNotBlank()
+    val tarjetaCompleta = numValido && cadValida && cvvValido && titularValido
+
+    // Detectar tipo de tarjeta por los primeros dígitos
+    val tipoTarjeta = when {
+        numLimpio.startsWith("4") -> "Visa"
+        numLimpio.startsWith("5") || numLimpio.startsWith("2") -> "Mastercard"
+        numLimpio.startsWith("3") -> "Amex"
+        else -> ""
+    }
+
+    // Simular procesamiento de pago con tarjeta (aquí se conectaría Stripe)
+    LaunchedEffect(procesandoTarjeta) {
+        if (procesandoTarjeta) {
+            kotlinx.coroutines.delay(2000)
+            procesandoTarjeta = false
+            pagoTarjetaOk = true
+            onMarcarPagado("tarjeta", "**** ${numLimpio.takeLast(4)}")
+        }
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!procesandoTarjeta) onDismiss() },
         title = {
             Column {
                 Text("Pagar reforma", fontWeight = FontWeight.SemiBold)
@@ -960,140 +957,175 @@ private fun PagarDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Cabecera con el importe
+                // Cabecera con importe
                 Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = verde)) {
                     Column(Modifier.padding(16.dp)) {
                         Text("Importe a pagar", color = Color.White.copy(0.85f), fontSize = 13.sp)
                         Spacer(Modifier.height(2.dp))
-                        Text("${Formato.formatMoneda(solicitud.fichaPrecioFinal)}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+                        Text(Formato.formatMoneda(solicitud.fichaPrecioFinal), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 28.sp)
                     }
                 }
 
-                if (!hayMetodos) {
-                    // El técnico no ha configurado métodos de pago
-                    Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "${solicitud.tecnicoNombre} aún no ha configurado métodos de cobro. Contáctale por chat para acordar el pago manualmente.",
-                                fontSize = 12.sp, color = Color(0xFF991B1B)
+                when (metodoElegido) {
+                    // ── Selección de método ──
+                    null -> {
+                        Text("¿Cómo quieres pagar?", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+
+                        // Opción: Tarjeta
+                        OutlinedButton(
+                            onClick = { metodoElegido = "tarjeta" },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF1E40AF)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1E40AF))
+                        ) {
+                            Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Tarjeta de crédito / débito", fontWeight = FontWeight.SemiBold)
+                                Text("Visa, Mastercard, Amex", fontSize = 11.sp, color = gris)
+                            }
+                            Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp))
+                        }
+
+                        // Opción: Efectivo
+                        OutlinedButton(
+                            onClick = { metodoElegido = "efectivo" },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF065F46)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF065F46))
+                        ) {
+                            Icon(Icons.Default.Payments, null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Pago en efectivo", fontWeight = FontWeight.SemiBold)
+                                Text("Pagas directamente al técnico", fontSize = 11.sp, color = gris)
+                            }
+                            Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    // ── Formulario de tarjeta ──
+                    "tarjeta" -> {
+                        if (pagoTarjetaOk) {
+                            // Pago confirmado
+                            Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
+                                Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF065F46), modifier = Modifier.size(40.dp))
+                                    Spacer(Modifier.height(8.dp))
+                                    Text("Pago realizado correctamente", fontWeight = FontWeight.Bold, color = Color(0xFF065F46))
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("El técnico recibirá la confirmación.", fontSize = 12.sp, color = Color(0xFF065F46))
+                                }
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Lock, null, tint = Color(0xFF1E40AF), modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Pago seguro", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF1E40AF))
+                                if (tipoTarjeta.isNotEmpty()) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(tipoTarjeta, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6366F1))
+                                }
+                            }
+
+                            // Número de tarjeta
+                            OutlinedTextField(
+                                value = numTarjeta,
+                                onValueChange = { v ->
+                                    val digits = v.filter { it.isDigit() }.take(19)
+                                    numTarjeta = digits.chunked(4).joinToString(" ")
+                                },
+                                label = { Text("Número de tarjeta") },
+                                placeholder = { Text("1234 5678 9012 3456") },
+                                leadingIcon = { Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(18.dp)) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth()
                             )
+
+                            // Caducidad + CVV en fila
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = caducidad,
+                                    onValueChange = { v ->
+                                        val d = v.filter { it.isDigit() }.take(4)
+                                        caducidad = if (d.length > 2) "${d.take(2)}/${d.drop(2)}" else d
+                                    },
+                                    label = { Text("MM/AA") },
+                                    placeholder = { Text("12/28") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                OutlinedTextField(
+                                    value = cvv,
+                                    onValueChange = { v -> cvv = v.filter { it.isDigit() }.take(4) },
+                                    label = { Text("CVV") },
+                                    placeholder = { Text("123") },
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            // Titular
+                            OutlinedTextField(
+                                value = titular,
+                                onValueChange = { titular = it.uppercase() },
+                                label = { Text("Titular de la tarjeta") },
+                                placeholder = { Text("NOMBRE APELLIDOS") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            errorTarjeta?.let {
+                                Text(it, color = Color(0xFFDC2626), fontSize = 12.sp)
+                            }
+
+                            if (procesandoTarjeta) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    CircularProgressIndicator(color = Color(0xFF1E40AF), modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Text("Procesando pago…", fontSize = 13.sp, color = Color(0xFF1E40AF))
+                                }
+                            }
+
+                            Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF))) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Default.Lock, null, tint = Color(0xFF1E40AF), modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Tus datos de pago están protegidos con cifrado SSL.", fontSize = 11.sp, color = Color(0xFF1E3A5F))
+                                }
+                            }
                         }
                     }
-                    Text(
-                        "Si ya os habéis puesto de acuerdo (transferencia, efectivo, etc.) puedes marcar el pago como realizado manualmente:",
-                        fontSize = 12.sp, color = gris
-                    )
-                    OutlinedTextField(
-                        value = referencia,
-                        onValueChange = { referencia = it },
-                        label = { Text("Referencia / concepto (opcional)") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Button(
-                        onClick = { onMarcarPagado("otro", referencia.trim()) },
-                        enabled = !pagando,
-                        colors = ButtonDefaults.buttonColors(containerColor = verde),
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Marcar como pagado", color = Color.White, fontWeight = FontWeight.SemiBold) }
-                } else if (metodoElegido == null) {
-                    Text("¿Cómo quieres pagar?", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
-                    if (paypal.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = { metodoElegido = "paypal" },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Color(0xFF003087)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF003087))
-                        ) {
-                            Icon(Icons.Default.AccountBalance, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("PayPal", fontWeight = FontWeight.SemiBold)
-                                Text("paypal.me/$paypal", fontSize = 11.sp)
+                    // ── Efectivo ──
+                    "efectivo" -> {
+                        Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Payments, null, tint = Color(0xFF065F46), modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Pago en efectivo", fontWeight = FontWeight.SemiBold, color = Color(0xFF065F46))
+                                }
+                                Text(
+                                    "Pagarás ${Formato.formatMoneda(solicitud.fichaPrecioFinal)} directamente a ${solicitud.tecnicoNombre} cuando finalice el trabajo.",
+                                    fontSize = 13.sp, color = Color(0xFF065F46)
+                                )
                             }
-                            Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp))
                         }
-                    }
-
-                    if (bizum.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = { metodoElegido = "bizum" },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Color(0xFF00B8D4)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00B8D4))
-                        ) {
-                            Icon(Icons.Default.Smartphone, null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("Bizum", fontWeight = FontWeight.SemiBold)
-                                Text(bizum, fontSize = 11.sp)
-                            }
-                            Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                } else {
-                    // Vista del método elegido — instrucciones + botón abrir + confirmación
-                    val esPayPal = metodoElegido == "paypal"
-                    val titulo = if (esPayPal) "Pagar con PayPal" else "Pagar con Bizum"
-                    val color = if (esPayPal) Color(0xFF003087) else Color(0xFF00B8D4)
-
-                    Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = color)
-
-                    if (esPayPal) {
-                        Text("Pulsa el botón para abrir PayPal con el importe pre-rellenado. Cuando completes el pago, vuelve aquí y confirma.", fontSize = 12.sp, color = gris)
-                    } else {
-                        Text("Pulsa el botón para abrir tu app del banco con un Bizum a $bizum por ${Formato.formatMoneda(solicitud.fichaPrecioFinal)}. Cuando completes el pago, vuelve aquí y confirma.", fontSize = 12.sp, color = gris)
-                    }
-
-                    Button(
-                        onClick = {
-                            val url = if (esPayPal) {
-                                "https://paypal.me/$paypal/${"%.2f".format(solicitud.fichaPrecioFinal).replace(",", ".")}EUR"
-                            } else {
-                                // Bizum no tiene esquema universal; usamos un enlace que funciona en algunos bancos
-                                // y como fallback abrimos el marcador con el teléfono.
-                                "tel:$bizum"
-                            }
-                            try {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                pagoIniciado = true
-                            } catch (e: Exception) {
-                                pagoIniciado = true
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = color)
-                    ) {
-                        Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (esPayPal) "Abrir PayPal" else "Abrir Bizum",
-                            color = Color.White, fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    if (pagoIniciado) {
-                        OutlinedTextField(
-                            value = referencia,
-                            onValueChange = { referencia = it },
-                            label = { Text("Referencia / concepto (opcional)") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
                         Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))) {
                             Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-                                Icon(Icons.Default.Info, null, tint = Color(0xFFD97706), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Info, null, tint = Color(0xFFD97706), modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    "Tras pulsar \"Ya he pagado\", el técnico recibirá una notificación y deberá confirmar la recepción para cerrar la reforma.",
+                                    "El técnico recibirá una notificación y deberá confirmar la recepción del pago para cerrar la reforma.",
                                     fontSize = 11.sp, color = Color(0xFF92400E)
                                 )
                             }
@@ -1103,24 +1135,54 @@ private fun PagarDialog(
             }
         },
         confirmButton = {
-            if (metodoElegido != null && pagoIniciado) {
-                Button(
-                    onClick = { onMarcarPagado(metodoElegido!!, referencia.trim()) },
-                    enabled = !pagando,
-                    colors = ButtonDefaults.buttonColors(containerColor = verde)
-                ) {
-                    if (pagando) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("Ya he pagado", color = Color.White, fontWeight = FontWeight.SemiBold)
+            when (metodoElegido) {
+                "tarjeta" -> {
+                    if (pagoTarjetaOk) {
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = verde)
+                        ) { Text("Cerrar", color = Color.White) }
+                    } else if (!procesandoTarjeta) {
+                        Button(
+                            onClick = {
+                                errorTarjeta = null
+                                if (!tarjetaCompleta) {
+                                    errorTarjeta = "Completa todos los campos correctamente"
+                                    return@Button
+                                }
+                                procesandoTarjeta = true
+                            },
+                            enabled = tarjetaCompleta,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E40AF))
+                        ) {
+                            Icon(Icons.Default.Lock, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Pagar ${Formato.formatMoneda(solicitud.fichaPrecioFinal, 0)}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        }
+                    } else {
+                        Spacer(Modifier.width(0.dp))
+                    }
                 }
-            } else {
-                Spacer(Modifier.width(0.dp))
+                "efectivo" -> {
+                    Button(
+                        onClick = { onMarcarPagado("efectivo", "Pago en efectivo al técnico") },
+                        enabled = !pagando,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF065F46))
+                    ) {
+                        if (pagando) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text("Confirmar pago en efectivo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                else -> Spacer(Modifier.width(0.dp))
             }
         },
         dismissButton = {
-            if (metodoElegido != null) {
-                OutlinedButton(onClick = { metodoElegido = null; pagoIniciado = false }) { Text("Atrás") }
-            } else {
-                OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+            if (!procesandoTarjeta && !pagoTarjetaOk) {
+                if (metodoElegido != null) {
+                    OutlinedButton(onClick = { metodoElegido = null; errorTarjeta = null; numTarjeta = ""; caducidad = ""; cvv = ""; titular = "" }) { Text("Atrás") }
+                } else {
+                    OutlinedButton(onClick = onDismiss) { Text("Cancelar") }
+                }
             }
         }
     )

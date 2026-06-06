@@ -104,7 +104,6 @@ def _borrar_subcoleccion(db, parent_ref, sub_name: str, batch_size=400) -> int:
 @https_fn.on_call(
     region=REGION,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
-    enforce_app_check=True,
 )
 def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     """
@@ -235,13 +234,13 @@ def _canal_para_tipo(tipo: str) -> str:
     en NotificacionesLocales.crearCanales. Si el canal no existe en el
     dispositivo (versión vieja de la app), Android cae al canal default."""
     return {
-        "chat":        "zerohaus_chat",
-        "mensaje":     "zerohaus_chat",
-        "presupuesto": "zerohaus_presupuesto",
-        "proyecto":    "zerohaus_proyecto",
-        "reforma":     "zerohaus_proyecto",
-        "valoracion":  "zerohaus_general",
-    }.get(tipo, "zerohaus_general")
+        "chat":        "zerohaus_chat_v2",
+        "mensaje":     "zerohaus_chat_v2",
+        "presupuesto": "zerohaus_presupuesto_v2",
+        "proyecto":    "zerohaus_proyecto_v2",
+        "reforma":     "zerohaus_proyecto_v2",
+        "valoracion":  "zerohaus_general_v2",
+    }.get(tipo, "zerohaus_general_v2")
 
 
 def _enviar_push(token, titulo: str, cuerpo: str, data: dict = None) -> None:

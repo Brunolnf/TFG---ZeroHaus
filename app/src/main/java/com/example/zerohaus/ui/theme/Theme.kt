@@ -34,7 +34,9 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF4ADE80),
+    // Mantenemos el mismo verde forest en dark mode (con suficiente contraste
+    // sobre el background oscuro #111318). Antes #4ADE80 podía leerse como lima.
+    primary = Color(0xFF22C55E),
     onPrimary = Color(0xFF052E16),
     primaryContainer = Color(0xFF15803D),
     onPrimaryContainer = Color(0xFFD1FAE5),

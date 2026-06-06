@@ -185,6 +185,56 @@ fun PanelTecnicoScreen(
                     badge = null,
                     onClick = onEstadisticas
                 )
+
+                // ── Mis certificados ──
+                if (certEstado.tieneAlguno) {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.VerifiedUser, null, tint = verde, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Mis certificados", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            }
+                            certEstado.certificados.forEach { cert ->
+                                val (bgColor, textColor, etiqueta, icono) = when {
+                                    cert.verificado -> listOf(Color(0xFFDCFCE7), Color(0xFF065F46), "Verificado ✓", Icons.Default.CheckCircle)
+                                    cert.rechazado  -> listOf(Color(0xFFFEE2E2), Color(0xFF991B1B), "Rechazado", Icons.Default.Cancel)
+                                    else            -> listOf(Color(0xFFFEF3C7), Color(0xFF92400E), "Pendiente revisión", Icons.Default.HourglassEmpty)
+                                }
+                                @Suppress("UNCHECKED_CAST")
+                                val bg = bgColor as Color; val tc = textColor as Color
+                                val lbl = etiqueta as String
+                                @Suppress("UNCHECKED_CAST")
+                                val ic = icono as androidx.compose.ui.graphics.vector.ImageVector
+                                Card(
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = bg),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(Modifier.padding(10.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(ic, null, tint = tc, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(cert.nombre, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = tc, modifier = Modifier.weight(1f))
+                                            Box(
+                                                Modifier.clip(RoundedCornerShape(6.dp)).background(tc.copy(0.15f)).padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) { Text(lbl, color = tc, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
+                                        }
+                                        if (cert.rechazado && cert.motivoRechazo.isNotBlank()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Text("Motivo: ${cert.motivoRechazo}", fontSize = 12.sp, color = tc.copy(0.85f))
+                                        }
+                                        Text(cert.tipo, fontSize = 11.sp, color = tc.copy(0.7f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(20.dp))

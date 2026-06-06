@@ -17,7 +17,8 @@ data class PerfilTecnicoEstado(
     val cargando: Boolean = true,
     val enviandoResena: Boolean = false,
     val exitoResena: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val tieneCertificadosVerificados: Boolean = false
 )
 
 class PerfilTecnicoViewModel : ViewModel() {
@@ -28,6 +29,7 @@ class PerfilTecnicoViewModel : ViewModel() {
     private val repoTecnicos = RepositorioTecnicos()
     private val repoResenas = RepositorioResenas()
     private val repoAuth = RepositorioAutenticacion()
+    private val repoCerts = RepositorioCertificados()
 
     fun cargarTecnico(tecnicoId: String) {
         estado = estado.copy(cargando = true)
@@ -43,13 +45,17 @@ class PerfilTecnicoViewModel : ViewModel() {
                 val tecnicoCorregido = tecnico?.copy(opiniones = realOpiniones, rating = realRating)
                 repoResenas.yaValorado(tecnicoId) { yaValorado ->
                     repoTecnicos.puedeValorar(tecnicoId) { puede ->
-                        estado = estado.copy(
-                            tecnico = tecnicoCorregido,
-                            resenas = resenas,
-                            yaValorado = yaValorado,
-                            puedeValorar = puede,
-                            cargando = false
-                        )
+                        val uid = tecnico?.uid?.takeIf { it.isNotBlank() } ?: tecnicoId
+                        repoCerts.tieneCertificadosVerificados(uid) { verificados ->
+                            estado = estado.copy(
+                                tecnico = tecnicoCorregido,
+                                resenas = resenas,
+                                yaValorado = yaValorado,
+                                puedeValorar = puede,
+                                tieneCertificadosVerificados = verificados,
+                                cargando = false
+                            )
+                        }
                     }
                 }
             }

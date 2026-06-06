@@ -132,7 +132,6 @@ private fun PantallaMasTecnico(
         Spacer(Modifier.height(4.dp))
 
         OpcTecnico(Icons.Default.Person, Color(0xFF7C3AED), "Perfil", "Tu cuenta en ZeroHaus", onPerfil)
-        OpcTecnico(Icons.Default.People, MaterialTheme.colorScheme.primary, "Mis clientes", "Clientes con quienes trabajas", onMisClientes)
         OpcTecnico(Icons.Default.Settings, MaterialTheme.colorScheme.onSurfaceVariant, "Ajustes", "Preferencias de la app", onAjustes)
         OpcTecnico(Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, "Sobre la app", "Información y versión", onSobreApp)
 

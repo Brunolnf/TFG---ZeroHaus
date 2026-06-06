@@ -15,7 +15,13 @@ class SesionViewModel : ViewModel() {
     var logueado = mutableStateOf<Boolean?>(null)
     var usuario = mutableStateOf<Usuario?>(null)
 
+    // Flag para que comprobarSesion() no machaque el estado tras logout
+    private var sesionCerrada = false
+
     fun comprobarSesion() {
+        // Si ya se hizo logout, no volver a comprobar (evita el spinner)
+        if (sesionCerrada) return
+
         val u = auth.currentUser
         logueado.value = u != null
         if (u != null) cargarUsuario()
@@ -28,6 +34,7 @@ class SesionViewModel : ViewModel() {
     }
 
     fun logout() {
+        sesionCerrada = true
         auth.signOut()
         RepositorioChat.limpiarCacheNombre()
         usuario.value = null

@@ -121,8 +121,22 @@ fun PerfilTecnicoScreen(
 
                             Spacer(Modifier.height(12.dp))
 
-                            // Nombre
+                            // Nombre + badge verificado
                             Text(t.nombre, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                            if (estado.tieneCertificadosVerificados) {
+                                Spacer(Modifier.height(6.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(Color(0xFF065F46).copy(0.12f))
+                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF065F46), modifier = Modifier.size(14.dp))
+                                    Text("Certificado verificado", color = Color(0xFF065F46), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
 
                             // Ciudad
                             if (t.ciudad.isNotEmpty()) {

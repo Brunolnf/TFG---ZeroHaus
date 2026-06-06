@@ -2,6 +2,7 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,18 +60,34 @@ fun MapaTecnicosScreen(
 
     var tecnicoSeleccionado by remember { mutableStateOf<Tecnico?>(null) }
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
+    LaunchedEffect(Unit) { viewModel.cargarTecnicos(forzar = true) }
 
-    // Coordenadas reales si existen; si no, posición de fallback determinista por ID del técnico
-    // (misma posición siempre para el mismo técnico, independientemente del orden de lista)
+    // Coordenadas: reales > ciudad conocida > fallback por hash.
+    // Si varios técnicos comparten la misma posición exacta, se aplica
+    // un pequeño desplazamiento (~300-500m) para que no se solapen.
     val tecnicosConPos = remember(estado.tecnicos) {
+        val posiciones = mutableMapOf<String, Int>() // clave → contador de repeticiones
         estado.tecnicos.map { t ->
-            val pos = if (t.latitud != 0.0 || t.longitud != 0.0) {
-                LatLng(t.latitud, t.longitud)
-            } else {
-                val idx = Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size
-                UBICACIONES_RESIDENCIALES_FALLBACK[idx]
+            val base = when {
+                t.latitud != 0.0 || t.longitud != 0.0 ->
+                    LatLng(t.latitud, t.longitud)
+                t.ciudad.isNotBlank() -> {
+                    val coords = com.example.zerohaus.Repositorios.RepositorioTecnicos.coordenadasDeCiudad(t.ciudad)
+                    if (coords != null) LatLng(coords.first, coords.second)
+                    else UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
+                }
+                else ->
+                    UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
             }
+            // Desplazar si hay colisión
+            val clave = "%.4f,%.4f".format(base.latitude, base.longitude)
+            val n = posiciones.getOrDefault(clave, 0)
+            posiciones[clave] = n + 1
+            val pos = if (n > 0) {
+                // Distribuir en círculo alrededor del punto (radio ~0.004° ≈ 400m)
+                val angulo = Math.toRadians(n * 72.0) // 5 posiciones max en circulo
+                LatLng(base.latitude + 0.004 * Math.cos(angulo), base.longitude + 0.004 * Math.sin(angulo))
+            } else base
             t to pos
         }
     }
@@ -108,15 +125,52 @@ fun MapaTecnicosScreen(
                     uiSettings = MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = false)
                 ) {
                     tecnicosConPos.forEach { (tecnico, posicion) ->
-                        Marker(
+                        val esSeleccionado = tecnicoSeleccionado?.id == tecnico.id
+                        MarkerComposable(
+                            keys = arrayOf(tecnico.id, esSeleccionado),
                             state = MarkerState(position = posicion),
                             title = tecnico.nombre,
-                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.joinToString(", ")}",
+                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull() ?: ""}",
                             onClick = {
-                                tecnicoSeleccionado = tecnico
-                                false
+                                tecnicoSeleccionado = if (esSeleccionado) null else tecnico
+                                true // consume el click para no mostrar InfoWindow nativo
                             }
-                        )
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                // Burbuja con nombre
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.surface,
+                                    shadowElevation = 4.dp
+                                ) {
+                                    Text(
+                                        tecnico.nombre.split(" ").take(2).joinToString(" "),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (esSeleccionado) Color.White
+                                                else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                // Pin triangular
+                                Box(
+                                    Modifier
+                                        .size(width = 12.dp, height = 8.dp)
+                                        .background(
+                                            if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.surface
+                                        )
+                                )
+                                // Círculo del pin
+                                Surface(
+                                    shape = androidx.compose.foundation.shape.CircleShape,
+                                    color = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                            else MaterialTheme.colorScheme.primary.copy(0.7f),
+                                    modifier = Modifier.size(12.dp)
+                                ) {}
+                            }
+                        }
                     }
                 }
 

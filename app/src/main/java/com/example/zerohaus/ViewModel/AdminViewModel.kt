@@ -3,12 +3,15 @@ package com.example.zerohaus.ViewModel
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.example.zerohaus.Modelos.Certificado
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAdmin
+import com.example.zerohaus.Repositorios.RepositorioCertificados
 
 class AdminViewModel : ViewModel() {
 
     private val repo = RepositorioAdmin()
+    private val repoCerts = RepositorioCertificados()
 
     val usuarios = mutableStateListOf<Usuario>()
     val cargando = mutableStateOf(false)
@@ -16,12 +19,48 @@ class AdminViewModel : ViewModel() {
     val mensaje = mutableStateOf<String?>(null)
     val filtro = mutableStateOf("")
 
+    // Certificados pendientes de revisión
+    val certificadosPendientes = mutableStateListOf<Certificado>()
+    val cargandoCerts = mutableStateOf(false)
+
     fun cargar() {
         cargando.value = true
         repo.listarUsuarios { lista ->
             usuarios.clear()
             usuarios.addAll(lista)
             cargando.value = false
+        }
+        cargarCertificadosPendientes()
+    }
+
+    fun cargarCertificadosPendientes() {
+        cargandoCerts.value = true
+        repoCerts.obtenerPendientesVerificacion { lista ->
+            certificadosPendientes.clear()
+            certificadosPendientes.addAll(lista)
+            cargandoCerts.value = false
+        }
+    }
+
+    fun aprobarCertificado(cert: Certificado) {
+        repoCerts.aprobarCertificado(cert.id) { result ->
+            result
+                .onSuccess {
+                    mensaje.value = "Certificado '${cert.nombre}' verificado ✓"
+                    cargarCertificadosPendientes()
+                }
+                .onFailure { error.value = it.message }
+        }
+    }
+
+    fun rechazarCertificado(cert: Certificado, motivo: String) {
+        repoCerts.rechazarCertificado(cert.id, motivo) { result ->
+            result
+                .onSuccess {
+                    mensaje.value = "Certificado '${cert.nombre}' rechazado"
+                    cargarCertificadosPendientes()
+                }
+                .onFailure { error.value = it.message }
         }
     }
 
@@ -74,47 +113,12 @@ class AdminViewModel : ViewModel() {
     }
 
     fun eliminar(usuario: Usuario) {
-        repo.eliminarUsuario(usuario.uid) { result ->
-            result
-                .onSuccess {
-                    mensaje.value = "Usuario eliminado"
-                    cargar()
-                }
-                .onFailure { error.value = it.message }
-        }
-    }
-
-    fun eliminarDefinitivamente(usuario: Usuario) {
         cargando.value = true
-        repo.eliminarDefinitivamente(usuario.uid) { result ->
+        repo.eliminarUsuario(usuario.uid) { result ->
             cargando.value = false
             result
-                .onSuccess { data ->
-                    // La Cloud Function devuelve {ok, uid, stats:{coleccion:n, ..., auth:1}}.
-                    // Construimos un resumen humano para el snackbar.
-                    @Suppress("UNCHECKED_CAST")
-                    val stats = data["stats"] as? Map<String, Any> ?: emptyMap()
-                    val totalDocs = stats.values
-                        .mapNotNull { (it as? Number)?.toLong() }
-                        .sum()
-                    val authBorrado = (stats["auth"] as? Number)?.toLong() == 1L
-                    mensaje.value = buildString {
-                        append("Usuario eliminado definitivamente ")
-                        append("($totalDocs docs borrados")
-                        if (authBorrado) append(" + cuenta Auth")
-                        append(")")
-                    }
-                    cargar()
-                }
-                .onFailure { error.value = it.message }
-        }
-    }
-
-    fun restaurar(usuario: Usuario) {
-        repo.restaurarUsuario(usuario.uid) { result ->
-            result
                 .onSuccess {
-                    mensaje.value = "Usuario restaurado"
+                    mensaje.value = "Usuario y todos sus datos eliminados"
                     cargar()
                 }
                 .onFailure { error.value = it.message }

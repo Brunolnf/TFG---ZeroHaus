@@ -17,7 +17,12 @@ data class CertificadoEstado(
     val exito: Boolean = false,
     val error: String? = null,
     val certificados: List<Certificado> = emptyList()
-)
+) {
+    val tieneAlguno: Boolean get() = certificados.isNotEmpty()
+    val tieneVerificados: Boolean get() = certificados.any { it.verificado }
+    val tieneRechazados: Boolean get() = certificados.any { it.rechazado }
+    val tienePendientes: Boolean get() = certificados.any { !it.verificado && !it.rechazado }
+}
 
 class CertificadoViewModel : ViewModel() {
 

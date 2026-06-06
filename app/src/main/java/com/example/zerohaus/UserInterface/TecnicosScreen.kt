@@ -1,5 +1,9 @@
 ﻿package com.example.zerohaus.UserInterface
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,9 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.TecnicosViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +47,7 @@ fun TecnicosScreen(
     val amarillo = Color(0xFFFFC107)
     val estado = viewModel.estado
     val filtrados = viewModel.tecnicosFiltrados()
+    val ctx = LocalContext.current
 
     var mostrarFiltros by remember { mutableStateOf(false) }
     var tecnicoParaPresupuesto by remember { mutableStateOf<com.example.zerohaus.Modelos.Tecnico?>(null) }
@@ -47,7 +58,26 @@ fun TecnicosScreen(
         "Auditorías", "Rehabilitación", "Biomasa", "Certificación", "Consultoría"
     )
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
+    // Pedir ubicación y actualizar distancias
+    val locationPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.cargarTecnicos()
+        val tienePermiso = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (tienePermiso) {
+            obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+        } else {
+            locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        // Fallback: si tras 3s no hay ubicación, usar Madrid
+        kotlinx.coroutines.delay(3000)
+        if (viewModel.estado.latUsuario == 0.0) {
+            viewModel.actualizarUbicacion(40.4168, -3.7038)
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(estado.mensajeExito, estado.error) {
@@ -142,8 +172,31 @@ fun TecnicosScreen(
                         }
                     }
 
+                    // Chips de ordenamiento
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        listOf(
+                            OrdenTecnicos.VALORACION to "⭐ Valoración",
+                            OrdenTecnicos.PROXIMIDAD to "📍 Proximidad",
+                            OrdenTecnicos.PROYECTOS  to "🔨 Proyectos"
+                        ).forEach { (orden, label) ->
+                            FilterChip(
+                                selected = estado.orden == orden,
+                                onClick = { viewModel.cambiarOrden(orden) },
+                                label = { Text(label, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = verde.copy(0.15f),
+                                    selectedLabelColor = verde
+                                )
+                            )
+                        }
+                    }
+
                     estado.filtro?.let {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(6.dp))
                         AssistChip(
                             onClick = { viewModel.cambiarFiltro(null) },
                             label = { Text("Filtro: $it  ✕") },
@@ -231,29 +284,19 @@ fun TecnicosScreen(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
-                                    if (t.ciudad.isNotEmpty()) {
+                                    if (t.ciudad.isNotEmpty() || t.distanciaKm > 0.0) {
                                         Spacer(Modifier.height(2.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.LocationOn,
-                                                null,
-                                                tint = gris,
-                                                modifier = Modifier.size(13.dp)
-                                            )
+                                            Icon(Icons.Default.LocationOn, null, tint = gris, modifier = Modifier.size(13.dp))
                                             Spacer(Modifier.width(2.dp))
-                                            Text(t.ciudad, color = gris, fontSize = 13.sp)
-                                        }
-                                    } else if (t.distanciaKm > 0.0) {
-                                        Spacer(Modifier.height(2.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.LocationOn,
-                                                null,
-                                                tint = gris,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(Modifier.width(2.dp))
-                                            Text("${t.distanciaKm} km", color = gris, fontSize = 13.sp)
+                                            val textoUbic = buildString {
+                                                if (t.ciudad.isNotEmpty()) append(t.ciudad)
+                                                if (t.distanciaKm > 0.0) {
+                                                    if (t.ciudad.isNotEmpty()) append(" · ")
+                                                    append("${t.distanciaKm} km")
+                                                }
+                                            }
+                                            Text(textoUbic, color = gris, fontSize = 13.sp)
                                         }
                                     }
                                 }
@@ -372,6 +415,7 @@ fun TecnicosScreen(
         }
     }
 
+    // ───────────── FIN DE TecnicosScreen ─────────────
     // Diálogo solicitar presupuesto
     if (tecnicoParaPresupuesto != null) {
         val t = tecnicoParaPresupuesto!!
@@ -409,4 +453,37 @@ fun TecnicosScreen(
             }
         )
     }
+}
+
+@androidx.annotation.RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+private fun obtenerUbicacion(context: android.content.Context, onResult: (Double, Double) -> Unit) {
+    try {
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        // Intentar primero con lastLocation (rápido)
+        client.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                onResult(loc.latitude, loc.longitude)
+            } else {
+                // En emulador lastLocation suele ser null — pedir ubicación fresca
+                val request = com.google.android.gms.location.CurrentLocationRequest.Builder()
+                    .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+                    .setDurationMillis(5000)
+                    .build()
+                client.getCurrentLocation(request, null)
+                    .addOnSuccessListener { freshLoc ->
+                        if (freshLoc != null) onResult(freshLoc.latitude, freshLoc.longitude)
+                    }
+            }
+        }.addOnFailureListener {
+            // Fallback directo a getCurrentLocation
+            val request = com.google.android.gms.location.CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+                .setDurationMillis(5000)
+                .build()
+            client.getCurrentLocation(request, null)
+                .addOnSuccessListener { freshLoc ->
+                    if (freshLoc != null) onResult(freshLoc.latitude, freshLoc.longitude)
+                }
+        }
+    } catch (_: Exception) {}
 }

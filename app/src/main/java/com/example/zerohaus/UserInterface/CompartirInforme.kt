@@ -14,6 +14,14 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
+/** Genera el PDF y lo guarda en [destino] sin abrir ningún intent. */
+fun compartirInformeSilencioso(context: Context, informe: InformeEnergetico, destino: File) {
+    val pdf = generarPdf(context, informe)
+    if (pdf.canonicalPath != destino.canonicalPath) {
+        pdf.copyTo(destino, overwrite = true)
+    }
+}
+
 fun compartirInforme(context: Context, informe: InformeEnergetico) {
     val pdfFile = try { generarPdf(context, informe) } catch (_: Exception) { null }
     if (pdfFile != null) {

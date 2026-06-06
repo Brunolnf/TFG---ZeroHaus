@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +60,10 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
     var errorLocal by remember { mutableStateOf<String?>(null) }
+
+    // Estado del visor de imagen fullscreen
+    var imagenAmpliada by remember { mutableStateOf<String?>(null) }
+    var archivoAmpliado by remember { mutableStateOf<MensajeChat?>(null) }
 
     // Estado del diálogo "solicitar presupuesto"
     var mostrarDialogoPresupuesto by remember { mutableStateOf(false) }
@@ -206,7 +211,7 @@ fun ChatScreen(
                                     modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                                 )
                             }
-                            BurbujaMensaje(msg, esMio, gris, verde, sdf, context)
+                            BurbujaMensaje(msg, esMio, gris, verde, sdf, context, onVerImagen = { imagenAmpliada = it }, onVerArchivo = { archivoAmpliado = it })
                         }
                     }
                     item { Spacer(Modifier.height(4.dp)) }
@@ -382,6 +387,121 @@ fun ChatScreen(
             }
         )
     }
+
+    // ───────────── VISOR IMAGEN FULLSCREEN ─────────────
+    imagenAmpliada?.let { url ->
+        Dialog(
+            onDismissRequest = { imagenAmpliada = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = true
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .clickable { imagenAmpliada = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Imagen ampliada",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(),
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { imagenAmpliada = null },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                ) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+    }
+
+    // ───────────── VISOR ARCHIVO FULLSCREEN ─────────────
+    archivoAmpliado?.let { msg ->
+        val ext = msg.mediaNombre.substringAfterLast('.', "").uppercase()
+        val esImagen = ext in listOf("JPG", "JPEG", "PNG", "GIF", "WEBP", "BMP")
+        Dialog(
+            onDismissRequest = { archivoAmpliado = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = true
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (esImagen) {
+                    // Si el archivo es una imagen, mostrarla a pantalla completa
+                    AsyncImage(
+                        model = msg.mediaUrl,
+                        contentDescription = msg.mediaNombre,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .clickable { archivoAmpliado = null },
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    // Para otros archivos: tarjeta con info y botón abrir
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        val extColor = archivoColor(ext, gris)
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .background(extColor.copy(alpha = 0.12f), RoundedCornerShape(18.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(archivoIcono(ext), null, tint = extColor, modifier = Modifier.size(40.dp))
+                        }
+                        Text(msg.mediaNombre, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        if (msg.mediaBytes > 0L) {
+                            Text(formatBytes(msg.mediaBytes), color = gris, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = {
+                                archivoAmpliado = null
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = verde),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Abrir archivo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        }
+                        OutlinedButton(
+                            onClick = { archivoAmpliado = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Cerrar") }
+                    }
+                }
+                IconButton(
+                    onClick = { archivoAmpliado = null },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                ) {
+                    Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+    }
 }
 
 // ───────────── BARRA PREVIEW IMAGEN ─────────────
@@ -465,7 +585,9 @@ private fun BurbujaMensaje(
     gris: Color,
     verde: Color,
     sdf: SimpleDateFormat,
-    context: android.content.Context
+    context: android.content.Context,
+    onVerImagen: (String) -> Unit = {},
+    onVerArchivo: (MensajeChat) -> Unit = {}
 ) {
     val shape = RoundedCornerShape(
         topStart = if (esMio) 18.dp else 4.dp,
@@ -482,8 +604,7 @@ private fun BurbujaMensaje(
                 modifier = Modifier
                     .widthIn(max = 240.dp)
                     .clickable {
-                        if (msg.mediaUrl.isNotEmpty())
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                        if (msg.mediaUrl.isNotEmpty()) onVerImagen(msg.mediaUrl)
                     }
             ) {
                 Column {
@@ -520,8 +641,7 @@ private fun BurbujaMensaje(
                 modifier = Modifier
                     .widthIn(max = 270.dp)
                     .clickable {
-                        if (msg.mediaUrl.isNotEmpty())
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                        if (msg.mediaUrl.isNotEmpty()) onVerArchivo(msg)
                     }
             ) {
                 Row(

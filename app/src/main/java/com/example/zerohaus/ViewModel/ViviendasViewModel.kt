@@ -27,9 +27,15 @@ class ViviendasViewModel : ViewModel() {
     fun cargarViviendas() {
         estado = estado.copy(cargando = true)
         repo.obtenerViviendas { lista ->
+            // Preserva la selección del usuario si la vivienda sigue existiendo
+            // tras recargar (antes se reseteaba a lista.firstOrNull(), perdiendo
+            // la selección cada vez que el usuario editaba/refrescaba).
+            val seleccionPrevia = estado.viviendaSeleccionada
+            val nuevaSeleccion = lista.firstOrNull { it.id == seleccionPrevia?.id }
+                ?: lista.firstOrNull()
             estado = estado.copy(
                 viviendas = lista,
-                viviendaSeleccionada = lista.firstOrNull(),
+                viviendaSeleccionada = nuevaSeleccion,
                 cargando = false
             )
         }

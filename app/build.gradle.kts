@@ -22,7 +22,7 @@ android {
         applicationId = "es.zerohaus.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -101,6 +101,7 @@ dependencies {
     // Google Maps
     implementation("com.google.maps.android:maps-compose:6.2.1")
     implementation("com.google.android.gms:play-services-maps:19.0.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))

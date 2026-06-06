@@ -69,7 +69,7 @@ fun MainScaffold(
     }) { pv ->
         Box(Modifier.padding(pv)) {
             when (actual) {
-                "inicio" -> PanelScreen(panelViewModel, certificadoViewModel, onNuevoPreestudio, onMisViviendas, onMisProyectos, onPresupuestos, onHistorialInformes, onGraficas, onVerUltimoInforme, onPerfil, onAjustes)
+                "inicio" -> PanelScreen(panelViewModel, onNuevoPreestudio, onMisViviendas, onMisProyectos, onPresupuestos, onHistorialInformes, onGraficas, onVerUltimoInforme, onPerfil, onAjustes)
                 "mensajes" -> ChatsListScreen(chatViewModel, { actual = "inicio" }, onChats)
                 "explorar" -> PantallaExplorar(onBuscarTecnicos, onMapaTecnicos, onRankings)
                 "mas" -> PantallaMas(onPerfil, onAjustes, onSobreApp, onCerrarSesion)

@@ -90,7 +90,8 @@ fun MisProyectosScreen(
                         proyecto = p,
                         verde = verde,
                         gris = gris,
-                        onToggleTarea = { idx, checked -> viewModel.toggleTarea(p.id, idx, checked) },
+                        soloLectura = true,
+                        onToggleTarea = { _, _ -> },
                         onVerDetalle = { proyectoDetalle = p },
                         onEliminar = { proyectoAEliminar = p }
                     )
@@ -104,10 +105,9 @@ fun MisProyectosScreen(
         NuevoProyectoDialog(
             guardando = viewModel.guardando,
             viviendas = viewModel.viviendas.map { it.nombre },
-            tecnicos = viewModel.tecnicos.map { it.nombre },
             onDismiss = { mostrarCrear = false },
-            onCrear = { titulo, desc, vivienda, tecnico, tareas, fechaFin ->
-                viewModel.crearProyecto(titulo, desc, vivienda, tecnico, tareas, fechaFin) { exito ->
+            onCrear = { titulo, desc, vivienda, tareas, fechaFin ->
+                viewModel.crearProyecto(titulo, desc, vivienda, tareas, fechaFin) { exito ->
                     if (exito) mostrarCrear = false
                 }
             }
@@ -117,8 +117,9 @@ fun MisProyectosScreen(
     proyectoDetalle?.let { p ->
         DetalleProyectoDialog(
             proyecto = p,
+            soloLectura = true,
             onDismiss = { proyectoDetalle = null },
-            onToggleTarea = { idx, checked -> viewModel.toggleTarea(p.id, idx, checked) },
+            onToggleTarea = { _, _ -> },
             onEliminar = { proyectoAEliminar = p; proyectoDetalle = null }
         )
     }
@@ -147,6 +148,7 @@ private fun TarjetaProyecto(
     proyecto: Proyecto,
     verde: Color,
     gris: Color,
+    soloLectura: Boolean = false,
     onToggleTarea: (Int, Boolean) -> Unit,
     onVerDetalle: () -> Unit,
     onEliminar: () -> Unit
@@ -279,8 +281,13 @@ private fun TarjetaProyecto(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             checked = t.completada,
-                            onCheckedChange = { checked -> onToggleTarea(index, checked) },
-                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF16A34A))
+                            onCheckedChange = if (soloLectura) null else { checked -> onToggleTarea(index, checked) },
+                            enabled = !soloLectura,
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Color(0xFF16A34A),
+                                disabledCheckedColor = Color(0xFF16A34A).copy(alpha = 0.6f),
+                                disabledUncheckedColor = gris.copy(alpha = 0.4f)
+                            )
                         )
                         Text(
                             t.nombre,
@@ -311,6 +318,7 @@ private fun TarjetaProyecto(
 @Composable
 private fun DetalleProyectoDialog(
     proyecto: Proyecto,
+    soloLectura: Boolean = false,
     onDismiss: () -> Unit,
     onToggleTarea: (Int, Boolean) -> Unit,
     onEliminar: () -> Unit
@@ -413,8 +421,13 @@ private fun DetalleProyectoDialog(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(
                                         checked = t.completada,
-                                        onCheckedChange = { checked -> onToggleTarea(index, checked) },
-                                        colors = CheckboxDefaults.colors(checkedColor = verde)
+                                        onCheckedChange = if (soloLectura) null else { checked -> onToggleTarea(index, checked) },
+                                        enabled = !soloLectura,
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = verde,
+                                            disabledCheckedColor = verde.copy(alpha = 0.6f),
+                                            disabledUncheckedColor = gris.copy(alpha = 0.4f)
+                                        )
                                     )
                                     Text(
                                         t.nombre,
@@ -460,9 +473,8 @@ private fun DetalleProyectoDialog(
 private fun NuevoProyectoDialog(
     guardando: Boolean,
     viviendas: List<String>,
-    tecnicos: List<String>,
     onDismiss: () -> Unit,
-    onCrear: (String, String, String, String, List<Tarea>, Long) -> Unit
+    onCrear: (String, String, String, List<Tarea>, Long) -> Unit
 ) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
@@ -471,9 +483,7 @@ private fun NuevoProyectoDialog(
     var titulo by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
     var viviendaNombre by remember { mutableStateOf("") }
-    var tecnicoNombre by remember { mutableStateOf("") }
     var expandidoVivienda by remember { mutableStateOf(false) }
-    var expandidoTecnico by remember { mutableStateOf(false) }
     var fechaFinTexto by remember { mutableStateOf("") }
     var tareas by remember { mutableStateOf(listOf<String>()) }
     var nuevaTarea by remember { mutableStateOf("") }
@@ -519,54 +529,26 @@ private fun NuevoProyectoDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ExposedDropdownMenuBox(
-                            expanded = expandidoVivienda,
-                            onExpandedChange = { expandidoVivienda = it },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            OutlinedTextField(
-                                value = viviendaNombre,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Vivienda") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoVivienda) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            )
-                            ExposedDropdownMenu(expanded = expandidoVivienda, onDismissRequest = { expandidoVivienda = false }) {
-                                if (viviendas.isEmpty()) {
-                                    DropdownMenuItem(text = { Text("Sin viviendas", color = gris) }, onClick = { expandidoVivienda = false })
-                                } else {
-                                    viviendas.forEach { v ->
-                                        DropdownMenuItem(text = { Text(v) }, onClick = { viviendaNombre = v; expandidoVivienda = false })
-                                    }
-                                }
-                            }
-                        }
-                        ExposedDropdownMenuBox(
-                            expanded = expandidoTecnico,
-                            onExpandedChange = { expandidoTecnico = it },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            OutlinedTextField(
-                                value = tecnicoNombre,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = { Text("Técnico") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoTecnico) },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            )
-                            ExposedDropdownMenu(expanded = expandidoTecnico, onDismissRequest = { expandidoTecnico = false }) {
-                                if (tecnicos.isEmpty()) {
-                                    DropdownMenuItem(text = { Text("Sin técnicos", color = gris) }, onClick = { expandidoTecnico = false })
-                                } else {
-                                    tecnicos.forEach { t ->
-                                        DropdownMenuItem(text = { Text(t) }, onClick = { tecnicoNombre = t; expandidoTecnico = false })
-                                    }
+                    ExposedDropdownMenuBox(
+                        expanded = expandidoVivienda,
+                        onExpandedChange = { expandidoVivienda = it }
+                    ) {
+                        OutlinedTextField(
+                            value = viviendaNombre,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Vivienda") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandidoVivienda) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        )
+                        ExposedDropdownMenu(expanded = expandidoVivienda, onDismissRequest = { expandidoVivienda = false }) {
+                            if (viviendas.isEmpty()) {
+                                DropdownMenuItem(text = { Text("Sin viviendas", color = gris) }, onClick = { expandidoVivienda = false })
+                            } else {
+                                viviendas.forEach { v ->
+                                    DropdownMenuItem(text = { Text(v) }, onClick = { viviendaNombre = v; expandidoVivienda = false })
                                 }
                             }
                         }
@@ -651,7 +633,6 @@ private fun NuevoProyectoDialog(
                                 titulo.trim(),
                                 descripcion.trim(),
                                 viviendaNombre.trim(),
-                                tecnicoNombre.trim(),
                                 tareas.map { Tarea(nombre = it) },
                                 fechaFin
                             )

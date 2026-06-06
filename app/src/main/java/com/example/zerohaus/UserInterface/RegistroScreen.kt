@@ -29,9 +29,12 @@ fun RegistroScreen(
     val c = LocalCadenas.current
     val estado = viewModel.estado
     val verde = MaterialTheme.colorScheme.primary
-    val fondo = Color(0xFFEEF8F5)
+    // Mismo enfoque que LoginScreen: detectamos dark según el background
+    // del tema efectivo (que sí respeta AppEstado.tema), no del sistema.
+    val esDark = MaterialTheme.colorScheme.background.red < 0.5f
+    val fondo = if (esDark) MaterialTheme.colorScheme.background else Color(0xFFEEF8F5)
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val borde = Color(0xFFD1D5DB)
+    val borde = MaterialTheme.colorScheme.outline
     var expandirTipo by remember { mutableStateOf(false) }
     var verContrasena by remember { mutableStateOf(false) }
     var verConfirmar by remember { mutableStateOf(false) }

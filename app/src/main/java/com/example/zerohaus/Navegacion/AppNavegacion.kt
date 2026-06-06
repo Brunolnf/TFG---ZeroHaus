@@ -19,16 +19,7 @@ import com.google.firebase.auth.FirebaseAuth
 
 @Composable
 fun AppNavegacion() {
-    val nav = rememberNavController()
-
-    // Solo los ViewModels compartidos entre varias rutas viven al nivel raíz.
-    // Los demás se instancian dentro de su composable() para que Navigation
-    // los limpie automáticamente al salir de la pantalla.
     val sesionVM: SesionViewModel = viewModel()
-    val loginVM: LoginViewModel = viewModel()   // compartido: "login" + "recuperar"
-    val chatVM: ChatViewModel = viewModel()     // compartido: "main", "perfil_tecnico", "chat"
-    val informeVM: InformeViewModel = viewModel() // compartido: "preestudio" → "informe"
-    val tecnicosVM: TecnicosViewModel = viewModel() // compartido: "tecnicos" + "mapa_tecnicos"
 
     var mostrarSplash by remember { mutableStateOf(true) }
 
@@ -41,6 +32,8 @@ fun AppNavegacion() {
     // Comprobar sesión
     LaunchedEffect(Unit) { sesionVM.comprobarSesion() }
     val logueado = sesionVM.logueado.value
+
+    // null = aún comprobando sesión → spinner breve solo al abrir la app
     if (logueado == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -53,30 +46,25 @@ fun AppNavegacion() {
         if (logueado) ServicioNotificaciones.registrarToken()
     }
 
-    // Logout reactivo: cuando la sesión se cierra desde cualquier pantalla,
-    // limpiamos por completo el back stack y vamos a "login". Centralizar esto
-    // evita que un composable activo (p.ej. "main") se quede mostrando un
-    // spinner por tener `usuario == null` durante la transición.
-    LaunchedEffect(logueado) {
-        if (!logueado) {
-            nav.navigate("login") {
-                popUpTo(nav.graph.id) { inclusive = true }
-                launchSingleTop = true
-            }
-        }
-    }
-
     val cerrarSesion: () -> Unit = { sesionVM.logout() }
 
-    // Si el usuario logueado es el admin, va directo al panel de administración.
-    // Comprobamos por email (único admin, hardcodeado en AdminConfig).
-    val emailActual = FirebaseAuth.getInstance().currentUser?.email
+    val emailActual = if (logueado) FirebaseAuth.getInstance().currentUser?.email else null
     val esAdmin = logueado && AdminConfig.esAdmin(emailActual)
     val start = when {
         esAdmin -> "admin"
         logueado -> "main"
         else -> "login"
     }
+
+    // key(start) destruye y recrea el NavHost entero cuando cambia el estado
+    // de sesión. Al cerrar sesión start pasa a "login" → se muestra LoginScreen
+    // al instante sin spinners ni pantallas en blanco.
+    key(start) {
+    val nav = rememberNavController()
+    val loginVM: LoginViewModel = viewModel()
+    val chatVM: ChatViewModel = viewModel()
+    val informeVM: InformeViewModel = viewModel()
+    val tecnicosVM: TecnicosViewModel = viewModel()
 
     NavHost(navController = nav, startDestination = start) {
 
@@ -133,17 +121,10 @@ fun AppNavegacion() {
             val usuario = sesionVM.usuario.value
             val esTecnico = usuario?.tipoUsuario == "Técnico"
 
-            // Mientras se carga el usuario tras un login fresco.
-            // Si ya no hay sesión activa (logout en curso), no mostramos spinner:
-            // el LaunchedEffect raíz nos llevará a "login" inmediatamente.
-            if (usuario == null) {
-                if (sesionVM.logueado.value == true) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                return@composable
-            }
+            // Sin usuario aún (login fresco cargando, o logout en tránsito).
+            // No mostramos spinner — si es logout, key(start) destruirá este
+            // composable y mostrará LoginScreen directamente.
+            if (usuario == null) return@composable
 
             if (esTecnico) {
                 val panelTecnicoVM: PanelTecnicoViewModel = viewModel()
@@ -270,6 +251,7 @@ fun AppNavegacion() {
             val historialVM: HistorialInformesViewModel = viewModel()
             HistorialInformesScreen(
                 viewModel = historialVM,
+                chatViewModel = chatVM,
                 onVolver = { nav.popBackStack() },
                 onVerInforme = { inf ->
                     informeVM.cargarInforme(inf)
@@ -334,4 +316,5 @@ fun AppNavegacion() {
             EstadisticasTecnicoScreen(viewModel = estadisticasTecVM, onVolver = { nav.popBackStack() })
         }
     }
+    } // key(start)
 }
