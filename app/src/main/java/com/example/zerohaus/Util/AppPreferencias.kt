@@ -22,4 +22,12 @@ class AppPreferencias(ctx: Context) {
 
     fun getNotificacionesSonido(): Boolean = prefs.getBoolean("notif_sonido", true)
     fun setNotificacionesSonido(v: Boolean) = prefs.edit().putBoolean("notif_sonido", v).apply()
+
+    // Vivienda activa seleccionada por el usuario (persiste entre sesiones)
+    fun getViviendaSeleccionadaId(): String = prefs.getString("vivienda_sel_id", "") ?: ""
+    fun setViviendaSeleccionadaId(v: String) = prefs.edit().putString("vivienda_sel_id", v).apply()
+
+    // Tipo de usuario cacheado para evitar esperar a Firestore al abrir la app
+    fun getTipoUsuarioCached(): String = prefs.getString("tipo_usuario_cache", "") ?: ""
+    fun setTipoUsuarioCached(v: String) = prefs.edit().putString("tipo_usuario_cache", v).apply()
 }

@@ -11,13 +11,32 @@ object AppEstado {
     var unidadMoneda by mutableStateOf("EUR")
     var notificacionesPush by mutableStateOf(true)
     var notificacionesSonido by mutableStateOf(true)
+    var tipoUsuarioCache by mutableStateOf("")
 
-    fun inicializar(prefs: AppPreferencias) {
-        tema = prefs.getTema()
-        idioma = prefs.getIdioma()
-        unidadEnergia = prefs.getUnidadEnergia()
-        unidadMoneda = prefs.getUnidadMoneda()
-        notificacionesPush = prefs.getNotificacionesPush()
-        notificacionesSonido = prefs.getNotificacionesSonido()
+    private var prefs: AppPreferencias? = null
+
+    fun inicializar(p: AppPreferencias) {
+        prefs = p
+        tema = p.getTema()
+        idioma = p.getIdioma()
+        unidadEnergia = p.getUnidadEnergia()
+        unidadMoneda = p.getUnidadMoneda()
+        notificacionesPush = p.getNotificacionesPush()
+        notificacionesSonido = p.getNotificacionesSonido()
+        tipoUsuarioCache = p.getTipoUsuarioCached()
+    }
+
+    /** ID de la vivienda activa seleccionada por el usuario (persiste entre sesiones). */
+    fun getViviendaSeleccionadaId(): String = prefs?.getViviendaSeleccionadaId() ?: ""
+    fun setViviendaSeleccionadaId(id: String) { prefs?.setViviendaSeleccionadaId(id) }
+
+    fun guardarTipoUsuario(tipo: String) {
+        tipoUsuarioCache = tipo
+        prefs?.setTipoUsuarioCached(tipo)
+    }
+
+    fun limpiarTipoUsuario() {
+        tipoUsuarioCache = ""
+        prefs?.setTipoUsuarioCached("")
     }
 }

@@ -11,7 +11,7 @@ class InformeViewModel : ViewModel() {
 
     var informe by mutableStateOf<InformeEnergetico?>(null)
         private set
-    var cargando by mutableStateOf(true)
+    var cargando by mutableStateOf(false)
         private set
 
     private val repo = RepositorioInformes()

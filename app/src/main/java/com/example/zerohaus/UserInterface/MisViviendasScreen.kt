@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -39,16 +40,17 @@ fun MisViviendasScreen(
     var confirmarEliminar by remember { mutableStateOf<String?>(null) }
     var viviendaEditando by remember { mutableStateOf<Vivienda?>(null) }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(estado.mensaje, estado.error) {
-        estado.mensaje?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-        estado.error?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-    }
     LaunchedEffect(Unit) { viewModel.cargarViviendas() }
 
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensaje ?: estado.error,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -110,7 +112,14 @@ fun MisViviendasScreen(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(v.nombre, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                        Text(
+                                            text = v.nombre,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 16.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         if (esSeleccionada) {
                                             Spacer(Modifier.width(8.dp))
                                             EstadoChip("Activa", verde, fontSize = 10)
@@ -202,6 +211,16 @@ private fun EditarViviendaDialog(
     val optsCalefaccion = listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa", "Sin calefacción")
     val optsAcs = listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia", "Sin ACS")
     val optsOrientacion = listOf("Norte", "Sur", "Este", "Oeste", "Noreste", "Noroeste", "Sureste", "Suroeste")
+
+    // Todos los campos son obligatorios. Validaciones numéricas:
+    //  - superficie: entero > 0
+    //  - año construcción: 1800 ≤ año ≤ año actual (no futuros, no antigüedades absurdas)
+    val anioActual = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
+    val superficieOk = superficie.toIntOrNull()?.let { it > 0 } == true
+    val anioOk = anio.toIntOrNull()?.let { it in 1800..anioActual } == true
+    val formularioCompleto = nombre.isNotBlank() && superficieOk && anioOk
+        && direccion.isNotBlank() && ventanas.isNotBlank() && aislamiento.isNotBlank()
+        && calefaccion.isNotBlank() && acs.isNotBlank() && orientacion.isNotBlank()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -303,7 +322,7 @@ private fun EditarViviendaDialog(
                                 )
                             )
                         },
-                        enabled = nombre.isNotBlank(),
+                        enabled = formularioCompleto,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)

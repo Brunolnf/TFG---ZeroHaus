@@ -47,7 +47,10 @@ fun LoginScreen(
     }
 
     LaunchedEffect(estado.loginCorrecto) {
-        if (estado.loginCorrecto) onLoginExitoso()
+        if (estado.loginCorrecto) {
+            viewModel.resetear()   // consume el flag (one-shot): evita re-disparos en reentradas
+            onLoginExitoso()
+        }
     }
 
     Scaffold(containerColor = fondo) { pv ->

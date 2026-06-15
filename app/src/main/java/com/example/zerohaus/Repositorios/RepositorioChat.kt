@@ -18,7 +18,7 @@ class RepositorioChat {
 
     private fun uid() = auth.currentUser?.uid ?: ""
 
-    // ───────────── CACHÉ NOMBRE EMISOR ─────────────
+  
 
     companion object {
         @Volatile private var nombreCacheado: String? = null
@@ -45,8 +45,6 @@ class RepositorioChat {
             }
             .addOnFailureListener { callback("Usuario") }
     }
-
-    // ───────────── HELPER PRIVADO ─────────────
 
     /**
      * Actualiza el doc del chat con el último mensaje y el contador de no leídos
@@ -77,8 +75,6 @@ class RepositorioChat {
                 db.collection("chats").document(chatId).update(updates)
             }
     }
-
-    // ───────────── OBTENER / CREAR CHAT ─────────────
 
     fun obtenerOCrearChat(
         otroUid: String,
@@ -124,8 +120,6 @@ class RepositorioChat {
             .addOnFailureListener { callback("") }
     }
 
-    // ───────────── ESCUCHAR CHATS ─────────────
-
     fun escucharChats(callback: (List<Chat>) -> Unit): ListenerRegistration {
         return db.collection("chats")
             .whereArrayContains("participantes", uid())
@@ -137,8 +131,6 @@ class RepositorioChat {
                 callback(lista)
             }
     }
-
-    // ───────────── MENSAJES ─────────────
 
     fun cargarMensajesDesdeCache(chatId: String, callback: (List<MensajeChat>) -> Unit) {
         db.collection("chats").document(chatId)
@@ -167,8 +159,6 @@ class RepositorioChat {
                 callback(mensajes)
             }
     }
-
-    // ───────────── ENVIAR TEXTO ─────────────
 
     fun enviarMensaje(
         chatId: String,
@@ -199,8 +189,6 @@ class RepositorioChat {
                 .addOnFailureListener { callback(false) }
         }
     }
-
-    // ───────────── ENVIAR IMAGEN ─────────────
 
     fun enviarImagen(chatId: String, uri: Uri, caption: String = "", callback: (Boolean) -> Unit) {
         val miUid = uid()
@@ -236,8 +224,6 @@ class RepositorioChat {
             }
             .addOnFailureListener { callback(false) }
     }
-
-    // ───────────── ENVIAR ARCHIVO ─────────────
 
     fun enviarArchivo(
         chatId: String,
@@ -281,7 +267,13 @@ class RepositorioChat {
             .addOnFailureListener { callback(false) }
     }
 
-    // ───────────── MARCAR LEÍDOS ─────────────
+    fun eliminarMensaje(chatId: String, mensajeId: String, callback: (Boolean) -> Unit) {
+        db.collection("chats").document(chatId)
+            .collection("mensajes").document(mensajeId)
+            .delete()
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
+    }
 
     fun marcarLeidos(chatId: String) {
         val miUid = uid()

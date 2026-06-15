@@ -2,9 +2,9 @@ package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 
 class RepositorioInformes {
 
@@ -44,23 +44,35 @@ class RepositorioInformes {
     fun obtenerUltimoInforme(callback: (InformeEnergetico?) -> Unit) {
         db.collection("informes")
             .whereEqualTo("uid", uid())
-            .orderBy("fechaGeneracion", Query.Direction.DESCENDING)
-            .limit(1)
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.firstOrNull()?.toObject(InformeEnergetico::class.java))
+            .getOrTimeout { snap ->
+                val ultimo = snap?.documents
+                    ?.mapNotNull { it.toObject(InformeEnergetico::class.java) }
+                    ?.maxByOrNull { it.fechaGeneracion }
+                callback(ultimo)
             }
-            .addOnFailureListener { callback(null) }
     }
 
-    fun obtenerInformes(callback: (List<InformeEnergetico>) -> Unit) {
+    fun obtenerInformes(
+        onSuccess: (List<InformeEnergetico>) -> Unit,
+        onError: ((Exception) -> Unit)? = null
+    ) {
         db.collection("informes")
             .whereEqualTo("uid", uid())
-            .orderBy("fechaGeneracion", Query.Direction.DESCENDING)
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.mapNotNull { it.toObject(InformeEnergetico::class.java) })
+            .getOrTimeout { snap ->
+                onSuccess(snap?.documents
+                    ?.mapNotNull { it.toObject(InformeEnergetico::class.java) }
+                    ?.sortedByDescending { it.fechaGeneracion } ?: emptyList())
             }
-            .addOnFailureListener { callback(emptyList()) }
+    }
+
+    // Sobrecarga de compatibilidad para llamadas que no necesitan el error
+    fun obtenerInformes(callback: (List<InformeEnergetico>) -> Unit) =
+        obtenerInformes(onSuccess = callback, onError = null)
+
+    fun eliminarInforme(informeId: String, callback: (Boolean) -> Unit) {
+        db.collection("informes").document(informeId)
+            .delete()
+            .addOnSuccessListener { callback(true) }
+            .addOnFailureListener { callback(false) }
     }
 }

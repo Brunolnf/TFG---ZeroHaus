@@ -487,7 +487,32 @@ private fun NuevoProyectoDialog(
     var fechaFinTexto by remember { mutableStateOf("") }
     var tareas by remember { mutableStateOf(listOf<String>()) }
     var nuevaTarea by remember { mutableStateOf("") }
-    var fechaError by remember { mutableStateOf(false) }
+
+    // Validación: todos los campos son obligatorios. La fecha estimada de fin
+    // debe ser posterior al día de hoy (no permitimos cerrar un proyecto antes
+    // de empezarlo).
+    val sdfEstricto = remember {
+        SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).apply { isLenient = false }
+    }
+    val hoy00 = remember {
+        java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val fechaFinMs = runCatching {
+        if (fechaFinTexto.isBlank()) null else sdfEstricto.parse(fechaFinTexto)?.time
+    }.getOrNull()
+    val errorFecha: String? = when {
+        fechaFinTexto.isBlank() -> null
+        fechaFinMs == null -> "Formato dd/MM/yyyy inválido."
+        fechaFinMs <= hoy00 -> "La fecha debe ser posterior a hoy."
+        else -> null
+    }
+    val fechaOk = fechaFinMs != null && errorFecha == null
+    val fechaError = errorFecha != null
+    val formularioCompleto = titulo.isNotBlank() && descripcion.isNotBlank()
+        && viviendaNombre.isNotBlank() && tareas.isNotEmpty() && fechaOk
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -555,14 +580,11 @@ private fun NuevoProyectoDialog(
                     }
                     OutlinedTextField(
                         value = fechaFinTexto,
-                        onValueChange = {
-                            fechaFinTexto = it
-                            fechaError = false
-                        },
+                        onValueChange = { fechaFinTexto = it },
                         label = { Text("Fin estimado (dd/MM/yyyy)") },
                         singleLine = true,
                         isError = fechaError,
-                        supportingText = if (fechaError) {{ Text("Formato incorrecto. Usa dd/MM/yyyy") }} else null,
+                        supportingText = errorFecha?.let { msg -> { Text(msg) } },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         trailingIcon = { Icon(Icons.Default.CalendarToday, null, tint = gris) }
@@ -619,25 +641,16 @@ private fun NuevoProyectoDialog(
                     ) { Text("Cancelar") }
                     Button(
                         onClick = {
-                            var fechaFin = 0L
-                            if (fechaFinTexto.isNotBlank()) {
-                                try {
-                                    sdf.isLenient = false
-                                    fechaFin = sdf.parse(fechaFinTexto)?.time ?: 0L
-                                } catch (e: Exception) {
-                                    fechaError = true
-                                    return@Button
-                                }
-                            }
+                            // formularioCompleto garantiza fechaFinMs != null cuando enabled = true.
                             onCrear(
                                 titulo.trim(),
                                 descripcion.trim(),
                                 viviendaNombre.trim(),
                                 tareas.map { Tarea(nombre = it) },
-                                fechaFin
+                                fechaFinMs!!
                             )
                         },
-                        enabled = titulo.isNotBlank() && !guardando,
+                        enabled = formularioCompleto && !guardando,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)

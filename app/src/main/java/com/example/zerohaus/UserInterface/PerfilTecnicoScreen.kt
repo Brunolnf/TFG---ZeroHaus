@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.ViewModel.PerfilTecnicoViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -127,13 +128,13 @@ fun PerfilTecnicoScreen(
                                 Spacer(Modifier.height(6.dp))
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(20.dp))
-                                        .background(Color(0xFF065F46).copy(0.12f))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                                        .background(Color(0xFF065F46).copy(0.13f))
+                                        .then(Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                                 ) {
-                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF065F46), modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF065F46), modifier = Modifier.size(16.dp))
                                     Text("Certificado verificado", color = Color(0xFF065F46), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 }
                             }
@@ -288,7 +289,7 @@ fun PerfilTecnicoScreen(
                         if (t.telefono.isNotEmpty()) {
                             OutlinedButton(
                                 onClick = {
-                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${t.telefono}"))
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Telefono.formatoMarcado(t.telefono)}"))
                                     context.startActivity(intent)
                                 },
                                 border = BorderStroke(1.dp, verde),
@@ -305,7 +306,7 @@ fun PerfilTecnicoScreen(
                 }
 
                 // ---- BOTÓN VALORAR ----
-                if (estado.puedeValorar && !estado.yaValorado) {
+                if (estado.puedeValorar) {
                     item {
                         OutlinedButton(
                             onClick = { mostrarFormResena = true },
@@ -316,7 +317,10 @@ fun PerfilTecnicoScreen(
                         ) {
                             Icon(Icons.Default.Star, null, tint = verde, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Escribir valoración", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (estado.yaValorado) "Valorar de nuevo" else "Escribir valoración",
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 } else if (!estado.yaValorado && !estado.cargando) {
@@ -335,6 +339,28 @@ fun PerfilTecnicoScreen(
                                 Icon(Icons.Default.Info, null, tint = gris, modifier = Modifier.size(18.dp))
                                 Text(
                                     "Para valorar a este técnico primero debes completar una reforma con él desde la sección Presupuestos.",
+                                    color = gris,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+                    }
+                } else if (estado.yaValorado && !estado.cargando) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            border = BorderStroke(1.dp, borde),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                Modifier.padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, null, tint = verde, modifier = Modifier.size(18.dp))
+                                Text(
+                                    "Ya has valorado todos tus proyectos completados con este técnico.",
                                     color = gris,
                                     fontSize = 13.sp
                                 )
@@ -457,8 +483,19 @@ fun PerfilTecnicoScreen(
             2 -> "Malo"
             else -> "Muy malo"
         }
+        // Cuando el envío termina con éxito, cerramos el diálogo desde aquí.
+        // Antes se cerraba en el onClick (antes incluso de empezar la escritura),
+        // lo que permitía un segundo tap rápido sobre un botón aún visible →
+        // doble reseña. Ahora dejamos el diálogo en pantalla hasta el éxito real.
+        LaunchedEffect(estado.exitoResena) {
+            if (estado.exitoResena && mostrarFormResena) {
+                mostrarFormResena = false
+                comentario = ""
+                puntuacion = 5
+            }
+        }
         AlertDialog(
-            onDismissRequest = { mostrarFormResena = false },
+            onDismissRequest = { if (!estado.enviandoResena) mostrarFormResena = false },
             title = { Text("Valorar técnico", fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -490,7 +527,8 @@ fun PerfilTecnicoScreen(
                     OutlinedTextField(
                         value = comentario,
                         onValueChange = { comentario = it },
-                        label = { Text("Comentario (opcional)") },
+                        label = { Text("Comentario *") },
+                        placeholder = { Text("Cuenta cómo fue la experiencia (mín. 10 caracteres)", fontSize = 12.sp) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2
@@ -505,18 +543,22 @@ fun PerfilTecnicoScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = {
-                        viewModel.publicarResena(tecnicoId, puntuacion, comentario)
-                        mostrarFormResena = false
-                        comentario = ""
-                        puntuacion = 5
-                    },
-                    enabled = !estado.enviandoResena,
+                    onClick = { viewModel.publicarResena(tecnicoId, puntuacion, comentario) },
+                    enabled = !estado.enviandoResena && comentario.trim().length >= 10,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) { Text("Publicar", color = Color.White) }
+                ) {
+                    if (estado.enviandoResena) {
+                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text("Publicar", color = Color.White)
+                }
             },
             dismissButton = {
-                OutlinedButton(onClick = { mostrarFormResena = false }) { Text("Cancelar") }
+                OutlinedButton(
+                    onClick = { mostrarFormResena = false },
+                    enabled = !estado.enviandoResena
+                ) { Text("Cancelar") }
             }
         )
     }

@@ -23,7 +23,10 @@ data class PreestudioEstado(
     val orientacion: String = "Sur",
     val cargando: Boolean = false,
     val error: String? = null,
-    val informeGenerado: InformeEnergetico? = null
+    val informeGenerado: InformeEnergetico? = null,
+    val viviendas: List<Vivienda> = emptyList(),
+    val viviendaSeleccionada: Vivienda? = null,   // null = formulario manual / nueva vivienda
+    val cargandoViviendas: Boolean = false
 )
 
 class PreestudioViewModel : ViewModel() {
@@ -45,6 +48,8 @@ class PreestudioViewModel : ViewModel() {
     fun cambiarOrientacion(v: String) { estado = estado.copy(orientacion = v) }
 
     fun generarInforme() {
+        if (estado.cargando) return  // evitar llamadas duplicadas
+
         val superficie = estado.superficie.toIntOrNull()
         val anio = estado.anio.toIntOrNull()
 
@@ -53,33 +58,44 @@ class PreestudioViewModel : ViewModel() {
                 { estado = estado.copy(error = "El nombre de la vivienda no puede estar vacío"); return }
             superficie == null || superficie <= 0 || superficie > 5000 ->
                 { estado = estado.copy(error = "Introduce una superficie válida (1–5000 m²)"); return }
-            anio == null || anio < 1900 || anio > 2025 ->
-                { estado = estado.copy(error = "Introduce un año de construcción válido (1900–2025)"); return }
+            anio == null || anio < 1900 || anio > java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) ->
+                { estado = estado.copy(error = "Introduce un año de construcción válido (1900–${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)})"); return }
         }
 
         estado = estado.copy(cargando = true, error = null)
 
-        val vivienda = Vivienda(
-            nombre = estado.nombreVivienda,
-            superficie = superficie!!,
+        val viviendaBase = Vivienda(
+            nombre          = estado.nombreVivienda,
+            superficie      = superficie!!,
             anioConstruccion = anio!!,
-            tipoVentanas = estado.ventanas,
-            aislamiento = estado.aislamiento,
-            calefaccion = estado.calefaccion,
-            acs = estado.acs,
-            direccion = estado.direccion,
-            orientacion = estado.orientacion
+            tipoVentanas    = estado.ventanas,
+            aislamiento     = estado.aislamiento,
+            calefaccion     = estado.calefaccion,
+            acs             = estado.acs,
+            direccion       = estado.direccion,
+            orientacion     = estado.orientacion
         )
 
         viewModelScope.launch {
-            val resultVivienda = suspendCancellableCoroutine { cont ->
-                repoViviendas.guardarVivienda(vivienda) { cont.resume(it) }
+            // Si el usuario eligió una vivienda existente, la reutilizamos sin crear una nueva
+            val viviendaConId: Vivienda
+            val idExistente = estado.viviendaSeleccionada?.id
+
+            if (!idExistente.isNullOrEmpty()) {
+                // Solo usar el ID; NO escribir en Firestore (no crear ni sobrescribir)
+                viviendaConId = viviendaBase.copy(id = idExistente)
+            } else {
+                // Vivienda nueva → guardar en Firestore
+                val resultVivienda = suspendCancellableCoroutine { cont ->
+                    repoViviendas.guardarVivienda(viviendaBase) { cont.resume(it) }
+                }
+                val viviendaId = resultVivienda.getOrElse { e ->
+                    estado = estado.copy(error = e.message, cargando = false)
+                    return@launch
+                }
+                viviendaConId = viviendaBase.copy(id = viviendaId)
             }
-            val viviendaId = resultVivienda.getOrElse { e ->
-                estado = estado.copy(error = e.message, cargando = false)
-                return@launch
-            }
-            val viviendaConId = vivienda.copy(id = viviendaId)
+
             val resultInforme = suspendCancellableCoroutine { cont ->
                 repoInformes.generarInforme(viviendaConId) { cont.resume(it) }
             }
@@ -91,5 +107,38 @@ class PreestudioViewModel : ViewModel() {
 
     fun limpiarInforme() {
         estado = estado.copy(informeGenerado = null)
+    }
+
+    /** Carga las viviendas guardadas del usuario para el selector. */
+    fun cargarViviendas() {
+        estado = estado.copy(cargandoViviendas = true)
+        repoViviendas.obtenerViviendas { lista ->
+            estado = estado.copy(viviendas = lista, cargandoViviendas = false)
+        }
+    }
+
+    /** Rellena el formulario con los datos de una vivienda existente. */
+    fun seleccionarViviendaExistente(vivienda: Vivienda) {
+        estado = estado.copy(
+            viviendaSeleccionada = vivienda,
+            nombreVivienda   = vivienda.nombre,
+            superficie       = vivienda.superficie.toString(),
+            anio             = vivienda.anioConstruccion.toString(),
+            ventanas         = vivienda.tipoVentanas.ifBlank { "Vidrio simple" },
+            aislamiento      = vivienda.aislamiento.ifBlank { "Aislamiento parcial" },
+            calefaccion      = vivienda.calefaccion.ifBlank { "Caldera de gas" },
+            acs              = vivienda.acs.ifBlank { "Gas" },
+            direccion        = vivienda.direccion,
+            orientacion      = vivienda.orientacion.ifBlank { "Sur" },
+            error            = null
+        )
+    }
+
+    /** Limpia la selección y resetea el formulario para introducir una vivienda nueva. */
+    fun usarNuevaVivienda() {
+        estado = PreestudioEstado(
+            viviendas = estado.viviendas,
+            viviendaSeleccionada = null
+        )
     }
 }

@@ -25,6 +25,23 @@ object NotificacionesLocales {
 
     private var appContext: Context? = null
 
+    // Deduplicación: si la misma notificación (titulo+cuerpo+tipo) llega varias
+    // veces en una ventana corta, mostramos solo la primera. Cubre los duplicados
+    // típicos (Cloud Function disparándose dos veces, push FCM repetido por el
+    // servidor, retries del transporte, etc.) sin tener que tocar el backend.
+    private const val VENTANA_DEDUP_MS = 3000L
+    private var ultimaKey: String? = null
+    private var ultimaKeyMs: Long = 0L
+
+    private fun esDuplicado(titulo: String, cuerpo: String, tipo: String): Boolean {
+        val key = "$titulo|$cuerpo|$tipo"
+        val ahora = System.currentTimeMillis()
+        val esRepe = key == ultimaKey && (ahora - ultimaKeyMs) < VENTANA_DEDUP_MS
+        ultimaKey = key
+        ultimaKeyMs = ahora
+        return esRepe
+    }
+
     fun crearCanales(context: Context) {
         appContext = context.applicationContext
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -73,6 +90,7 @@ object NotificacionesLocales {
     }
 
     fun mostrar(context: Context, titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
+        if (esDuplicado(titulo, cuerpo, tipo)) return
         val canalId = when (tipo) {
             "chat", "mensaje" -> CANAL_CHAT
             "presupuesto"     -> CANAL_PRESUPUESTO

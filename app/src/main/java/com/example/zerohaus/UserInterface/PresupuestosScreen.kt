@@ -1,4 +1,4 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -24,6 +24,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.zerohaus.Modelos.SolicitudPresupuesto
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Modelos.estaExpirada
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.PresupuestosViewModel
@@ -48,16 +49,18 @@ fun PresupuestosScreen(
     var solicitudFicha by remember { mutableStateOf<SolicitudPresupuesto?>(null) }     // técnico: enviar ficha
     var solicitudVerFicha by remember { mutableStateOf<SolicitudPresupuesto?>(null) }  // cliente: ver y aceptar ficha
     var solicitudPagar by remember { mutableStateOf<SolicitudPresupuesto?>(null) }     // cliente: pagar
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(estado.mensaje, estado.error) {
-        estado.mensaje?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-        estado.error?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-    }
+    var solicitudACancelar by remember { mutableStateOf<SolicitudPresupuesto?>(null) } // cliente: cancelar/borrar
     LaunchedEffect(Unit) { viewModel.cargarMisSolicitudes() }
 
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensaje ?: estado.error,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -109,7 +112,7 @@ fun PresupuestosScreen(
                     modifier = Modifier.padding(pv).fillMaxSize().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(lista) { s ->
+                    items(lista, key = { it.id }) { s ->
                         if (esTecnico) {
                             TarjetaRecibida(s, sdf, verde, gris,
                                 onResponder = { solicitudResponder = s },
@@ -119,11 +122,12 @@ fun PresupuestosScreen(
                             )
                         } else {
                             TarjetaEnviada(s, sdf, verde, gris,
-                                onAceptar = { viewModel.aceptarPresupuesto(s.id) },
-                                onRechazar = { viewModel.rechazarPresupuesto(s.id) },
+                                onAceptar   = { viewModel.aceptarPresupuesto(s.id) },
+                                onRechazar  = { viewModel.rechazarPresupuesto(s.id) },
                                 onCompletar = { solicitudCompletar = s },
-                                onVerFicha = { solicitudVerFicha = s },
-                                onPagar = { solicitudPagar = s }
+                                onVerFicha  = { solicitudVerFicha = s },
+                                onPagar     = { solicitudPagar = s },
+                                onCancelar  = { solicitudACancelar = s }
                             )
                         }
                     }
@@ -196,7 +200,31 @@ fun PresupuestosScreen(
         )
     }
 
-    // Diálogo del cliente: pagar (PayPal / Bizum / Otro)
+    // Confirmación: cancelar solicitud
+    solicitudACancelar?.let { s ->
+        AlertDialog(
+            onDismissRequest = { solicitudACancelar = null },
+            icon  = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
+            title = { Text("Cancelar solicitud", fontWeight = FontWeight.SemiBold) },
+            text  = {
+                Text("¿Quieres cancelar la solicitud enviada a ${s.tecnicoNombre}? Esta acción no se puede deshacer.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.cancelarSolicitud(s.id)
+                        solicitudACancelar = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) { Text("Cancelar solicitud", color = Color.White) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { solicitudACancelar = null }) { Text("Volver") }
+            }
+        )
+    }
+
+    // Diálogo del cliente: pagar (tarjeta / efectivo)
     solicitudPagar?.let { s ->
         PagarDialog(
             solicitud = s,
@@ -221,11 +249,13 @@ private fun TarjetaEnviada(
     onRechazar: () -> Unit,
     onCompletar: () -> Unit,
     onVerFicha: () -> Unit,
-    onPagar: () -> Unit
+    onPagar: () -> Unit,
+    onCancelar: () -> Unit
 ) {
     val borde = MaterialTheme.colorScheme.outline
-    val colorEstado = colorEstado(s.estado, verde, gris)
-    val etiquetaEstado = etiquetaEstado(s.estado)
+    val expirada = s.estaExpirada
+    val colorEstado = if (expirada) Color(0xFF991B1B) else colorEstado(s.estado, verde, gris)
+    val etiquetaEstado = if (expirada) "Expirada" else etiquetaEstado(s.estado)
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -246,7 +276,7 @@ private fun TarjetaEnviada(
             }
 
             // Bloque de presupuesto recibido del técnico
-            if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
+            if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "FichaRechazada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
                 Spacer(Modifier.height(10.dp))
                 Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))) {
                     Column(Modifier.padding(12.dp)) {
@@ -282,6 +312,38 @@ private fun TarjetaEnviada(
 
             // Acciones según estado
             when (s.estado) {
+                "Pendiente" -> {
+                    Spacer(Modifier.height(12.dp))
+                    // Aviso extra si ha expirado
+                    if (expirada) {
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
+                        ) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Timer, null, tint = Color(0xFF991B1B), modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Esta solicitud lleva más de 30 días sin respuesta.",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF991B1B)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    OutlinedButton(
+                        onClick = onCancelar,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFDC2626)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626))
+                    ) {
+                        Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Cancelar solicitud", fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 "Presupuestado" -> {
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -323,6 +385,16 @@ private fun TarjetaEnviada(
                         Text("Revisar y aceptar ficha", color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
+                "FichaRechazada" -> {
+                    Spacer(Modifier.height(12.dp))
+                    Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.HourglassEmpty, null, tint = Color(0xFFD97706), modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Has rechazado la ficha. Esperando que el técnico envíe una nueva.", fontSize = 12.sp, color = Color(0xFF92400E))
+                        }
+                    }
+                }
                 "EnCurso" -> {
                     Spacer(Modifier.height(12.dp))
                     Card(shape = RoundedCornerShape(10.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
@@ -354,11 +426,9 @@ private fun TarjetaEnviada(
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 val medio = when (s.metodoPago) {
-                                    "paypal" -> "PayPal"
-                                    "bizum" -> "Bizum"
                                     "tarjeta" -> "tarjeta"
                                     "efectivo" -> "efectivo"
-                                    else -> "transferencia / efectivo"
+                                    else -> "otro medio"
                                 }
                                 Text("Pago por $medio en verificación", fontSize = 12.sp, color = Color(0xFF92400E), fontWeight = FontWeight.SemiBold)
                                 Text("Esperando que ${s.tecnicoNombre} confirme la recepción.", fontSize = 11.sp, color = Color(0xFF92400E))
@@ -421,7 +491,7 @@ private fun TarjetaRecibida(
             }
 
             // Presupuesto enviado
-            if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
+            if (s.estado in listOf("Presupuestado", "Aceptado", "FichaEnviada", "FichaRechazada", "EnCurso", "PendientePago", "PagoEnVerificacion", "Completado")) {
                 Spacer(Modifier.height(8.dp))
                 Text("Tu presupuesto: ${Formato.formatMoneda(s.precioPresupuesto)}", color = verde, fontWeight = FontWeight.SemiBold)
                 if (s.respuestaTecnico.isNotEmpty()) {
@@ -469,6 +539,19 @@ private fun TarjetaRecibida(
                         }
                     }
                 }
+                "FichaRechazada" -> {
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onEnviarFicha,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                    ) {
+                        Icon(Icons.Default.Description, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Reenviar ficha ajustada", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
                 "EnCurso" -> {
                     Spacer(Modifier.height(12.dp))
                     OutlinedButton(
@@ -501,9 +584,9 @@ private fun TarjetaRecibida(
                                 Icon(Icons.Default.Info, null, tint = Color(0xFF0284C7), modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(8.dp))
                                 val medio = when (s.metodoPago) {
-                                    "paypal" -> "PayPal"
-                                    "bizum" -> "Bizum"
-                                    else -> "transferencia / efectivo"
+                                    "tarjeta" -> "tarjeta"
+                                    "efectivo" -> "efectivo"
+                                    else -> "otro medio"
                                 }
                                 Text("${s.nombreCliente} dice haber pagado por $medio", fontSize = 12.sp, color = Color(0xFF0C4A6E), fontWeight = FontWeight.SemiBold)
                             }
@@ -552,6 +635,7 @@ private fun colorEstado(estado: String, verde: Color, gris: Color): Color = when
     "Presupuestado" -> Color(0xFF2563EB)
     "Aceptado" -> verde
     "FichaEnviada" -> Color(0xFF7C3AED)
+    "FichaRechazada" -> Color(0xFFDC2626)
     "EnCurso" -> Color(0xFF0EA5E9)
     "PendientePago" -> Color(0xFFD97706)
     "PagoEnVerificacion" -> Color(0xFF0284C7)
@@ -562,6 +646,7 @@ private fun colorEstado(estado: String, verde: Color, gris: Color): Color = when
 
 private fun etiquetaEstado(estado: String): String = when (estado) {
     "FichaEnviada" -> "Ficha enviada"
+    "FichaRechazada" -> "Ficha rechazada"
     "EnCurso" -> "En curso"
     "PendientePago" -> "Pendiente pago"
     "PagoEnVerificacion" -> "Verificando pago"
@@ -579,6 +664,8 @@ private fun ResponderDialog(
     var precio by remember { mutableStateOf("") }
     var respuesta by remember { mutableStateOf("") }
     val precioValido = precio.toDoubleOrNull()?.let { it > 0 } == true
+    val respuestaValida = respuesta.trim().isNotEmpty()
+    val formularioValido = precioValido && respuestaValida
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -591,7 +678,10 @@ private fun ResponderDialog(
                 }
                 OutlinedTextField(
                     value = precio,
-                    onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$"))) precio = it },
+                    onValueChange = { raw ->
+                        val normalizado = raw.replace(',', '.')
+                        if (normalizado.matches(Regex("^\\d*\\.?\\d*$"))) precio = normalizado
+                    },
                     label = { Text("Precio (${Formato.simboloMoneda()})") },
                     leadingIcon = { Icon(Icons.Default.Euro, null) },
                     singleLine = true,
@@ -603,7 +693,8 @@ private fun ResponderDialog(
                 OutlinedTextField(
                     value = respuesta,
                     onValueChange = { respuesta = it },
-                    label = { Text("Mensaje (opcional)") },
+                    label = { Text("Mensaje al cliente *") },
+                    placeholder = { Text("Explica qué incluye el presupuesto, plazos, materiales…", fontSize = 12.sp) },
                     minLines = 3,
                     maxLines = 5,
                     shape = RoundedCornerShape(12.dp),
@@ -615,7 +706,7 @@ private fun ResponderDialog(
         confirmButton = {
             Button(
                 onClick = { onEnviar(precio.toDouble(), respuesta.trim()) },
-                enabled = precioValido && !respondiendo,
+                enabled = formularioValido && !respondiendo,
                 colors = ButtonDefaults.buttonColors(containerColor = verde)
             ) {
                 if (respondiendo) {
@@ -649,14 +740,53 @@ private fun FichaInicioDialog(
     var fechaInicioTexto by remember { mutableStateOf("") }
     var fechaFinTexto by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
-    var precio by remember { mutableStateOf(solicitud.precioPresupuesto.takeIf { it > 0 }?.let { "%.2f".format(it) } ?: "") }
+    // Formateamos con Locale.US para que el separador decimal sea PUNTO, no coma.
+    // Con coma (locale ES) el campo no se podría parsear con toDoubleOrNull() y el
+    // botón "Enviar ficha" quedaría bloqueado.
+    var precio by remember { mutableStateOf(solicitud.precioPresupuesto.takeIf { it > 0 }?.let { String.format(Locale.US, "%.2f", it) } ?: "") }
     var tareas by remember { mutableStateOf(listOf<String>()) }
     var nuevaTarea by remember { mutableStateOf("") }
-    var fechaError by remember { mutableStateOf(false) }
 
     val precioNum = precio.toDoubleOrNull()
     val precioOk = precioNum != null && precioNum > 0
     val descripcionOk = descripcion.trim().isNotEmpty()
+    val tareasOk = tareas.isNotEmpty()
+
+    // Validación de fechas. Reglas:
+    //  - Ambas son obligatorias.
+    //  - Formato dd/MM/yyyy estricto (lenient = false rechaza 32/13/2025).
+    //  - Inicio: posterior al día de hoy (00:00).
+    //  - Fin: como mínimo 2 días después del inicio, como máximo 3 años.
+    // Si algún campo no cumple, el botón "Enviar ficha" queda deshabilitado
+    // y se muestra el mensaje concreto debajo de los campos de fecha.
+    val sdfEstricto = remember {
+        java.text.SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).apply { isLenient = false }
+    }
+    fun parsear(t: String): Long? =
+        if (t.isBlank()) null else runCatching { sdfEstricto.parse(t)?.time }.getOrNull()
+    val hoy00 = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val DIA_MS = 24L * 60 * 60 * 1000
+    val MIN_DIAS_REFORMA = 2
+    val MAX_ANIOS_REFORMA = 3
+    val fIniMs = parsear(fechaInicioTexto)
+    val fFinMs = parsear(fechaFinTexto)
+    val errorFechas: String? = when {
+        fechaInicioTexto.isBlank() || fechaFinTexto.isBlank() -> null      // aún rellenando
+        fIniMs == null || fFinMs == null -> "Formato de fecha inválido. Usa dd/MM/yyyy."
+        fIniMs <= hoy00 -> "La fecha de inicio debe ser posterior a hoy."
+        fFinMs < fIniMs + MIN_DIAS_REFORMA * DIA_MS ->
+            "La fecha de fin debe ser al menos $MIN_DIAS_REFORMA días después del inicio."
+        fFinMs > fIniMs + MAX_ANIOS_REFORMA * 365L * DIA_MS ->
+            "La fecha de fin no puede ser más de $MAX_ANIOS_REFORMA años después del inicio."
+        else -> null
+    }
+    val fechasOk = fIniMs != null && fFinMs != null && errorFechas == null
+    val fechaError = errorFechas != null
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -697,8 +827,8 @@ private fun FichaInicioDialog(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         OutlinedTextField(
                             value = fechaInicioTexto,
-                            onValueChange = { fechaInicioTexto = it; fechaError = false },
-                            label = { Text("Inicio dd/MM/yyyy") },
+                            onValueChange = { fechaInicioTexto = it },
+                            label = { Text("Inicio dd/MM/yyyy *") },
                             singleLine = true,
                             isError = fechaError,
                             shape = RoundedCornerShape(12.dp),
@@ -706,20 +836,23 @@ private fun FichaInicioDialog(
                         )
                         OutlinedTextField(
                             value = fechaFinTexto,
-                            onValueChange = { fechaFinTexto = it; fechaError = false },
-                            label = { Text("Fin dd/MM/yyyy") },
+                            onValueChange = { fechaFinTexto = it },
+                            label = { Text("Fin dd/MM/yyyy *") },
                             singleLine = true,
                             isError = fechaError,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    if (fechaError) {
-                        Text("Formato de fechas incorrecto. Usa dd/MM/yyyy", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    errorFechas?.let { msg ->
+                        Text(msg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                     OutlinedTextField(
                         value = precio,
-                        onValueChange = { if (it.matches(Regex("^\\d*\\.?\\d*$"))) precio = it },
+                        onValueChange = { raw ->
+                            val normalizado = raw.replace(',', '.')
+                            if (normalizado.matches(Regex("^\\d*\\.?\\d*$"))) precio = normalizado
+                        },
                         label = { Text("Precio final acordado (${Formato.simboloMoneda()}) *") },
                         leadingIcon = { Icon(Icons.Default.Euro, null) },
                         singleLine = true,
@@ -770,18 +903,12 @@ private fun FichaInicioDialog(
                     OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text("Cancelar") }
                     Button(
                         onClick = {
-                            var fIni = 0L
-                            var fFin = 0L
-                            try {
-                                sdf.isLenient = false
-                                if (fechaInicioTexto.isNotBlank()) fIni = sdf.parse(fechaInicioTexto)?.time ?: 0L
-                                if (fechaFinTexto.isNotBlank()) fFin = sdf.parse(fechaFinTexto)?.time ?: 0L
-                            } catch (e: Exception) {
-                                fechaError = true; return@Button
-                            }
-                            onEnviar(fIni, fFin, descripcion.trim(), precioNum ?: 0.0, tareas)
+                            // Las validaciones ya se han hecho arriba en tiempo real;
+                            // si llegamos aquí es porque enabled = true, así que las
+                            // fechas están parseadas y dentro de los rangos válidos.
+                            onEnviar(fIniMs!!, fFinMs!!, descripcion.trim(), precioNum ?: 0.0, tareas)
                         },
-                        enabled = !enviando && precioOk && descripcionOk,
+                        enabled = !enviando && precioOk && descripcionOk && fechasOk && tareasOk,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
@@ -860,7 +987,8 @@ private fun VerFichaDialog(
                     OutlinedTextField(
                         value = motivo,
                         onValueChange = { motivo = it },
-                        label = { Text("Motivo (opcional)") },
+                        label = { Text("Motivo *") },
+                        placeholder = { Text("Explica al técnico qué tiene que ajustar", fontSize = 12.sp) },
                         minLines = 2,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -872,6 +1000,7 @@ private fun VerFichaDialog(
             if (mostrarRechazar) {
                 Button(
                     onClick = { onRechazar(motivo.trim()) },
+                    enabled = motivo.trim().length >= 5,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
                 ) { Text("Confirmar rechazo", color = Color.White) }
             } else {
@@ -967,7 +1096,6 @@ private fun PagarDialog(
                 }
 
                 when (metodoElegido) {
-                    // ── Selección de método ──
                     null -> {
                         Text("¿Cómo quieres pagar?", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
 
@@ -1006,7 +1134,6 @@ private fun PagarDialog(
                         }
                     }
 
-                    // ── Formulario de tarjeta ──
                     "tarjeta" -> {
                         if (pagoTarjetaOk) {
                             // Pago confirmado
@@ -1105,7 +1232,6 @@ private fun PagarDialog(
                         }
                     }
 
-                    // ── Efectivo ──
                     "efectivo" -> {
                         Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))) {
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -2,6 +2,7 @@
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -39,18 +40,27 @@ fun MainScaffold(
     var actual by remember { mutableStateOf("inicio") }
     LaunchedEffect(Unit) { chatViewModel.cargarChats() }
     val noLeidos = chatViewModel.contarNoLeidos()
+    val notificaciones = panelViewModel.estado.notificaciones
+    val noLeidasInicio = notificaciones.count { !it.leida && it.tipo in listOf("presupuesto", "proyecto") }
 
-    Scaffold(bottomBar = {
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
             tabs.forEachIndexed { idx, (ruta, icono) ->
+                val badge = when (ruta) {
+                    "mensajes" -> noLeidos
+                    "inicio" -> noLeidasInicio
+                    else -> 0
+                }
                 NavigationBarItem(
                     selected = actual == ruta,
                     onClick = { actual = ruta; if (ruta == "mensajes") chatViewModel.cargarChats() },
                     icon = {
-                        if (ruta == "mensajes" && noLeidos > 0) {
+                        if (badge > 0) {
                             BadgedBox(badge = {
                                 Badge(containerColor = Color(0xFFEF4444)) {
-                                    Text("$noLeidos", color = Color.White, fontSize = 10.sp)
+                                    Text("$badge", color = Color.White, fontSize = 10.sp)
                                 }
                             }) { Icon(icono, ruta) }
                         } else {
@@ -67,7 +77,10 @@ fun MainScaffold(
             }
         }
     }) { pv ->
-        Box(Modifier.padding(pv)) {
+        // Solo aplicamos el padding inferior (barra de navegación). Cada pantalla
+        // interna tiene su propio Scaffold/TopAppBar que gestiona el inset superior,
+        // así evitamos doblar la altura de la status bar.
+        Box(Modifier.padding(bottom = pv.calculateBottomPadding())) {
             when (actual) {
                 "inicio" -> PanelScreen(panelViewModel, onNuevoPreestudio, onMisViviendas, onMisProyectos, onPresupuestos, onHistorialInformes, onGraficas, onVerUltimoInforme, onPerfil, onAjustes)
                 "mensajes" -> ChatsListScreen(chatViewModel, { actual = "inicio" }, onChats)
@@ -83,12 +96,11 @@ private fun PantallaExplorar(
     onBuscarTecnicos: () -> Unit, onMapaTecnicos: () -> Unit, onRankings: () -> Unit
 ) {
     val c = LocalCadenas.current
-    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(c.explorarTitulo, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
         Text(c.explorarSubtitulo, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))
-        Opc(Icons.Default.Place, Color(0xFF2563EB), c.explorarBuscarTecnicos, c.explorarBuscarTecnicosSub, onBuscarTecnicos)
+        Opc(Icons.Default.Search, Color(0xFF2563EB), c.explorarBuscarTecnicos, c.explorarBuscarTecnicosSub, onBuscarTecnicos)
         Opc(Icons.Default.LocationOn, Color(0xFFD97706), c.explorarMapaTecnicos, c.explorarMapaTecnicosSub, onMapaTecnicos)
         Opc(Icons.Default.Star, Color(0xFFEA580C), c.explorarRankings, c.explorarRankingsSub, onRankings)
     }
@@ -100,8 +112,7 @@ private fun PantallaMas(
     onSobreApp: () -> Unit, onCerrarSesion: () -> Unit
 ) {
     val c = LocalCadenas.current
-    Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Spacer(Modifier.height(8.dp))
+    Column(Modifier.fillMaxSize().statusBarsPadding().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(c.masTitulo, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
         Text(c.masSubtitulo, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))

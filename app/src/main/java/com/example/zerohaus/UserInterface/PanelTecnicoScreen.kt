@@ -1,6 +1,7 @@
 package com.example.zerohaus.UserInterface
 
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -20,7 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.CertificadoViewModel
@@ -50,20 +53,27 @@ fun PanelTecnicoScreen(
     val panelEstado = panelViewModel.estado
     val certEstado = certificadoViewModel.estado
 
+    val context = LocalContext.current
     var mostrarNotif by remember { mutableStateOf(false) }
     var mostrarCert by remember { mutableStateOf(false) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { certificadoViewModel.seleccionarArchivo(it, "archivo") }
+        if (uri != null && certEstado.puedeAgregar) {
+            val nombre = context.contentResolver
+                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { if (it.moveToFirst()) it.getString(0) else null }
+                ?: uri.lastPathSegment ?: "archivo"
+            certificadoViewModel.agregarArchivo(uri, nombre)
+        }
     }
 
     LaunchedEffect(Unit) {
         viewModel.cargar()
         panelViewModel.cargarDatos()
-        certificadoViewModel.cargarCertificados()
     }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -185,63 +195,12 @@ fun PanelTecnicoScreen(
                     badge = null,
                     onClick = onEstadisticas
                 )
-
-                // ── Mis certificados ──
-                if (certEstado.tieneAlguno) {
-                    Card(
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.VerifiedUser, null, tint = verde, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Mis certificados", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                            }
-                            certEstado.certificados.forEach { cert ->
-                                val (bgColor, textColor, etiqueta, icono) = when {
-                                    cert.verificado -> listOf(Color(0xFFDCFCE7), Color(0xFF065F46), "Verificado ✓", Icons.Default.CheckCircle)
-                                    cert.rechazado  -> listOf(Color(0xFFFEE2E2), Color(0xFF991B1B), "Rechazado", Icons.Default.Cancel)
-                                    else            -> listOf(Color(0xFFFEF3C7), Color(0xFF92400E), "Pendiente revisión", Icons.Default.HourglassEmpty)
-                                }
-                                @Suppress("UNCHECKED_CAST")
-                                val bg = bgColor as Color; val tc = textColor as Color
-                                val lbl = etiqueta as String
-                                @Suppress("UNCHECKED_CAST")
-                                val ic = icono as androidx.compose.ui.graphics.vector.ImageVector
-                                Card(
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = CardDefaults.cardColors(containerColor = bg),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(Modifier.padding(10.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(ic, null, tint = tc, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(cert.nombre, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = tc, modifier = Modifier.weight(1f))
-                                            Box(
-                                                Modifier.clip(RoundedCornerShape(6.dp)).background(tc.copy(0.15f)).padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) { Text(lbl, color = tc, fontSize = 10.sp, fontWeight = FontWeight.Bold) }
-                                        }
-                                        if (cert.rechazado && cert.motivoRechazo.isNotBlank()) {
-                                            Spacer(Modifier.height(4.dp))
-                                            Text("Motivo: ${cert.motivoRechazo}", fontSize = 12.sp, color = tc.copy(0.85f))
-                                        }
-                                        Text(cert.tipo, fontSize = 11.sp, color = tc.copy(0.7f))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             Spacer(Modifier.height(20.dp))
         }
     }
 
-    // ── Diálogo de notificaciones ──
     if (mostrarNotif) {
         AlertDialog(
             onDismissRequest = { mostrarNotif = false },
@@ -297,7 +256,6 @@ fun PanelTecnicoScreen(
         )
     }
 
-    // ── Diálogo de subir certificado/documento ──
     if (mostrarCert) {
         var abrirT by remember { mutableStateOf(false) }
         AlertDialog(
@@ -305,6 +263,7 @@ fun PanelTecnicoScreen(
             title = { Text(c.panelSubirCertificado, fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
                     OutlinedTextField(
                         value = certEstado.nombre,
                         onValueChange = { certificadoViewModel.cambiarNombre(it) },
@@ -313,12 +272,18 @@ fun PanelTecnicoScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+
                     Box(Modifier.fillMaxWidth()) {
                         OutlinedTextField(
-                            value = certEstado.tipo,
+                            value = certEstado.tipo.ifBlank { "Selecciona un tipo" },
                             onValueChange = {},
                             readOnly = true,
                             label = { Text(c.panelTipoLabel) },
+                            textStyle = LocalTextStyle.current.copy(
+                                color = if (certEstado.tipoSeleccionado)
+                                    MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             trailingIcon = {
                                 IconButton(onClick = { abrirT = true }) {
                                     Icon(Icons.Default.ArrowDropDown, null)
@@ -335,24 +300,90 @@ fun PanelTecnicoScreen(
                             }
                         }
                     }
-                    OutlinedButton(
-                        onClick = { filePicker.launch("*/*") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (certEstado.archivoUri != null) c.panelArchivoSeleccionado else c.panelSeleccionarArchivo)
+                        Text(
+                            "Archivos (${certEstado.archivos.size}/6)",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 13.sp
+                        )
+                        if (certEstado.archivos.isNotEmpty() && certEstado.puedeAgregar) {
+                            TextButton(
+                                onClick = { filePicker.launch("*/*") },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(2.dp))
+                                Text("Añadir", fontSize = 12.sp)
+                            }
+                        }
                     }
+
+                    if (certEstado.archivos.isEmpty()) {
+                        OutlinedButton(
+                            onClick = { filePicker.launch("*/*") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.AttachFile, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(c.panelSeleccionarArchivo)
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            certEstado.archivos.forEachIndexed { index, archivo ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.InsertDriveFile, null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = verde
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        archivo.nombre,
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    IconButton(
+                                        onClick = { certificadoViewModel.eliminarArchivo(index) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Close, null,
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     if (certEstado.cargando) LinearProgressIndicator(Modifier.fillMaxWidth(), color = verde)
-                    certEstado.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (certEstado.exito) Text(c.panelCertificadoSubido, color = verde)
+                    certEstado.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                    if (certEstado.exito) Text(c.panelCertificadoSubido, color = verde, fontSize = 12.sp)
                 }
             },
             confirmButton = {
                 Button(
                     onClick = { certificadoViewModel.subirCertificado() },
-                    enabled = !certEstado.cargando && certEstado.archivoUri != null && certEstado.nombre.isNotBlank(),
+                    enabled = certEstado.listo && !certEstado.cargando,
                     colors = ButtonDefaults.buttonColors(containerColor = verde)
                 ) { Text(c.subir, color = Color.White) }
             },

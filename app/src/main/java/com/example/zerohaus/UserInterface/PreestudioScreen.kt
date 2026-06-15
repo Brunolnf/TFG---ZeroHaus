@@ -1,4 +1,4 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.PreestudioViewModel
+import com.example.zerohaus.Modelos.Vivienda
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +31,9 @@ fun PreestudioScreen(
     val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
 
+
+    // Cargar viviendas guardadas para el selector
+    LaunchedEffect(Unit) { viewModel.cargarViviendas() }
 
     // Cuando se genera el informe, navegar automáticamente
     LaunchedEffect(estado.informeGenerado) {
@@ -60,6 +64,58 @@ fun PreestudioScreen(
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (estado.cargandoViviendas || estado.viviendas.isNotEmpty()) {
+                    Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp)) {
+                            CabeceraSeccion(
+                                iconoColorFondo = Color(0xFFECFDF5),
+                                iconoTint       = Color(0xFF059669),
+                                icono           = Icons.Default.Home,
+                                titulo          = "Vivienda del estudio"
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            if (estado.cargandoViviendas) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = verde
+                                    )
+                                    Text("Cargando viviendas guardadas…", fontSize = 13.sp, color = gris)
+                                }
+                            } else {
+                                ViviendaSelectorDropdown(
+                                    seleccionada = estado.viviendaSeleccionada,
+                                    viviendas    = estado.viviendas,
+                                    borde        = borde,
+                                    verde        = verde,
+                                    onNueva      = { viewModel.usarNuevaVivienda() },
+                                    onSeleccionar = { v -> viewModel.seleccionarViviendaExistente(v) }
+                                )
+                                if (estado.viviendaSeleccionada != null) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, null,
+                                            tint = Color(0xFF059669),
+                                            modifier = Modifier.size(14.dp))
+                                        Text(
+                                            "Datos cargados de «${estado.viviendaSeleccionada!!.nombre}»",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF059669)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Datos básicos
                 Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp)) {
@@ -130,10 +186,22 @@ fun PreestudioScreen(
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
 
+                // Validación: TODOS los campos son obligatorios. La superficie tiene
+                // que ser un entero > 0 y el año entre 1900 y el año actual.
+                val anioActual = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
+                val superficieOk = estado.superficie.toIntOrNull()?.let { it > 0 } == true
+                val anioOk = estado.anio.toIntOrNull()?.let { it in 1900..anioActual } == true
+                val preestudioCompleto = estado.nombreVivienda.isNotBlank()
+                    && superficieOk && anioOk
+                    && estado.direccion.isNotBlank()
+                    && estado.ventanas.isNotBlank() && estado.aislamiento.isNotBlank()
+                    && estado.calefaccion.isNotBlank() && estado.acs.isNotBlank()
+                    && estado.orientacion.isNotBlank()
+
                 // Botón generar informe
                 Button(
                     onClick = { viewModel.generarInforme() },
-                    enabled = !estado.cargando,
+                    enabled = !estado.cargando && preestudioCompleto,
                     colors = ButtonDefaults.buttonColors(containerColor = verde),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -184,6 +252,77 @@ private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: St
         ),
         modifier = Modifier.fillMaxWidth()
     )
+}
+
+/** Dropdown que lista las viviendas guardadas + opción "Nueva vivienda". */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ViviendaSelectorDropdown(
+    seleccionada: Vivienda?,
+    viviendas: List<Vivienda>,
+    borde: Color,
+    verde: Color,
+    onNueva: () -> Unit,
+    onSeleccionar: (Vivienda) -> Unit
+) {
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    var expandido by remember { mutableStateOf(false) }
+    val textoMostrado = seleccionada?.nombre ?: "Nueva vivienda"
+
+    EtiquetaCampo("Usar datos de una vivienda guardada")
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
+        OutlinedTextField(
+            value = textoMostrado,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            leadingIcon = {
+                Icon(
+                    if (seleccionada != null) Icons.Default.Home else Icons.Default.Add,
+                    null,
+                    tint = if (seleccionada != null) Color(0xFF059669) else gris,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = borde,
+                focusedBorderColor   = verde,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor   = MaterialTheme.colorScheme.surface
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = verde, modifier = Modifier.size(16.dp))
+                        Text("Nueva vivienda", fontWeight = FontWeight.SemiBold)
+                    }
+                },
+                onClick = { onNueva(); expandido = false }
+            )
+            if (viviendas.isNotEmpty()) HorizontalDivider()
+            viviendas.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(v.nombre) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Home, null,
+                            tint = gris,
+                            modifier = Modifier.size(16.dp))
+                    },
+                    onClick = { onSeleccionar(v); expandido = false }
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

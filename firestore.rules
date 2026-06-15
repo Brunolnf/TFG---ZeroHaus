@@ -2,7 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── helpers ───
     function logueado() { return request.auth != null; }
     function esMio(uid) { return logueado() && request.auth.uid == uid; }
     function uid()      { return request.auth.uid; }
@@ -15,7 +14,6 @@ service cloud.firestore {
       return logueado() && request.auth.token.email == 'brulinf9@gmail.com';
     }
 
-    // ─── USUARIOS ───
     // Lectura abierta a logueados (necesario para ver nombre en chats, listas de técnicos).
     // El admin puede crear/editar/eliminar cualquier usuario desde el panel.
     match /usuarios/{userId} {
@@ -23,7 +21,6 @@ service cloud.firestore {
       allow create, update, delete: if esMio(userId) || esAdmin();
     }
 
-    // ─── VIVIENDAS ───
     match /viviendas/{docId} {
       allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
       allow create: if (logueado() && request.resource.data.uid == uid()) || esAdmin();
@@ -31,7 +28,6 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
-    // ─── INFORMES ENERGÉTICOS ───
     match /informes/{docId} {
       allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
       allow create: if (logueado() && request.resource.data.uid == uid()) || esAdmin();
@@ -39,7 +35,6 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
-    // ─── PROYECTOS ───
     match /proyectos/{docId} {
       allow read: if logueado() && (
         resource.data.uid == uid() ||
@@ -57,7 +52,6 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
-    // ─── TÉCNICOS (perfil público) ───
     // El admin puede crear/actualizar/eliminar cualquier perfil técnico (necesario
     // al crear usuario tipo Técnico o eliminar uno desde el panel admin).
     // Self-claim: como el docId siempre coincide con el uid del dueño, permitimos
@@ -82,7 +76,6 @@ service cloud.firestore {
                     || esAdmin();
     }
 
-    // ─── NOTIFICACIONES ───
     // Cada usuario lee y marca leídas las suyas. Se permiten tanto
     // self-notifications (confirmaciones de acciones propias del cliente
     // al actor) como notificaciones a OTROS (notificación de evento a
@@ -99,7 +92,6 @@ service cloud.firestore {
                     && request.resource.data.detalle.size() <= 1000;
     }
 
-    // ─── SOLICITUDES ───
     match /solicitudes/{docId} {
       allow read: if logueado() && (
         resource.data.uidCliente == uid() ||
@@ -116,15 +108,24 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uidCliente == uid()) || esAdmin();
     }
 
-    // ─── CERTIFICADOS ───
+    // Lectura abierta a logueados (necesario para tres flujos):
+    //   1) Técnico ve los suyos (`whereEqualTo("uid", miUid)`).
+    //   2) Admin ve TODOS para aprobar/rechazar (sin filtro).
+    //   3) Cliente ve los del técnico al abrir su perfil, para pintar el
+    //      badge "verificado" (`whereEqualTo("uid", tecnicoUid)`).
+    // Sin esta apertura, los puntos 2 y 3 recibían PERMISSION_DENIED y la
+    // pantalla del admin mostraba "No hay certificados subidos" aunque los
+    // hubiera (el repo se traga el error y devuelve emptyList).
     match /certificados/{docId} {
-      allow read:   if logueado() && resource.data.uid == uid();
+      allow read:   if logueado();
       allow create: if logueado() && request.resource.data.uid == uid();
-      allow update: if logueado() && resource.data.uid == uid() && noMuta('uid');
+      // Aprobar / rechazar (campos verificado, rechazado, motivoRechazo,
+      // fechaVerificacion) lo hace EXCLUSIVAMENTE el admin desde su panel.
+      // El propio técnico no debe poder marcar su cert como verificado.
+      allow update: if esAdmin();
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
-    // ─── RESEÑAS ───
     // Lectura pública (cualquiera logueado ve opiniones). Solo escribe quien firma.
     // Validamos rating 1-5, longitud razonable, y campos esperados.
     match /resenas/{docId} {
@@ -148,7 +149,6 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
-    // ─── CHATS Y MENSAJES ───
     match /chats/{chatId} {
       allow read, update, delete: if (logueado() && uid() in resource.data.participantes) || esAdmin();
       allow create: if (logueado() && uid() in request.resource.data.participantes) || esAdmin();
@@ -161,12 +161,10 @@ service cloud.firestore {
       }
     }
 
-    // ─── AJUSTES ───
     match /ajustes/{userId} {
       allow read, write: if esMio(userId) || esAdmin();
     }
 
-    // ─── PAGOS ───
     // El técnico crea el registro al confirmar cobro; el cliente también puede leer/ver.
     // Auditabilidad: no se permite delete; los updates no mutan partes contables.
     match /pagos/{docId} {
@@ -186,7 +184,6 @@ service cloud.firestore {
                     && noMuta('importe') && noMuta('fecha');
     }
 
-    // ─── DENY ALL para cualquier colección no listada ───
     match /{document=**} {
       allow read, write: if false;
     }

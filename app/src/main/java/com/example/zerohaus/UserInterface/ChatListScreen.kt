@@ -61,6 +61,7 @@ fun ChatsListScreen(
 
     Scaffold(
         containerColor = fondo,
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = {

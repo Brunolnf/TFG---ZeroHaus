@@ -13,8 +13,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -197,7 +199,10 @@ fun PerfilScreen(
                                 onValueChange = { viewModel.cambiarTelefono(it) },
                                 placeholder = { Text(c.perfilTelefonoPlaceholder) },
                                 leadingIcon = { Icon(Icons.Default.Phone, null, tint = gris) },
+                                prefix = { Text("+34 ", color = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                supportingText = { Text("9 dígitos (España)", fontSize = 11.sp, color = gris) },
                                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -226,54 +231,21 @@ fun PerfilScreen(
                         }
                     }
 
-                    // ── Métodos de cobro (técnico) ──
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Payments, null, tint = verde, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Métodos de cobro", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                            }
-                            Text(
-                                "Configura cómo quieres que tus clientes te paguen. Necesitas al menos uno para poder cobrar reformas.",
-                                fontSize = 12.sp, color = gris
-                            )
-
-                            Text("PayPal — usuario de PayPal.me", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
-                            OutlinedTextField(
-                                value = estado.paypalUsername,
-                                onValueChange = { viewModel.cambiarPaypal(it) },
-                                placeholder = { Text("p.ej. carlosgomez") },
-                                leadingIcon = { Icon(Icons.Default.AccountBalance, null, tint = gris) },
-                                supportingText = { Text("Tu enlace será paypal.me/${estado.paypalUsername.ifEmpty { "tu_usuario" }}", fontSize = 11.sp) },
-                                singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Text("Bizum — teléfono asociado", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
-                            OutlinedTextField(
-                                value = estado.bizumTelefono,
-                                onValueChange = { viewModel.cambiarBizum(it) },
-                                placeholder = { Text("+34600123456") },
-                                leadingIcon = { Icon(Icons.Default.Smartphone, null, tint = gris) },
-                                supportingText = { Text("El cliente lo usará para enviarte un Bizum", fontSize = 11.sp) },
-                                singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
                 }
+
+                val esTecnico = estado.tipoUsuario == "Técnico"
+                val perfilCompleto = estado.nombre.isNotBlank() && (!esTecnico || (
+                    estado.especialidades.isNotBlank()
+                        && estado.descripcion.isNotBlank()
+                        && estado.telefono.isNotBlank()
+                        && estado.emailContacto.isNotBlank()
+                        && estado.ciudad.isNotBlank()
+                ))
 
                 // Guardar
                 Button(
                     onClick = { viewModel.guardarPerfil() },
-                    enabled = !estado.guardando && estado.nombre.isNotBlank(),
+                    enabled = !estado.guardando && perfilCompleto,
                     colors = ButtonDefaults.buttonColors(containerColor = verde),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),

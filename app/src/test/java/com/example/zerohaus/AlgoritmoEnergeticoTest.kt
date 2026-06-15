@@ -19,8 +19,6 @@ class AlgoritmoEnergeticoTest {
         orientacion = "Sur"
     )
 
-    // ── Etiquetas ──
-
     @Test
     fun `vivienda moderna y eficiente obtiene etiqueta A`() {
         val v = Vivienda(
@@ -47,8 +45,6 @@ class AlgoritmoEnergeticoTest {
         assertTrue(resultado.etiqueta in listOf("D", "E"))
     }
 
-    // ── Orientación ──
-
     @Test
     fun `orientacion sur consume menos que norte`() {
         val sur   = AlgoritmoEnergetico.calcular(viviendaBase().copy(orientacion = "Sur"))
@@ -62,8 +58,6 @@ class AlgoritmoEnergeticoTest {
         val oeste = AlgoritmoEnergetico.calcular(viviendaBase().copy(orientacion = "Oeste"))
         assertEquals(este.consumoEstimado, oeste.consumoEstimado, 0.01)
     }
-
-    // ── Superficie ──
 
     @Test
     fun `mayor superficie implica mayor consumo`() {
@@ -79,16 +73,12 @@ class AlgoritmoEnergeticoTest {
         assertEquals(v100.consumoEstimado, v50.consumoEstimado * 2, 0.5)
     }
 
-    // ── Año de construcción ──
-
     @Test
     fun `edificio nuevo consume menos que edificio antiguo`() {
         val nuevo   = AlgoritmoEnergetico.calcular(viviendaBase().copy(anioConstruccion = 2022))
         val antiguo = AlgoritmoEnergetico.calcular(viviendaBase().copy(anioConstruccion = 1960))
         assertTrue(nuevo.consumoEstimado < antiguo.consumoEstimado)
     }
-
-    // ── Emisiones y coste ──
 
     @Test
     fun `emisiones son 22 por ciento del consumo`() {
@@ -101,8 +91,6 @@ class AlgoritmoEnergeticoTest {
         val r = AlgoritmoEnergetico.calcular(viviendaBase())
         assertEquals(r.consumoEstimado * 0.15, r.costeAnual, 1.0)
     }
-
-    // ── Recomendaciones ──
 
     @Test
     fun `siempre recomienda LED`() {
@@ -127,8 +115,6 @@ class AlgoritmoEnergeticoTest {
         val r = AlgoritmoEnergetico.calcular(viviendaBase().copy(acs = "Solar térmica"))
         assertTrue(r.recomendaciones.none { "solar" in it.titulo.lowercase() && "ACS" in it.titulo })
     }
-
-    // ── Valores de retorno ──
 
     @Test
     fun `consumo es positivo para cualquier vivienda valida`() {

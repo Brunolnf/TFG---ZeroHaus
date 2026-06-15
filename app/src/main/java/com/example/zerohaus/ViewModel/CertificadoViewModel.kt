@@ -8,20 +8,26 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Certificado
 import com.example.zerohaus.Repositorios.RepositorioCertificados
 
+data class ArchivoSeleccionado(val uri: Uri, val nombre: String)
+
 data class CertificadoEstado(
     val nombre: String = "",
-    val tipo: String = "Selecciona un tipo",
-    val archivoUri: Uri? = null,
-    val archivoNombre: String = "",
+    val tipo: String = "",                              // vacío = sin seleccionar
+    val archivos: List<ArchivoSeleccionado> = emptyList(),
     val cargando: Boolean = false,
     val exito: Boolean = false,
     val error: String? = null,
     val certificados: List<Certificado> = emptyList()
 ) {
-    val tieneAlguno: Boolean get() = certificados.isNotEmpty()
-    val tieneVerificados: Boolean get() = certificados.any { it.verificado }
-    val tieneRechazados: Boolean get() = certificados.any { it.rechazado }
-    val tienePendientes: Boolean get() = certificados.any { !it.verificado && !it.rechazado }
+    val tipoSeleccionado: Boolean get() = tipo.isNotBlank()
+    val puedeAgregar: Boolean      get() = archivos.size < 6
+    /** Cumple los 3 requisitos para poder subir. */
+    val listo: Boolean             get() = nombre.isNotBlank() && tipoSeleccionado && archivos.isNotEmpty()
+    // Helpers para PanelTecnicoScreen
+    val tieneAlguno: Boolean       get() = certificados.isNotEmpty()
+    val tieneVerificados: Boolean  get() = certificados.any { it.verificado }
+    val tieneRechazados: Boolean   get() = certificados.any { it.rechazado }
+    val tienePendientes: Boolean   get() = certificados.any { !it.verificado && !it.rechazado }
 }
 
 class CertificadoViewModel : ViewModel() {
@@ -32,31 +38,36 @@ class CertificadoViewModel : ViewModel() {
     private val repo = RepositorioCertificados()
 
     fun cambiarNombre(v: String) { estado = estado.copy(nombre = v) }
-    fun cambiarTipo(v: String) { estado = estado.copy(tipo = v) }
-    fun seleccionarArchivo(uri: Uri, nombre: String) {
-        estado = estado.copy(archivoUri = uri, archivoNombre = nombre)
+    fun cambiarTipo(v: String)   { estado = estado.copy(tipo = v, error = null) }
+
+    fun agregarArchivo(uri: Uri, nombre: String) {
+        if (!estado.puedeAgregar) return
+        estado = estado.copy(
+            archivos = estado.archivos + ArchivoSeleccionado(uri, nombre),
+            error = null
+        )
+    }
+
+    fun eliminarArchivo(index: Int) {
+        estado = estado.copy(
+            archivos = estado.archivos.toMutableList().also { it.removeAt(index) }
+        )
     }
 
     fun subirCertificado() {
-        val uri = estado.archivoUri ?: run {
-            estado = estado.copy(error = "Selecciona un archivo")
-            return
-        }
-        if (estado.nombre.isBlank()) {
-            estado = estado.copy(error = "Introduce un nombre")
-            return
+        when {
+            estado.nombre.isBlank()    -> { estado = estado.copy(error = "Introduce un nombre"); return }
+            !estado.tipoSeleccionado   -> { estado = estado.copy(error = "Selecciona un tipo"); return }
+            estado.archivos.isEmpty()  -> { estado = estado.copy(error = "Añade al menos un archivo"); return }
         }
         estado = estado.copy(cargando = true, error = null)
-        repo.subirCertificado(estado.nombre, estado.tipo, uri) { result ->
+        val uris = estado.archivos.map { it.uri }
+        repo.subirCertificado(estado.nombre, estado.tipo, uris) { result ->
             result
                 .onSuccess {
                     estado = estado.copy(
-                        cargando = false,
-                        exito = true,
-                        nombre = "",
-                        tipo = "Selecciona un tipo",
-                        archivoUri = null,
-                        archivoNombre = ""
+                        cargando = false, exito = true,
+                        nombre = "", tipo = "", archivos = emptyList()
                     )
                     cargarCertificados()
                 }
@@ -70,7 +81,5 @@ class CertificadoViewModel : ViewModel() {
         }
     }
 
-    fun limpiar() {
-        estado = CertificadoEstado()
-    }
+    fun limpiar() { estado = CertificadoEstado() }
 }

@@ -35,15 +35,17 @@ fun ProyectosAsignadosScreen(
     val estado = viewModel.estado
     var detalleProyecto by remember { mutableStateOf<Proyecto?>(null) }
 
-    val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(Unit) { viewModel.cargar() }
-    LaunchedEffect(estado.mensaje) {
-        estado.mensaje?.let { snackbar.showSnackbar(it); viewModel.limpiarMensaje() }
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensaje,
+                tipo      = ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -87,7 +89,7 @@ fun ProyectosAsignadosScreen(
                         )
                         Spacer(Modifier.height(14.dp))
                         OutlinedButton(
-                            onClick = { viewModel.cargar() },
+                            onClick = { viewModel.cargar(forzar = true) },
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
@@ -111,16 +113,19 @@ fun ProyectosAsignadosScreen(
     }
 
     detalleProyecto?.let { p ->
+        // Leer el proyecto actualizado del VM para que el checkbox refleje el
+        // estado tras cada toggle (la actualización es optimista en el VM).
+        val pActual = estado.proyectos.firstOrNull { it.id == p.id } ?: p
         DialogoDetalleProyecto(
-            proyecto = p,
+            proyecto = pActual,
             onCerrar = { detalleProyecto = null },
             onToggleTarea = { idx, completada ->
-                viewModel.toggleTarea(p.id, idx, completada)
-                detalleProyecto = null
+                viewModel.toggleTarea(pActual.id, idx, completada)
+                // No cerramos el diálogo: el técnico suele marcar varias tareas seguidas.
             },
             onMarcarTerminado = {
-                if (p.solicitudId.isNotBlank()) {
-                    viewModel.marcarTrabajoTerminado(p.solicitudId)
+                if (pActual.solicitudId.isNotBlank()) {
+                    viewModel.marcarTrabajoTerminado(pActual.solicitudId)
                     detalleProyecto = null
                 }
             }
@@ -202,7 +207,11 @@ private fun DialogoDetalleProyecto(
 ) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val puedeTerminar = proyecto.estado == "En curso" && proyecto.solicitudId.isNotBlank()
+    // El botón "Marcar trabajo terminado" debe seguir visible cuando el técnico
+    // marca la última tarea (toggleTarea sube estado a "Finalizado" optimista),
+    // y también si aún quedan tareas por marcar pero el trabajo ya está hecho.
+    // El cierre real del proyecto ocurre en tecnicoConfirmaPago (pagado=true).
+    val puedeTerminar = !proyecto.pagado && proyecto.solicitudId.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onCerrar,

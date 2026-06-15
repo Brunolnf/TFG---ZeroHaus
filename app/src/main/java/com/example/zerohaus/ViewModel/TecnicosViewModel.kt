@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.SolicitudPresupuesto
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Repositorios.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.ListenerRegistration
 
 enum class OrdenTecnicos { VALORACION, PROXIMIDAD, PROYECTOS }
 
@@ -18,7 +20,8 @@ data class TecnicosEstado(
     val orden: OrdenTecnicos = OrdenTecnicos.VALORACION,
     val latUsuario: Double = 40.4168,   // Madrid por defecto (app solo España)
     val lngUsuario: Double = -3.7038,
-    val cargando: Boolean = true,
+    val cargando: Boolean = false,
+    val enviandoSolicitud: Boolean = false,
     val mensajeExito: String? = null,
     val error: String? = null
 )
@@ -27,35 +30,66 @@ class TecnicosViewModel : ViewModel() {
     var estado by mutableStateOf(TecnicosEstado())
         private set
     private val repo = RepositorioTecnicos()
-    private val repoResenas = RepositorioResenas()
     private val repoAuth = RepositorioAutenticacion()
+    private val auth = FirebaseAuth.getInstance()
 
+    private var listenerTec: ListenerRegistration? = null
+    private var listenerRes: ListenerRegistration? = null
+    private var uidEscuchado: String? = null
+
+    /**
+     * El VM es app-scoped (vive lo que la Activity). Si el listener se enganchó
+     * con un usuario distinto al actual —o sin usuario, en cold-start antes del
+     * login— las reglas de Firestore devuelven PERMISSION_DENIED, el listener
+     * queda muerto y la lista se queda vacía para siempre. Reaccionamos a los
+     * cambios de Auth re-enganchando con el uid nuevo.
+     */
+    private val authListener = FirebaseAuth.AuthStateListener { fa ->
+        val nuevo = fa.currentUser?.uid
+        if (nuevo != uidEscuchado) reengancharListeners()
+    }
+
+    init {
+        auth.addAuthStateListener(authListener)
+    }
+
+    /**
+     * Suscribe el directorio de técnicos en tiempo real. Antes era un get cacheado:
+     * un técnico recién registrado (caso "Adán") no aparecía hasta reabrir la app.
+     */
     fun cargarTecnicos(forzar: Boolean = false) {
-        if (!forzar && estado.tecnicos.isNotEmpty()) return
-        val tieneDatos = estado.tecnicos.isNotEmpty()
-        estado = estado.copy(cargando = !tieneDatos)
-        repo.obtenerTecnicos { lista ->
-            if (lista.isEmpty()) { estado = estado.copy(cargando = false); return@obtenerTecnicos }
-            val previos = estado.tecnicos.associateBy { it.id }
-            val tecnicosConDistancia = lista.map { t ->
-                val prev = previos[t.id]
-                val base = if (prev != null) t.copy(rating = prev.rating, opiniones = prev.opiniones) else t.copy(rating = 0.0, opiniones = 0)
-                // Calcular distancia si tenemos ubicación del usuario
-                if (estado.latUsuario != 0.0) {
-                    val (tLat, tLng) = coordsEfectivasTecnico(base)
-                    if (tLat != 0.0) base.copy(distanciaKm = calcularDistanciaKm(estado.latUsuario, estado.lngUsuario, tLat, tLng))
-                    else base
-                } else base
-            }
-            estado = estado.copy(tecnicos = tecnicosConDistancia, cargando = false)
-            lista.forEach { t ->
-                repoResenas.obtenerResenas(t.id) { resenas ->
-                    val count = resenas.size
-                    val avg = if (count == 0) 0.0 else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
-                    estado = estado.copy(tecnicos = estado.tecnicos.map { if (it.id == t.id) it.copy(rating = avg, opiniones = count) else it })
-                }
-            }
+        val uidActual = auth.currentUser?.uid
+        // Reenganchar si: el llamante lo pide, no hay listener, o cambió el uid
+        // (caso típico: el VM es app-scoped y el usuario se ha registrado/cambiado
+        // de cuenta sin que el AuthStateListener haya llegado a disparar todavía).
+        if (forzar || listenerTec == null || uidActual != uidEscuchado) {
+            reengancharListeners()
         }
+    }
+
+    private fun reengancharListeners() {
+        listenerTec?.remove(); listenerTec = null
+        listenerRes?.remove(); listenerRes = null
+        uidEscuchado = auth.currentUser?.uid
+        if (uidEscuchado == null) {
+            // Sin sesión no podemos leer (reglas exigen auth). Esperamos al
+            // siguiente disparo del AuthStateListener.
+            estado = estado.copy(tecnicos = emptyList(), cargando = false)
+            return
+        }
+        estado = estado.copy(cargando = estado.tecnicos.isEmpty())
+        val (regT, regR) = repo.escucharTecnicos { lista ->
+            val procesados = lista.map { t ->
+                if (estado.latUsuario != 0.0) {
+                    val (tLat, tLng) = coordsEfectivasTecnico(t)
+                    if (tLat != 0.0) t.copy(distanciaKm = calcularDistanciaKm(estado.latUsuario, estado.lngUsuario, tLat, tLng))
+                    else t
+                } else t
+            }
+            estado = estado.copy(tecnicos = procesados, cargando = false)
+        }
+        listenerTec = regT
+        listenerRes = regR
     }
 
     fun actualizarUbicacion(latRaw: Double, lngRaw: Double) {
@@ -109,7 +143,14 @@ class TecnicosViewModel : ViewModel() {
 
     fun solicitarPresupuesto(tecnico: Tecnico) { solicitarPresupuestoConDescripcion(tecnico, "Solicitud de presupuesto") }
     fun solicitarPresupuestoConDescripcion(tecnico: Tecnico, descripcion: String) {
-        repoAuth.obtenerUsuario { u ->
+        // Guard contra doble tap: el dialog se cierra al pulsar, pero un tap rápido
+        // puede disparar dos onClick antes de la recomposición, creando dos docs
+        // de solicitud idénticos. Bloqueamos reentradas mientras hay una en vuelo.
+        if (estado.enviandoSolicitud) return
+        estado = estado.copy(enviandoSolicitud = true)
+        // obtenerUsuarioUnaVez (no obtenerUsuario): el callback debe ejecutarse una
+        // sola vez. El doble disparo caché+servidor crearía dos solicitudes idénticas.
+        repoAuth.obtenerUsuarioUnaVez { u ->
             val s = SolicitudPresupuesto(
                 uidCliente = repoAuth.getUid() ?: "",
                 nombreCliente = u?.nombre ?: "Usuario",
@@ -119,10 +160,19 @@ class TecnicosViewModel : ViewModel() {
                 descripcion = descripcion
             )
             repo.solicitarPresupuesto(s) { r ->
-                r.onSuccess { estado = estado.copy(mensajeExito = "Solicitud enviada a ${tecnico.nombre}") }
-                    .onFailure { estado = estado.copy(error = it.message) }
+                r.onSuccess { estado = estado.copy(enviandoSolicitud = false, mensajeExito = "Solicitud enviada a ${tecnico.nombre}") }
+                    .onFailure { estado = estado.copy(enviandoSolicitud = false, error = it.message) }
             }
         }
     }
     fun limpiarMensaje() { estado = estado.copy(mensajeExito = null, error = null) }
+
+    override fun onCleared() {
+        super.onCleared()
+        auth.removeAuthStateListener(authListener)
+        listenerTec?.remove()
+        listenerRes?.remove()
+        listenerTec = null
+        listenerRes = null
+    }
 }

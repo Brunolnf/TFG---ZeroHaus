@@ -2,8 +2,10 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -136,38 +139,90 @@ fun MapaTecnicosScreen(
                                 true // consume el click para no mostrar InfoWindow nativo
                             }
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                // Burbuja con nombre
+                            val burbuja  = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.surface
+                            val txtColor = if (esSeleccionado) Color.White
+                                           else MaterialTheme.colorScheme.onSurface
+                            val pinColor = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                            ) {
+                                // Pill con icono, nombre y rating
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (esSeleccionado) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.surface,
-                                    shadowElevation = 4.dp
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = burbuja,
+                                    shadowElevation = if (esSeleccionado) 8.dp else 4.dp,
+                                    border = if (!esSeleccionado)
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                    else null
                                 ) {
-                                    Text(
-                                        tecnico.nombre.split(" ").take(2).joinToString(" "),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (esSeleccionado) Color.White
-                                                else MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    Row(
+                                        Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Build, null,
+                                            modifier = Modifier.size(11.dp),
+                                            tint = if (esSeleccionado) Color.White
+                                                   else MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            tecnico.nombre.split(" ").take(2).joinToString(" "),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = txtColor,
+                                            maxLines = 1
+                                        )
+                                        if (tecnico.rating > 0f) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = if (esSeleccionado) Color.White.copy(alpha = 0.18f)
+                                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            ) {
+                                                Row(
+                                                    Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Star, null,
+                                                        modifier = Modifier.size(9.dp),
+                                                        tint = if (esSeleccionado) Color(0xFFFFD700)
+                                                               else Color(0xFFF59E0B)
+                                                    )
+                                                    Text(
+                                                        "%.1f".format(tecnico.rating),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = if (esSeleccionado) Color.White
+                                                                else MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Triángulo puntero dibujado con Canvas
+                                Canvas(Modifier.size(width = 14.dp, height = 7.dp)) {
+                                    drawPath(
+                                        path = Path().apply {
+                                            moveTo(0f, 0f)
+                                            lineTo(size.width, 0f)
+                                            lineTo(size.width / 2f, size.height)
+                                            close()
+                                        },
+                                        color = burbuja
                                     )
                                 }
-                                // Pin triangular
-                                Box(
-                                    Modifier
-                                        .size(width = 12.dp, height = 8.dp)
-                                        .background(
-                                            if (esSeleccionado) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.surface
-                                        )
-                                )
-                                // Círculo del pin
+                                // Punto de anclaje
                                 Surface(
-                                    shape = androidx.compose.foundation.shape.CircleShape,
-                                    color = if (esSeleccionado) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.primary.copy(0.7f),
-                                    modifier = Modifier.size(12.dp)
+                                    shape = CircleShape,
+                                    color = pinColor,
+                                    modifier = Modifier.size(7.dp)
                                 ) {}
                             }
                         }

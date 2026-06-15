@@ -9,6 +9,7 @@ import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.example.zerohaus.Util.Telefono
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 
@@ -25,10 +26,8 @@ data class PerfilEstado(
     val emailContacto: String = "",
     val tecnicoDocId: String = "",
     val ciudad: String = "",
-    val paypalUsername: String = "",
-    val bizumTelefono: String = "",
     // Estado UI
-    val cargando: Boolean = true,
+    val cargando: Boolean = false,
     val guardando: Boolean = false,
     val subiendoFoto: Boolean = false,
     val exito: Boolean = false,
@@ -44,6 +43,8 @@ class PerfilViewModel : ViewModel() {
     private val repoTecnicos = RepositorioTecnicos()
     private val storage = FirebaseStorage.getInstance()
     private val auth = FirebaseAuth.getInstance()
+
+    init { if (auth.currentUser != null) cargarPerfil() }
 
     fun cargarPerfil() {
         estado = estado.copy(cargando = true)
@@ -62,12 +63,10 @@ class PerfilViewModel : ViewModel() {
                         estado = estado.copy(
                             especialidades = tecnico?.especialidades?.joinToString(", ") ?: "",
                             descripcion = tecnico?.descripcion ?: "",
-                            telefono = tecnico?.telefono ?: "",
+                            telefono = Telefono.normalizar(tecnico?.telefono),
                             emailContacto = tecnico?.emailContacto?.ifEmpty { usuario.email } ?: usuario.email,
                             tecnicoDocId = tecnico?.id ?: "",
                             ciudad = tecnico?.ciudad ?: "",
-                            paypalUsername = tecnico?.paypalUsername ?: "",
-                            bizumTelefono = tecnico?.bizumTelefono ?: "",
                             cargando = false
                         )
                     }
@@ -83,10 +82,12 @@ class PerfilViewModel : ViewModel() {
     fun cambiarNombre(v: String) { estado = estado.copy(nombre = v, exito = false) }
     fun cambiarEspecialidades(v: String) { estado = estado.copy(especialidades = v, exito = false) }
     fun cambiarDescripcion(v: String) { estado = estado.copy(descripcion = v, exito = false) }
-    fun cambiarTelefono(v: String) { estado = estado.copy(telefono = v, exito = false) }
+    fun cambiarTelefono(v: String) {
+        // Todos los números se asumen españoles: guardamos 9 dígitos y mostramos "+34"
+        // como prefijo fijo en la UI. Si pegan "+34 612...", se limpia aquí.
+        estado = estado.copy(telefono = Telefono.normalizar(v), exito = false)
+    }
     fun cambiarEmailContacto(v: String) { estado = estado.copy(emailContacto = v, exito = false) }
-    fun cambiarPaypal(v: String) { estado = estado.copy(paypalUsername = v, exito = false) }
-    fun cambiarBizum(v: String) { estado = estado.copy(bizumTelefono = v, exito = false) }
     fun cambiarCiudad(v: String) { estado = estado.copy(ciudad = v, exito = false) }
 
     fun guardarPerfil() {
@@ -113,9 +114,7 @@ class PerfilViewModel : ViewModel() {
                                 descripcion = estado.descripcion,
                                 telefono = estado.telefono,
                                 emailContacto = estado.emailContacto.ifEmpty { usuario.email },
-                                especialidades = especialidadesLista,
-                                paypalUsername = estado.paypalUsername.trim(),
-                                bizumTelefono = estado.bizumTelefono.trim()
+                                especialidades = especialidadesLista
                             ) { _ -> estado = estado.copy(guardando = false, exito = true) }
                         } else {
                             val tecnico = Tecnico(
@@ -125,9 +124,7 @@ class PerfilViewModel : ViewModel() {
                                 especialidades = especialidadesLista,
                                 descripcion = estado.descripcion,
                                 telefono = estado.telefono,
-                                emailContacto = estado.emailContacto.ifEmpty { usuario.email },
-                                paypalUsername = estado.paypalUsername.trim(),
-                                bizumTelefono = estado.bizumTelefono.trim()
+                                emailContacto = estado.emailContacto.ifEmpty { usuario.email }
                             )
                             repoTecnicos.registrarTecnico(tecnico) { _ ->
                                 estado = estado.copy(guardando = false, exito = true)

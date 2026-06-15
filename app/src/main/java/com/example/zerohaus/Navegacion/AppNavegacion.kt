@@ -1,10 +1,20 @@
 // RUTA: Navegacion/AppNavegacion.kt
 package com.example.zerohaus.Navegacion
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -14,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.UserInterface.*
 import com.example.zerohaus.Util.AdminConfig
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.ViewModel.*
 import com.google.firebase.auth.FirebaseAuth
 
@@ -21,66 +32,79 @@ import com.google.firebase.auth.FirebaseAuth
 fun AppNavegacion() {
     val sesionVM: SesionViewModel = viewModel()
 
-    var mostrarSplash by remember { mutableStateOf(true) }
+    var mostrarSplash by rememberSaveable { mutableStateOf(true) }
 
-    // Splash
     if (mostrarSplash) {
         SplashScreen { mostrarSplash = false }
         return
     }
 
-    // Comprobar sesión
-    LaunchedEffect(Unit) { sesionVM.comprobarSesion() }
+    // logueado es Boolean (nunca null): se inicializa sincrónico en SesionViewModel.init
     val logueado = sesionVM.logueado.value
 
-    // null = aún comprobando sesión → spinner breve solo al abrir la app
-    if (logueado == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-
-    // Registrar token de notificaciones si hay sesión activa
     LaunchedEffect(logueado) {
         if (logueado) ServicioNotificaciones.registrarToken()
     }
 
-    val cerrarSesion: () -> Unit = { sesionVM.logout() }
-
     val emailActual = if (logueado) FirebaseAuth.getInstance().currentUser?.email else null
     val esAdmin = logueado && AdminConfig.esAdmin(emailActual)
-    val start = when {
-        esAdmin -> "admin"
-        logueado -> "main"
-        else -> "login"
-    }
 
-    // key(start) destruye y recrea el NavHost entero cuando cambia el estado
-    // de sesión. Al cerrar sesión start pasa a "login" → se muestra LoginScreen
-    // al instante sin spinners ni pantallas en blanco.
-    key(start) {
     val nav = rememberNavController()
     val loginVM: LoginViewModel = viewModel()
     val chatVM: ChatViewModel = viewModel()
     val informeVM: InformeViewModel = viewModel()
     val tecnicosVM: TecnicosViewModel = viewModel()
 
-    NavHost(navController = nav, startDestination = start) {
+    // startDestination se fija una sola vez cuando el NavHost se crea.
+    // Los cambios posteriores de auth los gestiona el LaunchedEffect de abajo.
+    val startDestination = remember {
+        when {
+            esAdmin  -> "admin"
+            logueado -> "main"
+            else     -> "login"
+        }
+    }
+
+    // Al cerrar sesión navega explícitamente a login vaciando el back stack.
+    // Más fiable que key(start): no destruye el NavHost ni sufre problemas
+    // de subcomposiciones del NavHost interno.
+    //
+    // IMPORTANTE: se vacía con popUpTo(nav.graph.id), NO con popUpTo(0): el id 0
+    // no corresponde a ningún destino real, así que no popea nada y deja viva la
+    // pantalla "main" anterior. Al cerrar sesión esa "main" huérfana (con
+    // usuario == null) se queda girando el spinner verde para siempre.
+    LaunchedEffect(logueado) {
+        if (!logueado) {
+            loginVM.resetear()   // limpia el loginCorrecto viejo ANTES de mostrar el login
+            nav.navigate("login") {
+                popUpTo(nav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    val cerrarSesion: () -> Unit = { sesionVM.logout() }
+
+    NavHost(navController = nav, startDestination = startDestination) {
 
         // Auth
         composable("login") {
             LoginScreen(
                 viewModel = loginVM,
                 onLoginExitoso = {
-                    // Recarga el usuario tras login para que MainScaffold sepa si es técnico o cliente.
-                    sesionVM.comprobarSesion()
-                    // Si es el admin, va a su panel; si no, al main normal.
-                    val destino = if (AdminConfig.esAdmin(FirebaseAuth.getInstance().currentUser?.email))
-                        "admin" else "main"
-                    nav.navigate(destino) { popUpTo("login") { inclusive = true } }
+                    // GUARDA anti-rebote: el LoginViewModel es app-scoped y conserva
+                    // loginCorrecto=true tras un login. Al volver al login después de un
+                    // logout, ese flag stale vuelve a disparar este callback. Si no hay
+                    // sesión REAL, ignorarlo evita rebotar a "main" sin usuario (causa
+                    // del spinner verde infinito).
+                    if (FirebaseAuth.getInstance().currentUser != null) {
+                        sesionVM.postLogin()
+                        val destino = if (AdminConfig.esAdmin(FirebaseAuth.getInstance().currentUser?.email))
+                            "admin" else "main"
+                        nav.navigate(destino) { popUpTo("login") { inclusive = true } }
+                    }
                 },
-                onIrARegistro = { nav.navigate("registro") },
+                onIrARegistro  = { nav.navigate("registro") },
                 onIrARecuperar = { nav.navigate("recuperar") }
             )
         }
@@ -96,7 +120,7 @@ fun AppNavegacion() {
         }
         composable("onboarding") {
             OnboardingScreen {
-                sesionVM.comprobarSesion()
+                sesionVM.postLogin()
                 nav.navigate("main") { popUpTo("onboarding") { inclusive = true } }
             }
         }
@@ -107,7 +131,7 @@ fun AppNavegacion() {
             )
         }
 
-        // Panel exclusivo del administrador (único admin: AdminConfig.ADMIN_EMAIL).
+        // Panel exclusivo del administrador (único admin: AdminConfig.ADMIN_EMAIL)
         composable("admin") {
             val adminVM: AdminViewModel = viewModel()
             AdminScreen(
@@ -119,14 +143,40 @@ fun AppNavegacion() {
         // Main (Bottom Nav) — bifurca según tipoUsuario
         composable("main") {
             val usuario = sesionVM.usuario.value
-            val esTecnico = usuario?.tipoUsuario == "Técnico"
 
-            // Sin usuario aún (login fresco cargando, o logout en tránsito).
-            // No mostramos spinner — si es logout, key(start) destruirá este
-            // composable y mostrará LoginScreen directamente.
-            if (usuario == null) return@composable
+            // Logout en curso: LaunchedEffect ya está navegando a login.
+            if (!sesionVM.logueado.value) return@composable
 
-            if (esTecnico) {
+            // Tipo: primero del usuario cargado, si no del caché local
+            val tipoUsuario = usuario?.tipoUsuario
+                ?: AppEstado.tipoUsuarioCache.ifBlank { null }
+
+            if (tipoUsuario == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (sesionVM.cargaFallida.value) {
+                        // La carga del usuario falló tras varios intentos: en vez de
+                        // un spinner eterno, ofrecemos reintentar.
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(32.dp)
+                        ) {
+                            Text(
+                                "No se pudieron cargar tus datos. Comprueba tu conexión.",
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = { sesionVM.cargarUsuario() }) {
+                                Text("Reintentar")
+                            }
+                        }
+                    } else {
+                        CircularProgressIndicator()
+                    }
+                }
+                return@composable
+            }
+
+            if (tipoUsuario == "Técnico") {
                 val panelTecnicoVM: PanelTecnicoViewModel = viewModel()
                 val panelVM: PanelViewModel = viewModel()
                 val certificadoVM: CertificadoViewModel = viewModel()
@@ -155,20 +205,20 @@ fun AppNavegacion() {
                     certificadoViewModel = certificadoVM,
                     chatViewModel = chatVM,
                     onCerrarSesion = cerrarSesion,
-                    onNuevoPreestudio      = { nav.navigate("preestudio") },
-                    onBuscarTecnicos       = { nav.navigate("tecnicos") },
-                    onMisProyectos         = { nav.navigate("proyectos") },
-                    onRankings             = { nav.navigate("rankings") },
-                    onVerUltimoInforme     = { nav.navigate("informe") },
-                    onPerfil               = { nav.navigate("perfil") },
-                    onPresupuestos         = { nav.navigate("presupuestos") },
-                    onHistorialInformes    = { nav.navigate("historial_informes") },
-                    onMisViviendas         = { nav.navigate("mis_viviendas") },
-                    onChats                = { id -> nav.navigate("chat/$id") },
-                    onGraficas             = { nav.navigate("graficas") },
-                    onMapaTecnicos         = { nav.navigate("mapa_tecnicos") },
-                    onSobreApp             = { nav.navigate("sobre_app") },
-                    onAjustes              = { nav.navigate("ajustes") }
+                    onNuevoPreestudio   = { nav.navigate("preestudio") },
+                    onBuscarTecnicos    = { nav.navigate("tecnicos") },
+                    onMisProyectos      = { nav.navigate("proyectos") },
+                    onRankings          = { nav.navigate("rankings") },
+                    onVerUltimoInforme  = { nav.navigate("informe") },
+                    onPerfil            = { nav.navigate("perfil") },
+                    onPresupuestos      = { nav.navigate("presupuestos") },
+                    onHistorialInformes = { nav.navigate("historial_informes") },
+                    onMisViviendas      = { nav.navigate("mis_viviendas") },
+                    onChats             = { id -> nav.navigate("chat/$id") },
+                    onGraficas          = { nav.navigate("graficas") },
+                    onMapaTecnicos      = { nav.navigate("mapa_tecnicos") },
+                    onSobreApp          = { nav.navigate("sobre_app") },
+                    onAjustes           = { nav.navigate("ajustes") }
                 )
             }
         }
@@ -222,15 +272,12 @@ fun AppNavegacion() {
                 onVolver = { nav.popBackStack() },
                 onContactar = { tecnicoUid, tecnicoNombre ->
                     chatVM.iniciarChatConTecnico(tecnicoUid, tecnicoNombre) { chatId ->
-                        // chatId vacío = error creando/encontrando el chat;
-                        // simplemente no navegamos para que el usuario reintente.
                         if (chatId.isNotBlank()) nav.navigate("chat/$chatId")
                     }
                 }
             )
         }
 
-        // Resto de pantallas
         composable("rankings") {
             val rankingsVM: RankingsViewModel = viewModel()
             RankingsScreen(
@@ -294,7 +341,6 @@ fun AppNavegacion() {
             AjustesScreen(viewModel = ajustesVM, onVolver = { nav.popBackStack() })
         }
 
-        // ── Pantallas exclusivas de técnicos ──
         composable("mis_clientes_tecnico") {
             val misClientesVM: MisClientesTecnicoViewModel = viewModel()
             MisClientesTecnicoScreen(
@@ -316,5 +362,4 @@ fun AppNavegacion() {
             EstadisticasTecnicoScreen(viewModel = estadisticasTecVM, onVolver = { nav.popBackStack() })
         }
     }
-    } // key(start)
 }

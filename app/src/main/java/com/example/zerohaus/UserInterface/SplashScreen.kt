@@ -29,7 +29,7 @@ fun SplashScreen(onTerminado: () -> Unit) {
 
     LaunchedEffect(Unit) {
         iniciar = true
-        delay(2200)
+        delay(1200)
         onTerminado()
     }
 

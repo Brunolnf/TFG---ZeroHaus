@@ -2,6 +2,7 @@
 package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.AjustesUsuario
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -11,9 +12,9 @@ class RepositorioAjustes {
     private fun uid() = auth.currentUser?.uid ?: ""
 
     fun obtenerAjustes(callback: (AjustesUsuario) -> Unit) {
-        db.collection("ajustes").document(uid()).get()
-            .addOnSuccessListener { doc -> callback(doc.toObject(AjustesUsuario::class.java) ?: AjustesUsuario(uid = uid())) }
-            .addOnFailureListener { callback(AjustesUsuario(uid = uid())) }
+        db.collection("ajustes").document(uid()).getOrTimeout { doc ->
+            callback(doc?.toObject(AjustesUsuario::class.java) ?: AjustesUsuario(uid = uid()))
+        }
     }
 
     fun guardarAjustes(ajustes: AjustesUsuario, callback: (Result<Unit>) -> Unit) {

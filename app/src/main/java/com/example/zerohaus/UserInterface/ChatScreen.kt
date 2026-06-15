@@ -1,4 +1,4 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import android.content.Intent
 import android.net.Uri
@@ -7,8 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,8 +27,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
@@ -58,23 +64,18 @@ fun ChatScreen(
     val sdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
     val listState = rememberLazyListState()
-    val snackbarHostState = remember { SnackbarHostState() }
     var errorLocal by remember { mutableStateOf<String?>(null) }
+    var toastExito by remember { mutableStateOf(false) }
 
     // Estado del visor de imagen fullscreen
     var imagenAmpliada by remember { mutableStateOf<String?>(null) }
     var archivoAmpliado by remember { mutableStateOf<MensajeChat?>(null) }
+    var mensajeAEliminar by remember { mutableStateOf<MensajeChat?>(null) }
 
     // Estado del diálogo "solicitar presupuesto"
     var mostrarDialogoPresupuesto by remember { mutableStateOf(false) }
     var descripcionPresupuesto by remember { mutableStateOf("") }
     var enviandoPresupuesto by remember { mutableStateOf(false) }
-
-    LaunchedEffect(errorLocal) {
-        errorLocal?.let { snackbarHostState.showSnackbar(it); errorLocal = null }
-    }
-
-    // ───────────── LAUNCHERS ─────────────
 
     val imagenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -93,15 +94,13 @@ fun ChatScreen(
                     if (si >= 0) bytes = c.getLong(si)
                 }
             }
-            if (bytes > 15 * 1024 * 1024) {
-                errorLocal = "El archivo supera el límite de 15 MB"
+            if (bytes > 50 * 1024 * 1024) {
+                errorLocal = "El archivo supera el límite de 50 MB"
             } else {
                 viewModel.enviarArchivo(chatId, uri, nombre, bytes)
             }
         }
     }
-
-    // ───────────── EFECTOS ─────────────
 
     LaunchedEffect(chatId) { viewModel.abrirChat(chatId) }
     DisposableEffect(Unit) { onDispose { viewModel.cerrarChat() } }
@@ -111,7 +110,13 @@ fun ChatScreen(
 
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = errorLocal,
+                tipo      = if (toastExito) ToastTipo.EXITO else ToastTipo.ERROR,
+                alOcultar = { errorLocal = null; toastExito = false }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -173,7 +178,6 @@ fun ChatScreen(
                 .imePadding()
         ) {
 
-            // ── Mensajes ──
             if (estado.mensajes.isEmpty()) {
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -211,14 +215,18 @@ fun ChatScreen(
                                     modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
                                 )
                             }
-                            BurbujaMensaje(msg, esMio, gris, verde, sdf, context, onVerImagen = { imagenAmpliada = it }, onVerArchivo = { archivoAmpliado = it })
+                            BurbujaMensaje(
+                                msg, esMio, gris, verde, sdf, context,
+                                onVerImagen = { imagenAmpliada = it },
+                                onVerArchivo = { archivoAmpliado = it },
+                                onEliminar = if (esMio) { { mensajeAEliminar = msg } } else null
+                            )
                         }
                     }
                     item { Spacer(Modifier.height(4.dp)) }
                 }
             }
 
-            // ── Barra inferior ──
             Surface(
                 shadowElevation = 8.dp,
                 color = MaterialTheme.colorScheme.surface
@@ -243,7 +251,6 @@ fun ChatScreen(
                             enviando = estado.subiendoMedia
                         )
                     } else {
-                        // ── Botones adjuntar ──
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -282,7 +289,6 @@ fun ChatScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                        // ── Texto + enviar ──
                         Row(
                             modifier = Modifier
                                 .padding(start = 10.dp, end = 8.dp, top = 5.dp, bottom = 5.dp)
@@ -317,8 +323,6 @@ fun ChatScreen(
             }
         }
     }
-
-    // ───────────── DIÁLOGO SOLICITAR PRESUPUESTO ─────────────
 
     if (mostrarDialogoPresupuesto) {
         AlertDialog(
@@ -362,14 +366,16 @@ fun ChatScreen(
                                 .onSuccess {
                                     mostrarDialogoPresupuesto = false
                                     descripcionPresupuesto = ""
+                                    toastExito = true
                                     errorLocal = "Solicitud enviada a ${estado.nombreOtroUsuario}"
                                 }
                                 .onFailure { e ->
+                                    toastExito = false
                                     errorLocal = e.message ?: "Error al enviar la solicitud"
                                 }
                         }
                     },
-                    enabled = !enviandoPresupuesto,
+                    enabled = !enviandoPresupuesto && descripcionPresupuesto.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = verde)
                 ) {
                     if (enviandoPresupuesto) {
@@ -388,20 +394,45 @@ fun ChatScreen(
         )
     }
 
-    // ───────────── VISOR IMAGEN FULLSCREEN ─────────────
+    mensajeAEliminar?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { mensajeAEliminar = null },
+            icon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
+            title = { Text("Eliminar mensaje", fontWeight = FontWeight.SemiBold) },
+            text = { Text("¿Quieres eliminar este mensaje? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.eliminarMensaje(chatId, msg.id)
+                        mensajeAEliminar = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) { Text("Eliminar", color = Color.White) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { mensajeAEliminar = null }) { Text("Cancelar") }
+            }
+        )
+    }
+
     imagenAmpliada?.let { url ->
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+        // Resetear zoom al abrir una nueva imagen
+        LaunchedEffect(url) { scale = 1f; offset = Offset.Zero }
+
         Dialog(
             onDismissRequest = { imagenAmpliada = null },
             properties = androidx.compose.ui.window.DialogProperties(
                 usePlatformDefaultWidth = false,
-                dismissOnClickOutside = true
+                dismissOnClickOutside = false   // evita cierre accidental al hacer pan
             )
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.95f))
-                    .clickable { imagenAmpliada = null },
+                    .clickable(enabled = scale <= 1.05f) { imagenAmpliada = null },
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
@@ -409,7 +440,19 @@ fun ChatScreen(
                     contentDescription = "Imagen ampliada",
                     modifier = Modifier
                         .fillMaxWidth()
-                        .wrapContentHeight(),
+                        .wrapContentHeight()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        }
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(0.5f, 6f)
+                                offset = if (scale > 1f) offset + pan else Offset.Zero
+                            }
+                        },
                     contentScale = ContentScale.Fit
                 )
                 IconButton(
@@ -418,19 +461,39 @@ fun ChatScreen(
                 ) {
                     Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
                 }
+                // Indicador de zoom al hacer pinch
+                if (scale > 1.1f) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${(scale * 10).toInt() / 10f}×",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
     }
 
-    // ───────────── VISOR ARCHIVO FULLSCREEN ─────────────
     archivoAmpliado?.let { msg ->
         val ext = msg.mediaNombre.substringAfterLast('.', "").uppercase()
         val esImagen = ext in listOf("JPG", "JPEG", "PNG", "GIF", "WEBP", "BMP")
+        var scaleArch by remember { mutableFloatStateOf(1f) }
+        var offsetArch by remember { mutableStateOf(Offset.Zero) }
+        LaunchedEffect(msg.id) { scaleArch = 1f; offsetArch = Offset.Zero }
+
         Dialog(
             onDismissRequest = { archivoAmpliado = null },
             properties = androidx.compose.ui.window.DialogProperties(
                 usePlatformDefaultWidth = false,
-                dismissOnClickOutside = true
+                dismissOnClickOutside = !esImagen
             )
         ) {
             Box(
@@ -440,16 +503,43 @@ fun ChatScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (esImagen) {
-                    // Si el archivo es una imagen, mostrarla a pantalla completa
+                    // Imagen a pantalla completa con zoom
                     AsyncImage(
                         model = msg.mediaUrl,
                         contentDescription = msg.mediaNombre,
                         modifier = Modifier
                             .fillMaxWidth()
                             .wrapContentHeight()
-                            .clickable { archivoAmpliado = null },
+                            .graphicsLayer {
+                                scaleX = scaleArch
+                                scaleY = scaleArch
+                                translationX = offsetArch.x
+                                translationY = offsetArch.y
+                            }
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    scaleArch = (scaleArch * zoom).coerceIn(0.5f, 6f)
+                                    offsetArch = if (scaleArch > 1f) offsetArch + pan else Offset.Zero
+                                }
+                            },
                         contentScale = ContentScale.Fit
                     )
+                    if (scaleArch > 1.1f) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 16.dp)
+                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${(scaleArch * 10).toInt() / 10f}×",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 } else {
                     // Para otros archivos: tarjeta con info y botón abrir
                     Column(
@@ -503,8 +593,6 @@ fun ChatScreen(
         }
     }
 }
-
-// ───────────── BARRA PREVIEW IMAGEN ─────────────
 
 @Composable
 private fun BarraPreviewImagen(
@@ -576,8 +664,7 @@ private fun BarraPreviewImagen(
     }
 }
 
-// ───────────── BURBUJAS ─────────────
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BurbujaMensaje(
     msg: MensajeChat,
@@ -587,7 +674,8 @@ private fun BurbujaMensaje(
     sdf: SimpleDateFormat,
     context: android.content.Context,
     onVerImagen: (String) -> Unit = {},
-    onVerArchivo: (MensajeChat) -> Unit = {}
+    onVerArchivo: (MensajeChat) -> Unit = {},
+    onEliminar: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(
         topStart = if (esMio) 18.dp else 4.dp,
@@ -603,9 +691,10 @@ private fun BurbujaMensaje(
                 shape = shape,
                 modifier = Modifier
                     .widthIn(max = 240.dp)
-                    .clickable {
-                        if (msg.mediaUrl.isNotEmpty()) onVerImagen(msg.mediaUrl)
-                    }
+                    .combinedClickable(
+                        onClick = { if (msg.mediaUrl.isNotEmpty()) onVerImagen(msg.mediaUrl) },
+                        onLongClick = { onEliminar?.invoke() }
+                    )
             ) {
                 Column {
                     AsyncImage(
@@ -640,9 +729,10 @@ private fun BurbujaMensaje(
                 colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
                 modifier = Modifier
                     .widthIn(max = 270.dp)
-                    .clickable {
-                        if (msg.mediaUrl.isNotEmpty()) onVerArchivo(msg)
-                    }
+                    .combinedClickable(
+                        onClick = { if (msg.mediaUrl.isNotEmpty()) onVerArchivo(msg) },
+                        onLongClick = { onEliminar?.invoke() }
+                    )
             ) {
                 Row(
                     Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -717,7 +807,12 @@ private fun BurbujaMensaje(
             Card(
                 shape = shape,
                 colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
-                modifier = Modifier.widthIn(max = 280.dp)
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { onEliminar?.invoke() }
+                    )
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Text(
@@ -736,8 +831,6 @@ private fun BurbujaMensaje(
         }
     }
 }
-
-// ───────────── HELPERS ─────────────
 
 private fun archivoColor(ext: String, fallback: Color): Color = when (ext) {
     "PDF" -> Color(0xFFDC2626)

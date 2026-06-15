@@ -3,13 +3,27 @@
   <component name="AppInsightsSettings">
     <option name="tabSettings">
       <map>
+        <entry key="Android Vitals">
+          <value>
+            <InsightsFilterSettings>
+              <option name="connection">
+                <ConnectionSetting>
+                  <option name="appId" value="es.zerohaus.app" />
+                </ConnectionSetting>
+              </option>
+              <option name="signal" value="SIGNAL_UNSPECIFIED" />
+              <option name="timeIntervalDays" value="SEVEN_DAYS" />
+              <option name="visibilityType" value="ALL" />
+            </InsightsFilterSettings>
+          </value>
+        </entry>
         <entry key="Firebase Crashlytics">
           <value>
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.example.zerohaus" />
-                  <option name="mobileSdkAppId" value="1:140712303137:android:33c54ada506e61342d6160" />
+                  <option name="appId" value="es.zerohaus.app" />
+                  <option name="mobileSdkAppId" value="1:140712303137:android:bdf070ae95ad00512d6160" />
                   <option name="projectId" value="zerohaus-2a865" />
                   <option name="projectNumber" value="140712303137" />
                 </ConnectionSetting>

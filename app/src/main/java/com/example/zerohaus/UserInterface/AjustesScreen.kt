@@ -1,9 +1,7 @@
 ﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -72,6 +70,14 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            val msg = estado.mensajeToast ?: estado.error
+            ZeroToast(
+                mensaje   = msg,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -95,7 +101,6 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                 Modifier
                     .padding(pv)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -276,33 +281,6 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                     Text(c.ajustesGuardar, color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
 
-                if (estado.exito) {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFD1FAE5))
-                    ) {
-                        Row(Modifier.padding(12.dp)) {
-                            Icon(Icons.Default.CheckCircle, null, tint = verde)
-                            Spacer(Modifier.width(8.dp))
-                            Text(c.ajustesGuardados, color = Color(0xFF065F46))
-                        }
-                    }
-                }
-
-                estado.error?.let {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
-                    ) {
-                        Row(Modifier.padding(12.dp)) {
-                            Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626))
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, color = Color(0xFF991B1B))
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -79,21 +79,15 @@ fun TecnicosScreen(
         }
     }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(estado.mensajeExito, estado.error) {
-        estado.mensajeExito?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.limpiarMensaje()
-        }
-        estado.error?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.limpiarMensaje()
-        }
-    }
-
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensajeExito ?: estado.error,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -268,19 +262,28 @@ fun TecnicosScreen(
                                     color = verde.copy(alpha = 0.1f)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            t.nombre.take(1).uppercase(),
-                                            color = verde,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 20.sp
-                                        )
+                                        if (t.nombre.isNotBlank()) {
+                                            Text(
+                                                t.nombre.take(1).uppercase(),
+                                                color = verde,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = verde,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
                                     }
                                 }
 
                                 // Nombre, ciudad, especialidades
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        t.nombre,
+                                        t.nombre.ifBlank { "Técnico" },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
@@ -302,26 +305,41 @@ fun TecnicosScreen(
                                 }
 
                                 // Badge de rating (arriba a la derecha)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = amarillo.copy(alpha = 0.15f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                if (t.opiniones > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = amarillo.copy(alpha = 0.15f)
                                     ) {
-                                        Icon(
-                                            Icons.Default.Star,
-                                            null,
-                                            tint = amarillo,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                null,
+                                                tint = amarillo,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "%.1f".format(t.rating),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF92400E)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = gris.copy(alpha = 0.12f)
+                                    ) {
                                         Text(
-                                            "%.1f".format(t.rating),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF92400E)
+                                            "Nuevo",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = gris
                                         )
                                     }
                                 }
@@ -415,7 +433,6 @@ fun TecnicosScreen(
         }
     }
 
-    // ───────────── FIN DE TecnicosScreen ─────────────
     // Diálogo solicitar presupuesto
     if (tecnicoParaPresupuesto != null) {
         val t = tecnicoParaPresupuesto!!
@@ -445,6 +462,7 @@ fun TecnicosScreen(
                         )
                         tecnicoParaPresupuesto = null
                     },
+                    enabled = !viewModel.estado.enviandoSolicitud && descripcionPresupuesto.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
                 ) { Text("Enviar solicitud", color = Color.White) }
             },

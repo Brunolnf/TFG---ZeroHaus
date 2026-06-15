@@ -69,7 +69,7 @@ fun RankingsScreen(
                     Text("No hay técnicos registrados aún", color = gris)
                     Spacer(Modifier.height(10.dp))
                     OutlinedButton(
-                        onClick = { viewModel.cargarRanking() },
+                        onClick = { viewModel.cargarRanking(forzar = true) },
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))

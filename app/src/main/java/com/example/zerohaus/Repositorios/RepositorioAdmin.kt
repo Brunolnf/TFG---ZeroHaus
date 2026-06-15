@@ -2,6 +2,7 @@ package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -28,13 +29,11 @@ class RepositorioAdmin {
 
     /** Lista todos los usuarios (incluidos bloqueados y eliminados). */
     fun listarUsuarios(callback: (List<Usuario>) -> Unit) {
-        db.collection("usuarios").get()
-            .addOnSuccessListener { snap ->
-                val lista = snap.documents.mapNotNull { it.toObject(Usuario::class.java) }
-                    .sortedBy { it.nombre.lowercase() }
-                callback(lista)
-            }
-            .addOnFailureListener { callback(emptyList()) }
+        db.collection("usuarios").getOrTimeout { snap ->
+            val lista = snap?.documents?.mapNotNull { it.toObject(Usuario::class.java) }
+                ?.sortedBy { it.nombre.lowercase() } ?: emptyList()
+            callback(lista)
+        }
     }
 
     /**
@@ -261,6 +260,255 @@ class RepositorioAdmin {
                 batch.commit().addOnCompleteListener { onDone() }
             }
             .addOnFailureListener { onDone() }
+    }
+
+    /**
+     * Borra docs de `/tecnicos` huérfanos cuyo nombre coincide con un patrón
+     * genérico ("tecnico", "técnico", "tecnico1", "técnico 2", vacío…). Son
+     * datos seed o pruebas viejas que aparecen en el buscador del cliente pero
+     * NO tienen entrada en `/usuarios` — por eso la limpieza basada en
+     * cuentas Auth no los ve. Aquí los borramos en cascada (reseñas, chats,
+     * solicitudes, proyectos, certificados, notificaciones).
+     */
+    fun limpiarTecnicosHuerfanosGenericos(callback: (Int) -> Unit) {
+        // Patrón: literal "tecnico"/"técnico" con sufijo numérico opcional
+        // (con o sin espacio). Cubre "Tecnico", "tecnico1", "TECNICO 2"…
+        val regex = Regex("^t[eé]cnico\\s*\\d*$", RegexOption.IGNORE_CASE)
+
+        db.collection("tecnicos").get()
+            .addOnSuccessListener { snap ->
+                val genericos = snap.documents.filter { doc ->
+                    val nombre = doc.getString("nombre").orEmpty().trim()
+                    nombre.isEmpty() || regex.matches(nombre)
+                }
+                if (genericos.isEmpty()) { callback(0); return@addOnSuccessListener }
+
+                var pendientes = genericos.size
+                var borrados = 0
+                genericos.forEach { doc ->
+                    val tecId = doc.id
+                    val tecUid = doc.getString("uid").orEmpty()
+                    borrarTecnicoCompleto(tecId, tecUid) { ok ->
+                        if (ok) borrados++
+                        pendientes--
+                        if (pendientes <= 0) callback(borrados)
+                    }
+                }
+            }
+            .addOnFailureListener { callback(0) }
+    }
+
+    /**
+     * Borra los usuarios "genéricos" cuyo nombre es literalmente "tecnico" /
+     * "técnico" / vacío. Son cuentas de prueba/seed que se quieren limpiar
+     * antes de la demo. Se llama en cascada `eliminarUsuario`, así que se
+     * borran también sus datos asociados (solicitudes, chats, reseñas…).
+     * NO toca al admin (su email está en la constante de protección).
+     */
+    fun limpiarUsuariosGenericos(adminEmail: String?, callback: (Int) -> Unit) {
+        val regex = Regex("^t[eé]cnico\\s*\\d*$", RegexOption.IGNORE_CASE)
+        db.collection("usuarios").get()
+            .addOnSuccessListener { snap ->
+                val genericos = snap.documents.filter { doc ->
+                    val nombre = doc.getString("nombre").orEmpty().trim()
+                    val email = doc.getString("email").orEmpty()
+                    val esGenerico = nombre.isEmpty() || regex.matches(nombre)
+                    val esAdmin = adminEmail != null && email.equals(adminEmail, ignoreCase = true)
+                    esGenerico && !esAdmin
+                }
+                if (genericos.isEmpty()) { callback(0); return@addOnSuccessListener }
+
+                var pendientes = genericos.size
+                var borrados = 0
+                genericos.forEach { doc ->
+                    eliminarUsuario(doc.id) { result ->
+                        if (result.isSuccess) borrados++
+                        pendientes--
+                        if (pendientes <= 0) callback(borrados)
+                    }
+                }
+            }
+            .addOnFailureListener { callback(0) }
+    }
+
+    /**
+     * Recupera técnicos cuyos perfiles `/tecnicos` fueron borrados pero cuya cuenta
+     * `/usuarios` sigue intacta. Por cada `/usuarios/{uid}` con tipoUsuario
+     * "Técnico" / "Tecnico" (sin tilde) / variantes de caja, recrea un doc mínimo
+     * en `/tecnicos/{uid}` si no existe. Idempotente: no toca los que ya están.
+     *
+     * Se llama automáticamente al abrir el panel del admin para reparar cualquier
+     * borrado accidental sin pedirle al usuario que haga nada.
+     */
+    fun restaurarTecnicosDesdeUsuarios(callback: (Int) -> Unit = {}) {
+        db.collection("usuarios").get()
+            .addOnSuccessListener { uSnap ->
+                val tecnicosUsuarios = uSnap.documents.filter { doc ->
+                    val tipo = doc.getString("tipoUsuario").orEmpty()
+                    tipo.equals("Técnico", ignoreCase = true) ||
+                        tipo.equals("Tecnico", ignoreCase = true)
+                }
+                if (tecnicosUsuarios.isEmpty()) { callback(0); return@addOnSuccessListener }
+
+                var pendientes = tecnicosUsuarios.size
+                var restaurados = 0
+                tecnicosUsuarios.forEach { uDoc ->
+                    val uid = uDoc.id
+                    val nombre = uDoc.getString("nombre").orEmpty()
+                    val email = uDoc.getString("email").orEmpty()
+                    db.collection("tecnicos").document(uid).get()
+                        .addOnSuccessListener { tDoc ->
+                            if (tDoc.exists()) {
+                                pendientes--
+                                if (pendientes <= 0) callback(restaurados)
+                                return@addOnSuccessListener
+                            }
+                            val tec = Tecnico(
+                                id = uid,
+                                uid = uid,
+                                nombre = nombre,
+                                emailContacto = email
+                            )
+                            db.collection("tecnicos").document(uid).set(tec)
+                                .addOnCompleteListener {
+                                    if (it.isSuccessful) restaurados++
+                                    pendientes--
+                                    if (pendientes <= 0) callback(restaurados)
+                                }
+                        }
+                        .addOnFailureListener {
+                            pendientes--
+                            if (pendientes <= 0) callback(restaurados)
+                        }
+                }
+            }
+            .addOnFailureListener { callback(0) }
+    }
+
+    /**
+     * Borra todos los técnicos "fake" (sin cuenta Auth real). Un técnico se considera
+     * real si existe `/usuarios/{tec.uid}` con `tipoUsuario == "Técnico"`. El resto
+     * son seed data o restos de pruebas: se eliminan junto con sus datos asociados
+     * (reseñas, chats, solicitudes, proyectos, certificados, notificaciones).
+     *
+     * El callback recibe el número de técnicos borrados (o -1 si hubo error global).
+     */
+    fun limpiarTecnicosFake(callback: (Result<Int>) -> Unit) {
+        db.collection("tecnicos").get()
+            .addOnSuccessListener { tecSnap ->
+                if (tecSnap.isEmpty) { callback(Result.success(0)); return@addOnSuccessListener }
+                val tecnicos = tecSnap.documents
+                // Leemos TODOS los /usuarios (no `whereEqualTo("tipoUsuario", "Técnico")`)
+                // y filtramos en cliente: el campo puede estar guardado como "Tecnico"
+                // sin tilde, "TECNICO", etc. La query exacta dejaba esos fuera y los
+                // técnicos reales acababan clasificados como fakes.
+                db.collection("usuarios").get()
+                    .addOnSuccessListener { uSnap ->
+                        val uidsReales = uSnap.documents
+                            .filter { doc ->
+                                val tipo = doc.getString("tipoUsuario").orEmpty()
+                                tipo.equals("Técnico", ignoreCase = true) ||
+                                    tipo.equals("Tecnico", ignoreCase = true)
+                            }
+                            .map { it.id }
+                            .toSet()
+                        // Un técnico es real si su uid (o el id del doc) coincide con un
+                        // /usuarios/{uid} de tipo "Técnico". Si no, es fake.
+                        val fakes = tecnicos.filter { doc ->
+                            val uid = doc.getString("uid").orEmpty()
+                            val id = doc.id
+                            uid !in uidsReales && id !in uidsReales
+                        }
+                        if (fakes.isEmpty()) { callback(Result.success(0)); return@addOnSuccessListener }
+
+                        var pendientes = fakes.size
+                        var borrados = 0
+                        fakes.forEach { doc ->
+                            val tecId = doc.id
+                            val tecUid = doc.getString("uid").orEmpty()
+                            borrarTecnicoCompleto(tecId, tecUid) { ok ->
+                                if (ok) borrados++
+                                pendientes--
+                                if (pendientes <= 0) callback(Result.success(borrados))
+                            }
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        callback(Result.failure(Exception(e.message ?: "Error leyendo usuarios")))
+                    }
+            }
+            .addOnFailureListener { e ->
+                callback(Result.failure(Exception(e.message ?: "Error leyendo técnicos")))
+            }
+    }
+
+    /**
+     * Cascada de borrado para un técnico "fake": reseñas, certificados, notificaciones,
+     * solicitudes, proyectos, chats (con mensajes) y el doc /tecnicos/{tecId}.
+     * No toca /usuarios (por definición no existe para fakes) ni Auth (no aplica).
+     */
+    private fun borrarTecnicoCompleto(
+        tecId: String,
+        tecUid: String,
+        onDone: (Boolean) -> Unit
+    ) {
+        // Identificadores por los que las colecciones referencian al técnico. Probamos
+        // ambos porque los datos antiguos pueden usar el docId o el uid indistintamente.
+        val ids = listOfNotNull(tecId.takeIf { it.isNotBlank() }, tecUid.takeIf { it.isNotBlank() })
+            .distinct()
+        if (ids.isEmpty()) { onDone(false); return }
+
+        val queries = mutableListOf<com.google.firebase.firestore.Query>()
+        ids.forEach { id ->
+            queries += db.collection("resenas").whereEqualTo("tecnicoId", id)
+            queries += db.collection("solicitudes").whereEqualTo("tecnicoId", id)
+            queries += db.collection("solicitudes").whereEqualTo("tecnicoUid", id)
+            queries += db.collection("proyectos").whereEqualTo("tecnicoId", id)
+            queries += db.collection("proyectos").whereEqualTo("tecnicoUid", id)
+            queries += db.collection("pagos").whereEqualTo("tecnicoUid", id)
+            queries += db.collection("certificados").whereEqualTo("uid", id)
+            queries += db.collection("notificaciones").whereEqualTo("uid", id)
+        }
+
+        var pendientes = queries.size + ids.size + 1 // +ids chats, +1 doc tecnico
+
+        fun checkFin() {
+            pendientes--
+            if (pendientes <= 0) onDone(true)
+        }
+
+        queries.forEach { q -> borrarQuery(q) { checkFin() } }
+
+        // Chats: borra el chat y su subcolección de mensajes.
+        ids.forEach { id ->
+            db.collection("chats").whereArrayContains("participantes", id).get()
+                .addOnSuccessListener { snap ->
+                    if (snap.isEmpty) { checkFin(); return@addOnSuccessListener }
+                    var chatsPend = snap.size()
+                    snap.documents.forEach { chatDoc ->
+                        chatDoc.reference.collection("mensajes").get()
+                            .addOnSuccessListener { msgs ->
+                                val batch = db.batch()
+                                msgs.documents.forEach { batch.delete(it.reference) }
+                                batch.delete(chatDoc.reference)
+                                batch.commit().addOnCompleteListener {
+                                    chatsPend--
+                                    if (chatsPend <= 0) checkFin()
+                                }
+                            }
+                            .addOnFailureListener {
+                                chatDoc.reference.delete()
+                                chatsPend--
+                                if (chatsPend <= 0) checkFin()
+                            }
+                    }
+                }
+                .addOnFailureListener { checkFin() }
+        }
+
+        // Doc del técnico (siempre por docId; el uid puede coincidir o no).
+        db.collection("tecnicos").document(tecId).delete()
+            .addOnCompleteListener { checkFin() }
     }
 
 }
