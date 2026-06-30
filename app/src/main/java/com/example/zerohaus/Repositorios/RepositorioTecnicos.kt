@@ -83,11 +83,155 @@ class RepositorioTecnicos {
             "vitoria"        to (42.8467 to -2.6716),
             "gasteiz"        to (42.8467 to -2.6716),
             "castellón"      to (39.9860 to -0.0513),
-            "castellon"      to (39.9860 to -0.0513)
+            "castellon"      to (39.9860 to -0.0513),
+            "palencia"       to (42.0095 to -4.5288),
+            "soria"          to (41.7665 to -2.4790),
+            "teruel"         to (40.3440 to -1.1069),
+            "cuenca"         to (40.0704 to -2.1374),
+            "guadalajara"    to (40.6334 to -3.1669),
+            "ávila"          to (40.6566 to -4.6812),
+            "avila"          to (40.6566 to -4.6812),
+            "segovia"        to (40.9429 to -4.1088),
+            "ciudad real"    to (38.9848 to -3.9274),
+            "mérida"         to (38.9165 to -6.3437),
+            "merida"         to (38.9165 to -6.3437),
+            "ceuta"          to (35.8894 to -5.3198),
+            "melilla"        to (35.2923 to -2.9381),
+            "huesca"         to (42.1401 to -0.4089),
+            "zamora"         to (41.5033 to -5.7446),
+            // Falta histórica: Cádiz NO estaba y técnicos de allí caían al fallback
+            // hash (con suerte aparecían en Bilbao o Granada). Añadida con las
+            // demás capitales que se nos quedaron fuera y los grandes municipios
+            // que la gente escribe en su perfil aunque no sean capital de provincia.
+            "cádiz"          to (36.5298 to -6.2924),
+            "cadiz"          to (36.5298 to -6.2924),
+            "santiago de compostela" to (42.8782 to -8.5448),
+            "santiago"       to (42.8782 to -8.5448),
+            "cartagena"      to (37.6056 to -0.9966),
+            "elche"          to (38.2682 to -0.7104),
+            "elx"            to (38.2682 to -0.7104),
+            "jerez de la frontera" to (36.6850 to -6.1261),
+            "jerez"          to (36.6850 to -6.1261),
+            "marbella"       to (36.5097 to -4.8854),
+            "algeciras"      to (36.1408 to -5.4562),
+            "hospitalet de llobregat" to (41.3596 to 2.0997),
+            "l'hospitalet"   to (41.3596 to 2.0997),
+            "hospitalet"     to (41.3596 to 2.0997),
+            "badalona"       to (41.4500 to 2.2474),
+            "terrassa"       to (41.5640 to 2.0089),
+            "sabadell"       to (41.5483 to 2.1075),
+            "mataró"         to (41.5388 to 2.4449),
+            "mataro"         to (41.5388 to 2.4449),
+            "reus"           to (41.1561 to 1.1069),
+            "móstoles"       to (40.3223 to -3.8649),
+            "mostoles"       to (40.3223 to -3.8649),
+            "alcalá de henares" to (40.4818 to -3.3645),
+            "alcala de henares" to (40.4818 to -3.3645),
+            "fuenlabrada"    to (40.2842 to -3.7944),
+            "leganés"        to (40.3267 to -3.7635),
+            "leganes"        to (40.3267 to -3.7635),
+            "getafe"         to (40.3057 to -3.7329),
+            "alcorcón"       to (40.3458 to -3.8246),
+            "alcorcon"       to (40.3458 to -3.8246),
+            "torrejón de ardoz" to (40.4596 to -3.4737),
+            "torrejon de ardoz" to (40.4596 to -3.4737),
+            "parla"          to (40.2370 to -3.7681),
+            "alcobendas"     to (40.5408 to -3.6418),
+            "san sebastián de los reyes" to (40.5538 to -3.6233),
+            "las rozas"      to (40.4929 to -3.8730),
+            "majadahonda"    to (40.4731 to -3.8728),
+            "pozuelo de alarcón" to (40.4318 to -3.8136),
+            "vélez-málaga"   to (36.7825 to -4.1009),
+            "velez-malaga"   to (36.7825 to -4.1009),
+            "vélez málaga"   to (36.7825 to -4.1009),
+            "fuengirola"     to (36.5397 to -4.6245),
+            "mijas"          to (36.5957 to -4.6373),
+            "torremolinos"   to (36.6203 to -4.4998),
+            "estepona"       to (36.4283 to -5.1453),
+            "benidorm"       to (38.5380 to -0.1316),
+            "torrevieja"     to (37.9799 to -0.6826),
+            "orihuela"       to (38.0848 to -0.9447),
+            "elda"           to (38.4774 to -0.7929),
+            "alcoy"          to (38.6989 to -0.4734),
+            "alcoi"          to (38.6989 to -0.4734),
+            "gandía"         to (38.9669 to -0.1813),
+            "gandia"         to (38.9669 to -0.1813),
+            "lorca"          to (37.6709 to -1.7019),
+            "molina de segura" to (38.0541 to -1.2120),
+            "dos hermanas"   to (37.2826 to -5.9237),
+            "alcalá de guadaíra" to (37.3372 to -5.8429),
+            "alcala de guadaira" to (37.3372 to -5.8429),
+            "utrera"         to (37.1856 to -5.7805),
+            "écija"          to (37.5409 to -5.0824),
+            "ecija"          to (37.5409 to -5.0824),
+            "linares"        to (38.0951 to -3.6360),
+            "úbeda"          to (38.0152 to -3.3702),
+            "ubeda"          to (38.0152 to -3.3702),
+            "motril"         to (36.7510 to -3.5187),
+            "roquetas de mar" to (36.7644 to -2.6147),
+            "el ejido"       to (36.7768 to -2.8128),
+            "talavera de la reina" to (39.9637 to -4.8323),
+            "talavera"       to (39.9637 to -4.8323),
+            "ferrol"         to (43.4823 to -8.2335),
+            "narón"          to (43.5070 to -8.1556),
+            "naron"          to (43.5070 to -8.1556),
+            "lalín"          to (42.6611 to -8.1129),
+            "lalin"          to (42.6611 to -8.1129),
+            "miranda de ebro" to (42.6864 to -2.9476),
+            "ponferrada"     to (42.5462 to -6.5919),
+            "torrelavega"    to (43.3503 to -4.0479),
+            "irún"           to (43.3389 to -1.7886),
+            "irun"           to (43.3389 to -1.7886),
+            "barakaldo"      to (43.2974 to -2.9883),
+            "getxo"          to (43.3568 to -3.0118),
+            "santa cruz de tenerife" to (28.4636 to -16.2518),
+            "la laguna"      to (28.4853 to -16.3208),
+            "san cristóbal de la laguna" to (28.4853 to -16.3208),
+            "arona"          to (28.0995 to -16.6809),
+            "telde"          to (27.9933 to -15.4197),
+            "arrecife"       to (28.9637 to -13.5477),
+            "ibiza"          to (38.9067 to 1.4206),
+            "eivissa"        to (38.9067 to 1.4206),
+            "manacor"        to (39.5703 to 3.2089),
+            "vilanova i la geltrú" to (41.2237 to 1.7252),
+            "vilanova"       to (41.2237 to 1.7252),
+            "vic"            to (41.9301 to 2.2546),
+            "manresa"        to (41.7287 to 1.8235),
+            "igualada"       to (41.5807 to 1.6175)
         )
 
-        fun coordenadasDeCiudad(ciudad: String): Pair<Double, Double>? =
-            CIUDADES_COORDS[ciudad.trim().lowercase()]
+        /**
+         * Devuelve coordenadas para el nombre de ciudad introducido por el
+         * técnico. Intenta varias tolerancias antes de rendirse:
+         *   1) match exacto con la clave normalizada (lowercase + trim).
+         *   2) match sin tildes (Á → a) por si el usuario las omite y la
+         *      clave canónica las lleva (o viceversa).
+         *   3) match por contención: si el texto incluye o está incluido
+         *      en una clave conocida (ej. "Palencia capital" → "palencia",
+         *      "Pza. Mayor, Madrid" → "madrid"). Devuelve el match más
+         *      largo para evitar falsos positivos.
+         */
+        fun coordenadasDeCiudad(ciudad: String): Pair<Double, Double>? {
+            val raw = ciudad.trim().lowercase()
+            if (raw.isEmpty()) return null
+            CIUDADES_COORDS[raw]?.let { return it }
+
+            val sinTildes = quitarTildes(raw)
+            CIUDADES_COORDS[sinTildes]?.let { return it }
+
+            val claveCoincidente = CIUDADES_COORDS.keys
+                .filter { clave ->
+                    val claveSinT = quitarTildes(clave)
+                    sinTildes.contains(claveSinT) || claveSinT.contains(sinTildes)
+                }
+                .maxByOrNull { it.length }
+            return claveCoincidente?.let { CIUDADES_COORDS[it] }
+        }
+
+        private fun quitarTildes(s: String): String = s
+            .replace('á', 'a').replace('é', 'e').replace('í', 'i')
+            .replace('ó', 'o').replace('ú', 'u').replace('ü', 'u')
+            .replace('ñ', 'n')
     }
 
     fun obtenerTecnicos(callback: (List<Tecnico>) -> Unit) {
@@ -127,10 +271,10 @@ class RepositorioTecnicos {
         var resenasPorTecnico: Map<String, List<Resena>> = emptyMap()
 
         // El contador de proyectos completados vive YA en el doc del técnico:
-        // arranca con el histórico sembrado (trabajos previos al tracking) y se
-        // incrementa con FieldValue.increment(1) cuando un proyecto pasa a
-        // "Finalizado" (ver tecnicoConfirmaPago). No hace falta cross-query a
-        // /proyectos, que las reglas de Firestore bloquean entre clientes.
+        // arranca con el histórico sembrado (trabajos previos al tracking) y lo
+        // incrementa el trigger `on_solicitud_estado_cambiado` (Admin SDK) al
+        // detectar la transición a "Completado". El cliente no lo toca porque
+        // las rules congelan el campo. No hace falta cross-query a /proyectos.
         fun emitir() {
             callback(tecnicosBase.map { t ->
                 val lista = resenasPorTecnico[t.id].orEmpty()
@@ -443,20 +587,15 @@ class RepositorioTecnicos {
         val ref = db.collection("solicitudes").document(solicitudId)
         ref.get().addOnSuccessListener { doc ->
             if (doc.getString("estado") != "FichaEnviada") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            val tecnicoUid = doc.getString("tecnicoUid") ?: ""
-            val nombreCliente = doc.getString("nombreCliente") ?: "Cliente"
-            ref.update("estado", "FichaRechazada")
-                .addOnSuccessListener {
-                    if (tecnicoUid.isNotEmpty()) {
-                        crearNotif(
-                            uid = tecnicoUid,
-                            titulo = "Ficha rechazada",
-                            detalle = "$nombreCliente ha rechazado la ficha de inicio${if (motivo.isNotBlank()) ": $motivo" else ""}. Puedes ajustarla y reenviarla.",
-                            tipo = "presupuesto"
-                        )
-                    }
-                    callback(Result.success(Unit))
-                }
+            // Guardamos el motivo en el doc para que el trigger
+            // `on_solicitud_estado_cambiado` (Admin SDK) pueda incluirlo en la
+            // notif al técnico. Antes el cliente creaba la notif cross-user, pero
+            // las rules ahora prohíben que el cliente escriba notifs en buzón ajeno.
+            ref.update(mapOf(
+                "estado" to "FichaRechazada",
+                "motivoRechazoFicha" to motivo.trim()
+            ))
+                .addOnSuccessListener { callback(Result.success(Unit)) }
                 .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
         }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
     }
@@ -522,15 +661,11 @@ class RepositorioTecnicos {
                         mapOf("estado" to "Finalizado", "pagado" to true, "progreso" to 100)
                     )
                 }
-                // Contador denormalizado en /tecnicos. Las reglas no permiten
-                // a clientes leer /proyectos de otros usuarios, así que un cross-
-                // query para contar finalizados fallaría con PERMISSION_DENIED.
-                // Mantenemos el campo aquí y lo subimos en el momento exacto en
-                // que un proyecto se cierra (técnico confirma cobro).
-                if (sol.tecnicoId.isNotEmpty()) {
-                    db.collection("tecnicos").document(sol.tecnicoId)
-                        .update("proyectosCompletados", FieldValue.increment(1))
-                }
+                // El contador `proyectosCompletados` lo incrementa el trigger
+                // `on_solicitud_estado_cambiado` con Admin SDK al detectar la
+                // transición a "Completado". Las rules de /tecnicos congelan ese
+                // campo para el cliente para evitar métricas infladas a mano.
+
                 // Histórico de pagos (opcional)
                 val refPago = db.collection("pagos").document()
                 refPago.set(
@@ -620,6 +755,4 @@ class RepositorioTecnicos {
             }
     }
 
-    private fun crearNotif(uid: String, titulo: String, detalle: String, tipo: String) =
-        RepositorioNotificaciones.crearRapida(uid, titulo, detalle, tipo)
 }

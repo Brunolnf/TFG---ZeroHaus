@@ -29,7 +29,6 @@ def _ahora_ms() -> int:
     (Timestamp != Long)."""
     return int(time.time() * 1000)
 
-ADMIN_EMAIL = "brulinf9@gmail.com"
 REGION = "europe-west1"  # Bélgica, más cerca de España = menor latencia
 
 # Colecciones donde el `uid` del usuario aparece como propietario del documento.
@@ -55,14 +54,19 @@ DOCS_POR_ID = ["usuarios", "tecnicos", "ajustes"]
 
 
 def _verificar_admin(req: https_fn.CallableRequest) -> None:
-    """Comprueba que quien llama está autenticado como el admin."""
+    """Comprueba el custom claim `admin: true` del JWT del caller.
+
+    El claim se asigna server-side con `set_admin_claim.py` (Admin SDK) y NO
+    es modificable desde el cliente. No comparamos por email para evitar
+    filtrar la identidad del admin en el código distribuido.
+    """
     if req.auth is None:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.UNAUTHENTICATED,
             "Debes iniciar sesión."
         )
-    email = (req.auth.token or {}).get("email", "")
-    if email.lower() != ADMIN_EMAIL.lower():
+    token = req.auth.token or {}
+    if token.get("admin") is not True:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "Solo el administrador puede ejecutar esta operación."
@@ -205,8 +209,13 @@ def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
 # ════════════════════════════════════════════════════════════════════════
 
 def _obtener_token_fcm(db, uid: str):
-    """Lee el tokenFCM de /usuarios/{uid}. None si no hay token o usuario."""
-    snap = db.collection("usuarios").document(uid).get()
+    """Lee el tokenFCM de /ajustes/{uid}. None si no hay token o doc.
+
+    Vive en /ajustes (cerrado a esMio||esAdmin) en vez de /usuarios (lectura
+    abierta), para evitar harvesting cross-user de tokens FCM. El Admin SDK
+    se salta las rules, asi que esta funcion lo lee sin problemas.
+    """
+    snap = db.collection("ajustes").document(uid).get()
     if not snap.exists:
         return None
     token = (snap.to_dict() or {}).get("tokenFCM", "")
@@ -454,6 +463,13 @@ def on_solicitud_estado_cambiado(event) -> None:
     tecnico_nombre = despues.get("tecnicoNombre", "El técnico")
     nombre_cliente = despues.get("nombreCliente", "El cliente")
 
+    motivo_rechazo_ficha = (despues.get("motivoRechazoFicha") or "").strip()
+    detalle_ficha_rechazada = (
+        f"{nombre_cliente} ha rechazado la ficha de inicio"
+        + (f": {motivo_rechazo_ficha}" if motivo_rechazo_ficha else "")
+        + ". Puedes ajustarla y reenviarla."
+    )
+
     # Mapa: estado nuevo → (destinatario_uid, titulo, cuerpo, tipo).
     plantillas = {
         "Presupuestado": (uid_cliente, "Has recibido un presupuesto",
@@ -462,6 +478,8 @@ def on_solicitud_estado_cambiado(event) -> None:
                           f"{nombre_cliente} ha aceptado tu presupuesto.", "proyecto"),
         "FichaEnviada":  (uid_cliente, "Ficha de inicio recibida",
                           f"{tecnico_nombre} te ha enviado la ficha de inicio.", "proyecto"),
+        "FichaRechazada": (tecnico_uid, "Ficha rechazada",
+                           detalle_ficha_rechazada, "presupuesto"),
         "EnCurso":       (tecnico_uid, "Proyecto en marcha",
                           f"{nombre_cliente} ha aceptado la ficha. ¡A trabajar!", "proyecto"),
         "PendientePago": (uid_cliente, "Trabajo finalizado",
@@ -485,6 +503,17 @@ def on_solicitud_estado_cambiado(event) -> None:
     _crear_notificacion_in_app(db, destinatario, titulo, cuerpo, tipo)
     token = _obtener_token_fcm(db, destinatario)
     _enviar_push(token, titulo, cuerpo, {"tipo": tipo, "solicitudId": sol_id})
+
+    # Contador denormalizado: al cerrar el proyecto, sumamos uno al técnico.
+    # Lo hace el trigger (Admin SDK, se salta las rules) en lugar del cliente,
+    # porque las rules de /tecnicos congelan `proyectosCompletados` para evitar
+    # infladas de métricas desde un cliente custom.
+    if estado_despues == "Completado":
+        tecnico_id = despues.get("tecnicoId", "") or tecnico_uid
+        if tecnico_id:
+            db.collection("tecnicos").document(tecnico_id).update({
+                "proyectosCompletados": firestore.Increment(1)
+            })
 
 
 # ════════════════════════════════════════════════════════════════════════

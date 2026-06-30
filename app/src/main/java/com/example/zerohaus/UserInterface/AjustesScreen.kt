@@ -1,7 +1,9 @@
 ﻿package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -90,6 +92,39 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                     IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
+        },
+        // Botón fijo abajo: en móviles bajos el Column con scroll dejaba el
+        // botón fuera del viewport y los usuarios no podían guardar sin recortar
+        // contenido. Subiéndolo a bottomBar siempre se ve.
+        //
+        // navigationBarsPadding(): respeta la barra de gestos / botones del
+        // sistema. Sin esto, en móviles con barra de 3 botones el botón
+        // quedaba parcialmente tapado por encima de Home/Back/Recents.
+        bottomBar = {
+            if (!estado.cargando) {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.navigationBarsPadding()
+                ) {
+                    Button(
+                        onClick = { viewModel.guardar() },
+                        enabled = !estado.guardando,
+                        colors = ButtonDefaults.buttonColors(containerColor = verde),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        if (estado.guardando) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(c.ajustesGuardar, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     ) { pv ->
         if (estado.cargando) {
@@ -101,6 +136,7 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                 Modifier
                     .padding(pv)
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -263,22 +299,6 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                             }
                         }
                     }
-                }
-
-                // Guardar
-                Button(
-                    onClick = { viewModel.guardar() },
-                    enabled = !estado.guardando,
-                    colors = ButtonDefaults.buttonColors(containerColor = verde),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) {
-                    if (estado.guardando) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(c.ajustesGuardar, color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
 
             }

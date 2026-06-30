@@ -30,4 +30,9 @@ class AppPreferencias(ctx: Context) {
     // Tipo de usuario cacheado para evitar esperar a Firestore al abrir la app
     fun getTipoUsuarioCached(): String = prefs.getString("tipo_usuario_cache", "") ?: ""
     fun setTipoUsuarioCached(v: String) = prefs.edit().putString("tipo_usuario_cache", v).apply()
+
+    // Cache del claim `admin` del ID token, para decidir startDestination al
+    // arrancar sin esperar la llamada async a getIdToken().
+    fun getEsAdminCached(): Boolean = prefs.getBoolean("es_admin_cache", false)
+    fun setEsAdminCached(v: Boolean) = prefs.edit().putBoolean("es_admin_cache", v).apply()
 }

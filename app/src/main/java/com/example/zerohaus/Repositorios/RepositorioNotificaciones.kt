@@ -78,11 +78,6 @@ class RepositorioNotificaciones {
             .addOnFailureListener { e -> callback(Result.failure(Exception(e.message))) }
     }
 
-    fun crearNotificacionParaUid(uidDestino: String, notificacion: Notificacion) {
-        val ref = db.collection("notificaciones").document()
-        ref.set(notificacion.copy(id = ref.id, uid = uidDestino))
-    }
-
     companion object {
         /** Ventana para considerar dos notificaciones idénticas como la misma duplicada. */
         private const val VENTANA_DEDUP_MS = 30_000L

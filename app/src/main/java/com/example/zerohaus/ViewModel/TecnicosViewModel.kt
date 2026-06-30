@@ -114,6 +114,18 @@ class TecnicosViewModel : ViewModel() {
         return coords ?: (0.0 to 0.0)
     }
 
+    /**
+     * True si sabemos situar al técnico en el mapa (lat/lng propias o ciudad
+     * reconocida). Hace falta para distinguir "distanciaKm == 0 porque está al
+     * lado" de "distanciaKm == 0 porque no se ha podido calcular": ambos casos
+     * tenían el mismo valor y la pastilla de km no aparecía en cards cercanas,
+     * dando la sensación de que el orden por proximidad no funcionaba.
+     */
+    fun tieneUbicacionConocida(t: Tecnico): Boolean {
+        val (tLat, _) = coordsEfectivasTecnico(t)
+        return tLat != 0.0
+    }
+
     private fun calcularDistanciaKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
         val result = FloatArray(1)
         Location.distanceBetween(lat1, lng1, lat2, lng2, result)

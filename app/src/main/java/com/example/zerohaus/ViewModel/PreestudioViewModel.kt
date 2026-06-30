@@ -20,7 +20,14 @@ data class PreestudioEstado(
     val calefaccion: String = "Caldera de gas",
     val acs: String = "Gas",
     val direccion: String = "",
+    val provincia: String = "",
     val orientacion: String = "Sur",
+    val iluminacion: String = "Mixta",
+    val tipoVivienda: String = "Piso interior",
+    val refrigeracion: String = "Sin refrigeración",
+    val fotovoltaica: String = "Sin fotovoltaica",
+    val ocupantes: String = "3",
+    val electrodomesticos: String = "Clase B-C",
     val cargando: Boolean = false,
     val error: String? = null,
     val informeGenerado: InformeEnergetico? = null,
@@ -45,13 +52,22 @@ class PreestudioViewModel : ViewModel() {
     fun cambiarCalefaccion(v: String) { estado = estado.copy(calefaccion = v) }
     fun cambiarAcs(v: String) { estado = estado.copy(acs = v) }
     fun cambiarDireccion(v: String) { estado = estado.copy(direccion = v) }
+    fun cambiarProvincia(v: String) { estado = estado.copy(provincia = v) }
     fun cambiarOrientacion(v: String) { estado = estado.copy(orientacion = v) }
+    fun cambiarIluminacion(v: String) { estado = estado.copy(iluminacion = v) }
+    fun cambiarTipoVivienda(v: String) { estado = estado.copy(tipoVivienda = v) }
+    fun cambiarRefrigeracion(v: String) { estado = estado.copy(refrigeracion = v) }
+    fun cambiarFotovoltaica(v: String) { estado = estado.copy(fotovoltaica = v) }
+    fun cambiarOcupantes(v: String) { estado = estado.copy(ocupantes = v) }
+    fun cambiarElectrodomesticos(v: String) { estado = estado.copy(electrodomesticos = v) }
 
     fun generarInforme() {
         if (estado.cargando) return  // evitar llamadas duplicadas
 
         val superficie = estado.superficie.toIntOrNull()
         val anio = estado.anio.toIntOrNull()
+        val ocupantes = estado.ocupantes.toIntOrNull()
+        val algo = com.example.zerohaus.Repositorios.AlgoritmoEnergetico
 
         when {
             estado.nombreVivienda.isBlank() ->
@@ -60,20 +76,41 @@ class PreestudioViewModel : ViewModel() {
                 { estado = estado.copy(error = "Introduce una superficie válida (1–5000 m²)"); return }
             anio == null || anio < 1900 || anio > java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) ->
                 { estado = estado.copy(error = "Introduce un año de construcción válido (1900–${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)})"); return }
+            estado.provincia !in algo.provinciasOrdenadas ->
+                { estado = estado.copy(error = "Selecciona una provincia válida de la lista"); return }
+            estado.iluminacion !in algo.opcionesIluminacion ->
+                { estado = estado.copy(error = "Selecciona el tipo de iluminación"); return }
+            estado.tipoVivienda !in algo.opcionesTipoVivienda ->
+                { estado = estado.copy(error = "Selecciona el tipo de vivienda"); return }
+            estado.refrigeracion !in algo.opcionesRefrigeracion ->
+                { estado = estado.copy(error = "Selecciona el sistema de refrigeración"); return }
+            estado.fotovoltaica !in algo.opcionesFotovoltaica ->
+                { estado = estado.copy(error = "Indica si hay instalación fotovoltaica"); return }
+            estado.electrodomesticos !in algo.opcionesElectrodomesticos ->
+                { estado = estado.copy(error = "Selecciona la clase de electrodomésticos"); return }
+            ocupantes == null || ocupantes !in 1..20 ->
+                { estado = estado.copy(error = "Introduce un número de ocupantes válido (1–20)"); return }
         }
 
         estado = estado.copy(cargando = true, error = null)
 
         val viviendaBase = Vivienda(
-            nombre          = estado.nombreVivienda,
-            superficie      = superficie!!,
-            anioConstruccion = anio!!,
-            tipoVentanas    = estado.ventanas,
-            aislamiento     = estado.aislamiento,
-            calefaccion     = estado.calefaccion,
-            acs             = estado.acs,
-            direccion       = estado.direccion,
-            orientacion     = estado.orientacion
+            nombre            = estado.nombreVivienda,
+            superficie        = superficie!!,
+            anioConstruccion  = anio!!,
+            tipoVentanas      = estado.ventanas,
+            aislamiento       = estado.aislamiento,
+            calefaccion       = estado.calefaccion,
+            acs               = estado.acs,
+            direccion         = estado.direccion,
+            provincia         = estado.provincia,
+            orientacion       = estado.orientacion,
+            iluminacion       = estado.iluminacion,
+            tipoVivienda      = estado.tipoVivienda,
+            refrigeracion     = estado.refrigeracion,
+            fotovoltaica      = estado.fotovoltaica,
+            ocupantes         = ocupantes!!,
+            electrodomesticos = estado.electrodomesticos
         )
 
         viewModelScope.launch {
@@ -129,7 +166,14 @@ class PreestudioViewModel : ViewModel() {
             calefaccion      = vivienda.calefaccion.ifBlank { "Caldera de gas" },
             acs              = vivienda.acs.ifBlank { "Gas" },
             direccion        = vivienda.direccion,
+            provincia        = vivienda.provincia,
             orientacion      = vivienda.orientacion.ifBlank { "Sur" },
+            iluminacion      = vivienda.iluminacion.ifBlank { "Mixta" },
+            tipoVivienda     = vivienda.tipoVivienda.ifBlank { "Piso interior" },
+            refrigeracion    = vivienda.refrigeracion.ifBlank { "Sin refrigeración" },
+            fotovoltaica     = vivienda.fotovoltaica.ifBlank { "Sin fotovoltaica" },
+            ocupantes        = if (vivienda.ocupantes > 0) vivienda.ocupantes.toString() else "3",
+            electrodomesticos = vivienda.electrodomesticos.ifBlank { "Clase B-C" },
             error            = null
         )
     }

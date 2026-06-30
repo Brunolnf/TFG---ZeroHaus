@@ -7,7 +7,6 @@ data class Usuario(
     val email: String = "",
     val tipoUsuario: String = "Propietario",
     val fotoPerfil: String = "",
-    val tokenFCM: String = "",
     val fechaRegistro: Long = System.currentTimeMillis(),
     // bloqueado: impide iniciar sesión (login lo comprueba y cierra sesión).
     // eliminado: el usuario fue borrado por el admin; el doc se mantiene

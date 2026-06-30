@@ -156,10 +156,11 @@ fun AdminScreen(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                val miUid = AdminConfig.adminUid
                                 items(lista, key = { it.uid }) { u ->
                                     UsuarioCard(
                                         usuario = u,
-                                        esAdminProtegido = AdminConfig.esAdmin(u.email),
+                                        esAdminProtegido = miUid != null && u.uid == miUid,
                                         onEditar = { usuarioEditar = u },
                                         onBloquear = { viewModel.toggleBloqueo(u) },
                                         onEliminar = { usuarioConfirmarEliminar = u }

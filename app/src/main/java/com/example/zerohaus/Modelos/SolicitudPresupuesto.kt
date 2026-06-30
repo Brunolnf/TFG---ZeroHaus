@@ -40,7 +40,12 @@ data class SolicitudPresupuesto(
     val fechaPago: Long = 0L,
     val metodoPago: String = "",         // "tarjeta" | "efectivo"
     val referenciaPago: String = "",     // referencia/concepto opcional indicado por el cliente
-    val fechaPagoCliente: Long = 0L      // cuando el cliente marca "ya he pagado"
+    val fechaPagoCliente: Long = 0L,     // cuando el cliente marca "ya he pagado"
+
+    // Motivo opcional cuando el cliente rechaza la ficha de inicio. Lo guarda
+    // el cliente y lo lee el trigger `on_solicitud_estado_cambiado` para
+    // incluirlo en la notif al técnico.
+    val motivoRechazoFicha: String = ""
 )
 
 /**

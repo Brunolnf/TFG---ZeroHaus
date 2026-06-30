@@ -269,6 +269,11 @@ class RepositorioAdmin {
      * NO tienen entrada en `/usuarios` — por eso la limpieza basada en
      * cuentas Auth no los ve. Aquí los borramos en cascada (reseñas, chats,
      * solicitudes, proyectos, certificados, notificaciones).
+     *
+     * Verificamos que realmente sean huérfanos (sin `/usuarios/{uid}` ni
+     * `/usuarios/{id}`): un técnico legítimo con nombre "Tecnico" o
+     * "Tecnico1" (típico en demos) no se debe borrar — antes el filtro
+     * solo miraba el nombre y arrasaba con certificados aprobados incluidos.
      */
     fun limpiarTecnicosHuerfanosGenericos(callback: (Int) -> Unit) {
         // Patrón: literal "tecnico"/"técnico" con sufijo numérico opcional
@@ -276,45 +281,60 @@ class RepositorioAdmin {
         val regex = Regex("^t[eé]cnico\\s*\\d*$", RegexOption.IGNORE_CASE)
 
         db.collection("tecnicos").get()
-            .addOnSuccessListener { snap ->
-                val genericos = snap.documents.filter { doc ->
+            .addOnSuccessListener { tecSnap ->
+                val candidatos = tecSnap.documents.filter { doc ->
                     val nombre = doc.getString("nombre").orEmpty().trim()
                     nombre.isEmpty() || regex.matches(nombre)
                 }
-                if (genericos.isEmpty()) { callback(0); return@addOnSuccessListener }
+                if (candidatos.isEmpty()) { callback(0); return@addOnSuccessListener }
 
-                var pendientes = genericos.size
-                var borrados = 0
-                genericos.forEach { doc ->
-                    val tecId = doc.id
-                    val tecUid = doc.getString("uid").orEmpty()
-                    borrarTecnicoCompleto(tecId, tecUid) { ok ->
-                        if (ok) borrados++
-                        pendientes--
-                        if (pendientes <= 0) callback(borrados)
+                // Cruzamos con /usuarios para no tocar técnicos con cuenta Auth.
+                db.collection("usuarios").get()
+                    .addOnSuccessListener { uSnap ->
+                        val uidsConCuenta = uSnap.documents.map { it.id }.toSet()
+                        val huerfanos = candidatos.filter { doc ->
+                            val uid = doc.getString("uid").orEmpty()
+                            val id = doc.id
+                            uid !in uidsConCuenta && id !in uidsConCuenta
+                        }
+                        if (huerfanos.isEmpty()) { callback(0); return@addOnSuccessListener }
+
+                        var pendientes = huerfanos.size
+                        var borrados = 0
+                        huerfanos.forEach { doc ->
+                            val tecId = doc.id
+                            val tecUid = doc.getString("uid").orEmpty()
+                            borrarTecnicoCompleto(tecId, tecUid) { ok ->
+                                if (ok) borrados++
+                                pendientes--
+                                if (pendientes <= 0) callback(borrados)
+                            }
+                        }
                     }
-                }
+                    .addOnFailureListener { callback(0) }
             }
             .addOnFailureListener { callback(0) }
     }
 
     /**
-     * Borra los usuarios "genéricos" cuyo nombre es literalmente "tecnico" /
-     * "técnico" / vacío. Son cuentas de prueba/seed que se quieren limpiar
-     * antes de la demo. Se llama en cascada `eliminarUsuario`, así que se
-     * borran también sus datos asociados (solicitudes, chats, reseñas…).
-     * NO toca al admin (su email está en la constante de protección).
+     * Borra los usuarios "genéricos" sin nombre. Son cuentas restos de
+     * pruebas: la app nunca crea cuentas con nombre vacío, así que se
+     * pueden eliminar sin riesgo. Se llama en cascada `eliminarUsuario`,
+     * así que se borran también sus datos asociados.
+     *
+     * ANTES también borraba por patrón `^tecnico\d*$` (Tecnico, Tecnico1…),
+     * pero un usuario LEGÍTIMO con ese nombre (típico mientras pruebas la
+     * app) acababa eliminado junto con sus certificados verificados —
+     * exactamente el caso que rompió el mapa de técnicos. Restringimos a
+     * nombre vacío para no destruir datos reales con un nombre informal.
      */
-    fun limpiarUsuariosGenericos(adminEmail: String?, callback: (Int) -> Unit) {
-        val regex = Regex("^t[eé]cnico\\s*\\d*$", RegexOption.IGNORE_CASE)
+    fun limpiarUsuariosGenericos(adminUid: String?, callback: (Int) -> Unit) {
         db.collection("usuarios").get()
             .addOnSuccessListener { snap ->
                 val genericos = snap.documents.filter { doc ->
                     val nombre = doc.getString("nombre").orEmpty().trim()
-                    val email = doc.getString("email").orEmpty()
-                    val esGenerico = nombre.isEmpty() || regex.matches(nombre)
-                    val esAdmin = adminEmail != null && email.equals(adminEmail, ignoreCase = true)
-                    esGenerico && !esAdmin
+                    val esAdmin = adminUid != null && doc.id == adminUid
+                    nombre.isEmpty() && !esAdmin
                 }
                 if (genericos.isEmpty()) { callback(0); return@addOnSuccessListener }
 

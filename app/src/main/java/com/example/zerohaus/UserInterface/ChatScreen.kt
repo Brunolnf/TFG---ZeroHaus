@@ -297,7 +297,7 @@ fun ChatScreen(
                         ) {
                             OutlinedTextField(
                                 value = estado.texto,
-                                onValueChange = { viewModel.cambiarTexto(it) },
+                                onValueChange = { if (it.length <= 2000) viewModel.cambiarTexto(it) },
                                 modifier = Modifier.weight(1f),
                                 placeholder = { Text("Escribe un mensaje…", color = gris) },
                                 shape = RoundedCornerShape(24.dp),
@@ -340,14 +340,15 @@ fun ChatScreen(
                     )
                     OutlinedTextField(
                         value = descripcionPresupuesto,
-                        onValueChange = { descripcionPresupuesto = it },
+                        onValueChange = { if (it.length <= 500) descripcionPresupuesto = it },
                         label = { Text("Describe lo que necesitas") },
                         placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                         maxLines = 6,
-                        enabled = !enviandoPresupuesto
+                        enabled = !enviandoPresupuesto,
+                        supportingText = { Text("${descripcionPresupuesto.length} / 500", fontSize = 11.sp) }
                     )
                     Text(
                         "El técnico recibirá tu solicitud y podrás seguir el estado en la sección Presupuestos.",

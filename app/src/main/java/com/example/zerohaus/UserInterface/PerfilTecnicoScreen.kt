@@ -525,13 +525,24 @@ fun PerfilTecnicoScreen(
                         fontSize = 14.sp
                     )
                     OutlinedTextField(
+                        // Tope de 1000 chars en cliente para que la UI no permita
+                        // pasarse del límite que enforce firestore.rules en /resenas.
                         value = comentario,
-                        onValueChange = { comentario = it },
+                        onValueChange = { if (it.length <= 1000) comentario = it },
                         label = { Text("Comentario *") },
                         placeholder = { Text("Cuenta cómo fue la experiencia (mín. 10 caracteres)", fontSize = 12.sp) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
+                        minLines = 2,
+                        supportingText = {
+                            Text(
+                                "${comentario.length} / 1000",
+                                fontSize = 11.sp,
+                                color = if (comentario.length >= 950)
+                                    MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     )
                     if (estado.enviandoResena) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Color(0xFF16A34A))

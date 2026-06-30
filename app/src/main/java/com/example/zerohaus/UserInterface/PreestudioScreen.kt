@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.PreestudioViewModel
 import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,6 +135,13 @@ fun PreestudioScreen(
                                 CampoTexto(estado.anio, { viewModel.cambiarAnio(it) }, "2000", borde)
                             }
                         }
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo("Nº de ocupantes")
+                        CampoTexto(estado.ocupantes, { viewModel.cambiarOcupantes(it.filter(Char::isDigit).take(2)) }, "3", borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto("Tipo de vivienda", estado.tipoVivienda,
+                            AlgoritmoEnergetico.opcionesTipoVivienda,
+                            { viewModel.cambiarTipoVivienda(it) }, borde)
                     }
                 }
 
@@ -164,6 +172,22 @@ fun PreestudioScreen(
                         SelectorCompacto("ACS", estado.acs,
                             listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia"),
                             { viewModel.cambiarAcs(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto("Iluminación", estado.iluminacion,
+                            AlgoritmoEnergetico.opcionesIluminacion,
+                            { viewModel.cambiarIluminacion(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto("Refrigeración", estado.refrigeracion,
+                            AlgoritmoEnergetico.opcionesRefrigeracion,
+                            { viewModel.cambiarRefrigeracion(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto("Fotovoltaica (autoconsumo)", estado.fotovoltaica,
+                            AlgoritmoEnergetico.opcionesFotovoltaica,
+                            { viewModel.cambiarFotovoltaica(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto("Electrodomésticos", estado.electrodomesticos,
+                            AlgoritmoEnergetico.opcionesElectrodomesticos,
+                            { viewModel.cambiarElectrodomesticos(it) }, borde)
                     }
                 }
 
@@ -174,6 +198,13 @@ fun PreestudioScreen(
                         Spacer(Modifier.height(10.dp))
                         EtiquetaCampo("Dirección")
                         CampoTexto(estado.direccion, { viewModel.cambiarDireccion(it) }, "Calle, número, ciudad", borde)
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo("Provincia")
+                        SelectorProvincia(
+                            valor = estado.provincia,
+                            onValor = { viewModel.cambiarProvincia(it) },
+                            borde = borde
+                        )
                         Spacer(Modifier.height(10.dp))
                         SelectorCompacto("Orientación", estado.orientacion,
                             listOf("Norte", "Sur", "Este", "Oeste"),
@@ -191,12 +222,19 @@ fun PreestudioScreen(
                 val anioActual = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
                 val superficieOk = estado.superficie.toIntOrNull()?.let { it > 0 } == true
                 val anioOk = estado.anio.toIntOrNull()?.let { it in 1900..anioActual } == true
+                val ocupantesOk = estado.ocupantes.toIntOrNull()?.let { it in 1..20 } == true
                 val preestudioCompleto = estado.nombreVivienda.isNotBlank()
-                    && superficieOk && anioOk
+                    && superficieOk && anioOk && ocupantesOk
                     && estado.direccion.isNotBlank()
                     && estado.ventanas.isNotBlank() && estado.aislamiento.isNotBlank()
                     && estado.calefaccion.isNotBlank() && estado.acs.isNotBlank()
                     && estado.orientacion.isNotBlank()
+                    && estado.provincia in AlgoritmoEnergetico.provinciasOrdenadas
+                    && estado.iluminacion in AlgoritmoEnergetico.opcionesIluminacion
+                    && estado.tipoVivienda in AlgoritmoEnergetico.opcionesTipoVivienda
+                    && estado.refrigeracion in AlgoritmoEnergetico.opcionesRefrigeracion
+                    && estado.fotovoltaica in AlgoritmoEnergetico.opcionesFotovoltaica
+                    && estado.electrodomesticos in AlgoritmoEnergetico.opcionesElectrodomesticos
 
                 // Botón generar informe
                 Button(
@@ -324,6 +362,63 @@ private fun ViviendaSelectorDropdown(
         }
     }
 }
+
+/**
+ * Selector de provincia con búsqueda por texto (ignorando tildes/mayúsculas).
+ * El estado del texto está totalmente levantado: el caller mantiene `valor`
+ * y la lista oficial de provincias está en [AlgoritmoEnergetico.provinciasOrdenadas].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectorProvincia(
+    valor: String,
+    onValor: (String) -> Unit,
+    borde: Color = MaterialTheme.colorScheme.outline,
+    placeholder: String = "Busca tu provincia"
+) {
+    val verde = MaterialTheme.colorScheme.primary
+    var expandido by remember { mutableStateOf(false) }
+
+    val filtradas = remember(valor) {
+        val opciones = AlgoritmoEnergetico.provinciasOrdenadas
+        if (valor.isBlank()) opciones
+        else {
+            val q = valor.quitarAcentos()
+            opciones.filter { it.quitarAcentos().contains(q, ignoreCase = true) }
+        }
+    }
+
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
+        OutlinedTextField(
+            value = valor,
+            onValueChange = { onValor(it); expandido = true },
+            placeholder = { Text(placeholder, fontSize = 13.sp) },
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = borde, focusedBorderColor = verde,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor = MaterialTheme.colorScheme.surface
+            ),
+            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryEditable)
+        )
+        if (filtradas.isNotEmpty()) {
+            ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+                filtradas.take(50).forEach { p ->
+                    DropdownMenuItem(
+                        text = { Text(p) },
+                        onClick = { onValor(p); expandido = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun String.quitarAcentos(): String =
+    java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

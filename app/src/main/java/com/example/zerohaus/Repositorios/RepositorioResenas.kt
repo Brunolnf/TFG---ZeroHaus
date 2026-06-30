@@ -64,7 +64,8 @@ class RepositorioResenas {
                         val r = resena.copy(id = ref.id, uid = uid, solicitudId = pendiente.id)
                         ref.set(r)
                             .addOnSuccessListener {
-                                recalcularRatingTecnico(resena.tecnicoId)
+                                // El trigger `on_resena_changed` (Admin SDK) recalcula
+                                // rating/opiniones en /tecnicos automáticamente.
                                 callback(Result.success(Unit))
                             }
                             .addOnFailureListener { e ->
@@ -109,21 +110,8 @@ class RepositorioResenas {
                         conservadas.add(r)
                     }
                 }
-                if (borreAlgo) recalcularRatingTecnico(tecnicoId)
-            }
-    }
-
-    private fun recalcularRatingTecnico(tecnicoId: String) {
-        db.collection("resenas")
-            .whereEqualTo("tecnicoId", tecnicoId)
-            .get()
-            .addOnSuccessListener { snap ->
-                val resenas = snap.documents.mapNotNull { it.toObject(Resena::class.java) }
-                val nuevoRating = if (resenas.isEmpty()) 0.0
-                    else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
-                db.collection("tecnicos").document(tecnicoId).update(
-                    mapOf("rating" to nuevoRating, "opiniones" to resenas.size)
-                )
+                // Si borré reseñas, el trigger `on_resena_changed` recalcula
+                // rating/opiniones en /tecnicos para cada borrado.
             }
     }
 

@@ -179,8 +179,9 @@ class RepositorioAutenticacion {
     }
 
     fun actualizarUsuario(usuario: Usuario, callback: (Result<Unit>) -> Unit) {
-        // Sólo se actualizan los campos editables desde la UI. Usar set() completo
-        // borraría tokenFCM, fechaRegistro, etc. — por eso .update() con campos concretos.
+        // Solo se actualizan los campos editables desde la UI. Usar set() completo
+        // borraria fechaRegistro y los campos congelados por las rules
+        // (bloqueado/eliminado/tipoUsuario) - por eso .set(merge) con campos concretos.
         val datos = mapOf(
             "nombre" to usuario.nombre,
             "fotoPerfil" to usuario.fotoPerfil

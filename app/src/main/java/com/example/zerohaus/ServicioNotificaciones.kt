@@ -38,10 +38,13 @@ class ServicioNotificaciones : FirebaseMessagingService() {
             Log.w(TAG, "guardarToken: no hay usuario logueado, token no se persiste")
             return
         }
+        // /ajustes/{uid} esta cerrado a esMio || esAdmin. Asi el tokenFCM no
+        // viaja en /usuarios (que tiene lectura abierta a logueados para los
+        // nombres de los chats), evitando harvesting de tokens cross-user.
         FirebaseFirestore.getInstance()
-            .collection("usuarios").document(uid)
+            .collection("ajustes").document(uid)
             .set(mapOf("tokenFCM" to token), SetOptions.merge())
-            .addOnSuccessListener { Log.i(TAG, "tokenFCM guardado en /usuarios/$uid") }
+            .addOnSuccessListener { Log.i(TAG, "tokenFCM guardado en /ajustes/$uid") }
             .addOnFailureListener { e -> Log.e(TAG, "Fallo al guardar tokenFCM: ${e.message}") }
     }
 
@@ -49,11 +52,10 @@ class ServicioNotificaciones : FirebaseMessagingService() {
         private const val TAG = "ServicioNotificaciones"
 
         /**
-         * Pide el token FCM actual y lo persiste en `/usuarios/{uid}.tokenFCM`.
-         * Llamar siempre que cambie el usuario logueado y también en cada arranque
-         * de la app: si el token caducó o nunca llegó a guardarse (red caída,
-         * Firestore bloqueado por reglas en el primer intento, etc.), este reintento
-         * lo recupera. Sin esto, los usuarios recién creados se quedaban sin push.
+         * Pide el token FCM actual y lo persiste en `/ajustes/{uid}.tokenFCM`.
+         * Vive en /ajustes (cerrado a esMio||esAdmin) en lugar de /usuarios
+         * (lectura abierta), para no exponer tokens FCM ajenos a cualquier
+         * logueado.
          */
         fun registrarToken() {
             val uid = FirebaseAuth.getInstance().currentUser?.uid ?: run {
@@ -63,11 +65,11 @@ class ServicioNotificaciones : FirebaseMessagingService() {
             FirebaseMessaging.getInstance().token
                 .addOnSuccessListener { token ->
                     if (token.isNullOrBlank()) {
-                        Log.w(TAG, "registrarToken: FCM devolvió un token vacío")
+                        Log.w(TAG, "registrarToken: FCM devolvio un token vacio")
                         return@addOnSuccessListener
                     }
                     FirebaseFirestore.getInstance()
-                        .collection("usuarios").document(uid)
+                        .collection("ajustes").document(uid)
                         .set(mapOf("tokenFCM" to token), SetOptions.merge())
                         .addOnSuccessListener { Log.i(TAG, "tokenFCM registrado para $uid") }
                         .addOnFailureListener { e -> Log.e(TAG, "Fallo guardando tokenFCM: ${e.message}") }

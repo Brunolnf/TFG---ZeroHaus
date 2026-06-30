@@ -287,16 +287,22 @@ fun TecnicosScreen(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
-                                    if (t.ciudad.isNotEmpty() || t.distanciaKm > 0.0) {
+                                    val ubicConocida = viewModel.tieneUbicacionConocida(t)
+                                    if (t.ciudad.isNotEmpty() || ubicConocida) {
                                         Spacer(Modifier.height(2.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(Icons.Default.LocationOn, null, tint = gris, modifier = Modifier.size(13.dp))
                                             Spacer(Modifier.width(2.dp))
                                             val textoUbic = buildString {
                                                 if (t.ciudad.isNotEmpty()) append(t.ciudad)
-                                                if (t.distanciaKm > 0.0) {
+                                                if (ubicConocida) {
                                                     if (t.ciudad.isNotEmpty()) append(" · ")
-                                                    append("${t.distanciaKm} km")
+                                                    // distanciaKm == 0 con coords conocidas = mismo punto que el
+                                                    // usuario; mostramos "<1 km" en vez de "0.0 km" o esconderla.
+                                                    append(
+                                                        if (t.distanciaKm < 1.0) "<1 km"
+                                                        else "${t.distanciaKm} km"
+                                                    )
                                                 }
                                             }
                                             Text(textoUbic, color = gris, fontSize = 13.sp)
@@ -444,12 +450,15 @@ fun TecnicosScreen(
                     Text("Técnico: ${t.nombre}", fontWeight = FontWeight.Medium)
                     OutlinedTextField(
                         value = descripcionPresupuesto,
-                        onValueChange = { descripcionPresupuesto = it },
+                        onValueChange = { if (it.length <= 500) descripcionPresupuesto = it },
                         label = { Text("Describe lo que necesitas") },
                         placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
+                        minLines = 3,
+                        supportingText = {
+                            Text("${descripcionPresupuesto.length} / 500", fontSize = 11.sp)
+                        }
                     )
                 }
             },

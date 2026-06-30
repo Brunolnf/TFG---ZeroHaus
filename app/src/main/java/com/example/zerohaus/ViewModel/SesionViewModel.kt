@@ -24,7 +24,13 @@ class SesionViewModel : ViewModel() {
     var cargaFallida = mutableStateOf(false)
 
     init {
-        if (auth.currentUser != null) cargarUsuario()
+        if (auth.currentUser != null) {
+            cargarUsuario()
+            // Sesión persistente: refresca el claim sin forzar (toma el token
+            // cacheado del SDK si está vigente). Mantiene AppEstado.esAdminCache
+            // alineado con la realidad del servidor por si cambió.
+            refrescarClaims(forzar = false)
+        }
     }
 
     fun cargarUsuario() {
@@ -43,6 +49,30 @@ class SesionViewModel : ViewModel() {
             }
             // Si u == null no hacemos nada aquí: el watchdog decide reintento/fallo.
         }
+    }
+
+    /**
+     * Refresca el flag de admin leyendo el custom claim del ID token. Lo
+     * persiste en AppEstado/AppPreferencias para que el siguiente arranque
+     * tenga un valor síncrono al decidir startDestination.
+     *
+     * Llamar con forzar=true tras un login (asegura claim recién emitido por
+     * el servidor) y con forzar=false en arranques con sesión ya activa
+     * (usa el token cacheado del SDK, instantáneo y sin red).
+     */
+    fun refrescarClaims(forzar: Boolean) {
+        val user = auth.currentUser ?: run {
+            AppEstado.guardarEsAdmin(false)
+            return
+        }
+        user.getIdToken(forzar)
+            .addOnSuccessListener { result ->
+                AppEstado.guardarEsAdmin(result.claims["admin"] == true)
+            }
+            .addOnFailureListener {
+                // Conservamos el valor cacheado: una caída de red puntual no
+                // debe degradar a un admin legítimo a usuario normal.
+            }
     }
 
     private fun programarWatchdog() {
@@ -65,6 +95,10 @@ class SesionViewModel : ViewModel() {
         cargaFallida.value = false
         intentos = 0
         cargarUsuario()
+        // Tras login: forzamos refresh del ID token para que el claim recién
+        // emitido por el servidor llegue (un token cacheado anterior podría
+        // ser de hace minutos y no traer aún la promoción/democión).
+        refrescarClaims(forzar = true)
     }
 
     fun logout() {
@@ -72,6 +106,7 @@ class SesionViewModel : ViewModel() {
         auth.signOut()
         AppEstado.setViviendaSeleccionadaId("")
         AppEstado.limpiarTipoUsuario()
+        AppEstado.guardarEsAdmin(false)
         RepositorioChat.limpiarCacheNombre()
         usuario.value = null
         logueado.value = false

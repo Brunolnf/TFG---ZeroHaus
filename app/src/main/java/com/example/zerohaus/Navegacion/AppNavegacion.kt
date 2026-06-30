@@ -46,8 +46,7 @@ fun AppNavegacion() {
         if (logueado) ServicioNotificaciones.registrarToken()
     }
 
-    val emailActual = if (logueado) FirebaseAuth.getInstance().currentUser?.email else null
-    val esAdmin = logueado && AdminConfig.esAdmin(emailActual)
+    val esAdmin = logueado && AdminConfig.esAdmin()
 
     val nav = rememberNavController()
     val loginVM: LoginViewModel = viewModel()
@@ -99,9 +98,20 @@ fun AppNavegacion() {
                     // del spinner verde infinito).
                     if (FirebaseAuth.getInstance().currentUser != null) {
                         sesionVM.postLogin()
-                        val destino = if (AdminConfig.esAdmin(FirebaseAuth.getInstance().currentUser?.email))
-                            "admin" else "main"
-                        nav.navigate(destino) { popUpTo("login") { inclusive = true } }
+                        // postLogin() dispara refrescarClaims(forzar=true), pero el
+                        // callback de getIdToken es async. Pedimos el token aquí
+                        // mismo y decidimos destino cuando llega; mientras tanto
+                        // navegamos a "main" como fallback (UX no se cuelga).
+                        FirebaseAuth.getInstance().currentUser
+                            ?.getIdToken(true)
+                            ?.addOnSuccessListener { result ->
+                                val esAdminClaim = result.claims["admin"] == true
+                                val destino = if (esAdminClaim) "admin" else "main"
+                                nav.navigate(destino) { popUpTo("login") { inclusive = true } }
+                            }
+                            ?.addOnFailureListener {
+                                nav.navigate("main") { popUpTo("login") { inclusive = true } }
+                            }
                     }
                 },
                 onIrARegistro  = { nav.navigate("registro") },
@@ -131,7 +141,7 @@ fun AppNavegacion() {
             )
         }
 
-        // Panel exclusivo del administrador (único admin: AdminConfig.ADMIN_EMAIL)
+        // Panel exclusivo del administrador (custom claim `admin` del ID token).
         composable("admin") {
             val adminVM: AdminViewModel = viewModel()
             AdminScreen(

@@ -35,10 +35,10 @@ class AdminViewModel : ViewModel() {
 
     fun cargar() {
         cargando.value = true
-        val emailAdmin = FirebaseAuth.getInstance().currentUser?.email
+        val uidAdmin = FirebaseAuth.getInstance().currentUser?.uid
         // 1) Limpieza de cuentas /usuarios cuyo nombre es genérico ("tecnico",
         //    "Tecnico1", "técnico 2", vacío…). Cascade completo.
-        repo.limpiarUsuariosGenericos(emailAdmin) { borradosUsr ->
+        repo.limpiarUsuariosGenericos(uidAdmin) { borradosUsr ->
             // 2) Limpieza de /tecnicos HUÉRFANOS con nombre genérico — son los
             //    que aparecían en el buscador del cliente y no tenían entrada
             //    en /usuarios, por eso el paso (1) no los veía.

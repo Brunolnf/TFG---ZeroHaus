@@ -986,12 +986,13 @@ private fun VerFichaDialog(
                 if (mostrarRechazar) {
                     OutlinedTextField(
                         value = motivo,
-                        onValueChange = { motivo = it },
+                        onValueChange = { if (it.length <= 300) motivo = it },
                         label = { Text("Motivo *") },
                         placeholder = { Text("Explica al técnico qué tiene que ajustar", fontSize = 12.sp) },
                         minLines = 2,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = { Text("${motivo.length} / 300", fontSize = 11.sp) }
                     )
                 }
             }

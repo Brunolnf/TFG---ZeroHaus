@@ -12,6 +12,10 @@ object AppEstado {
     var notificacionesPush by mutableStateOf(true)
     var notificacionesSonido by mutableStateOf(true)
     var tipoUsuarioCache by mutableStateOf("")
+    // Flag de "soy admin": viene del custom claim `admin` del ID token.
+    // Se persiste para tener un valor síncrono al decidir startDestination
+    // al arrancar; se refresca en cada login.
+    var esAdminCache by mutableStateOf(false)
 
     private var prefs: AppPreferencias? = null
 
@@ -24,6 +28,7 @@ object AppEstado {
         notificacionesPush = p.getNotificacionesPush()
         notificacionesSonido = p.getNotificacionesSonido()
         tipoUsuarioCache = p.getTipoUsuarioCached()
+        esAdminCache = p.getEsAdminCached()
     }
 
     /** ID de la vivienda activa seleccionada por el usuario (persiste entre sesiones). */
@@ -38,5 +43,10 @@ object AppEstado {
     fun limpiarTipoUsuario() {
         tipoUsuarioCache = ""
         prefs?.setTipoUsuarioCached("")
+    }
+
+    fun guardarEsAdmin(v: Boolean) {
+        esAdminCache = v
+        prefs?.setEsAdminCached(v)
     }
 }
