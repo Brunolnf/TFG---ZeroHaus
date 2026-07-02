@@ -50,4 +50,16 @@ object Formato {
     /** Diferencia de energía (sin "/año"). */
     fun formatEnergiaDelta(kwh: Double, decimales: Int = 1): String =
         formatEnergia(kwh, decimales)
+
+    fun convertirEnergia(kwh: Double): Double = when (AppEstado.unidadEnergia) {
+        "MJ"   -> kwh * KWH_A_MJ
+        "kcal" -> kwh * KWH_A_KCAL
+        else   -> kwh
+    }
+
+    fun convertirMoneda(eur: Double): Double = when (AppEstado.unidadMoneda) {
+        "USD" -> eur * EUR_A_USD
+        "GBP" -> eur * EUR_A_GBP
+        else  -> eur
+    }
 }

@@ -1,10 +1,14 @@
 package com.example.zerohaus.Repositorios
 
+import android.os.Handler
+import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
+import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 
 class RepositorioAutenticacion {
 
@@ -26,8 +30,17 @@ class RepositorioAutenticacion {
                     callback(Result.success(Unit))
                     return@addOnSuccessListener
                 }
+                var respondido = false
+                val handler = Handler(Looper.getMainLooper())
+                // Fail-open: si la lectura de moderación no responde en 6s (red o App
+                // Check colgados), dejamos entrar igual para no congelar el login.
+                handler.postDelayed({
+                    if (!respondido) { respondido = true; callback(Result.success(Unit)) }
+                }, 6000L)
                 db.collection("usuarios").document(uid).get()
                     .addOnSuccessListener { doc ->
+                        if (respondido) return@addOnSuccessListener
+                        respondido = true; handler.removeCallbacksAndMessages(null)
                         val u = doc.toObject(Usuario::class.java)
                         when {
                             // Sin doc → cuenta Auth huérfana (borrada definitivamente por el
@@ -51,11 +64,13 @@ class RepositorioAutenticacion {
                     .addOnFailureListener {
                         // Si falla la lectura del doc, permitimos el login (no bloqueamos
                         // por errores de red): la moderación no debe romper el flujo normal.
+                        if (respondido) return@addOnFailureListener
+                        respondido = true; handler.removeCallbacksAndMessages(null)
                         callback(Result.success(Unit))
                     }
             }
             .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error al iniciar sesión")))
+                callback(Result.failure(Exception(traducirError(e.message))))
             }
     }
 
@@ -104,14 +119,69 @@ class RepositorioAutenticacion {
 
     fun obtenerUsuario(callback: (Usuario?) -> Unit) {
         val uid = auth.currentUser?.uid ?: run { callback(null); return }
-        db.collection("usuarios").document(uid).get()
-            .addOnSuccessListener { doc -> callback(doc.toObject(Usuario::class.java)) }
-            .addOnFailureListener { callback(null) }
+        val ref = db.collection("usuarios").document(uid)
+        // 1) Caché primero: respuesta instantánea desde disco, sin esperar a la red
+        //    ni al token de App Check. Evita el spinner en reaperturas de la app.
+        ref.get(Source.CACHE)
+            .addOnSuccessListener { doc ->
+                val habiaCache = doc.exists()
+                if (habiaCache) callback(doc.toObject(Usuario::class.java))
+                // 2) Refresca del servidor en segundo plano. Si falla o se cuelga,
+                //    no pasa nada: ya hemos entregado los datos de caché.
+                ref.get(Source.SERVER)
+                    .addOnSuccessListener { fresh ->
+                        if (fresh.exists()) callback(fresh.toObject(Usuario::class.java))
+                        // Sin doc en caché ni en servidor: avisamos para no dejar
+                        // al SesionViewModel esperando un callback que no llega.
+                        else if (!habiaCache) callback(null)
+                    }
+                    .addOnFailureListener {
+                        // Sólo informamos del fallo si no teníamos nada en caché;
+                        // si ya entregamos datos cacheados, no los pisamos con null.
+                        if (!habiaCache) callback(null)
+                    }
+            }
+            .addOnFailureListener {
+                // Sin caché (primer arranque): vamos directos al servidor.
+                ref.get(Source.SERVER)
+                    .addOnSuccessListener { doc -> callback(doc.toObject(Usuario::class.java)) }
+                    .addOnFailureListener { callback(null) }
+            }
+    }
+
+    /**
+     * Igual que [obtenerUsuario] pero invoca el callback EXACTAMENTE UNA VEZ.
+     *
+     * [obtenerUsuario] llama al callback dos veces (caché y luego servidor) para
+     * refrescar la UI. Eso es correcto para pantallas de display, pero en acciones
+     * de escritura (crear solicitud de presupuesto, publicar reseña…) provoca que
+     * la acción se ejecute dos veces y se creen DOCUMENTOS DUPLICADOS. Usa esta
+     * variante en cualquier callback que cree o modifique datos.
+     */
+    fun obtenerUsuarioUnaVez(callback: (Usuario?) -> Unit) {
+        val uid = auth.currentUser?.uid ?: run { callback(null); return }
+        val ref = db.collection("usuarios").document(uid)
+        ref.get(Source.CACHE)
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    callback(doc.toObject(Usuario::class.java))
+                } else {
+                    ref.get(Source.SERVER)
+                        .addOnSuccessListener { fresh -> callback(fresh.toObject(Usuario::class.java)) }
+                        .addOnFailureListener { callback(null) }
+                }
+            }
+            .addOnFailureListener {
+                ref.get(Source.SERVER)
+                    .addOnSuccessListener { doc -> callback(doc.toObject(Usuario::class.java)) }
+                    .addOnFailureListener { callback(null) }
+            }
     }
 
     fun actualizarUsuario(usuario: Usuario, callback: (Result<Unit>) -> Unit) {
-        // Sólo se actualizan los campos editables desde la UI. Usar set() completo
-        // borraría tokenFCM, fechaRegistro, etc. — por eso .update() con campos concretos.
+        // Solo se actualizan los campos editables desde la UI. Usar set() completo
+        // borraria fechaRegistro y los campos congelados por las rules
+        // (bloqueado/eliminado/tipoUsuario) - por eso .set(merge) con campos concretos.
         val datos = mapOf(
             "nombre" to usuario.nombre,
             "fotoPerfil" to usuario.fotoPerfil
@@ -124,11 +194,7 @@ class RepositorioAutenticacion {
             }
     }
 
-    fun isLoggedIn(): Boolean = auth.currentUser != null
-
     fun getUid(): String? = auth.currentUser?.uid
-
-    fun logout() { auth.signOut() }
 
     /**
      * Envía el email de recuperación. Por seguridad **no revela** si el correo
@@ -138,7 +204,15 @@ class RepositorioAutenticacion {
      */
     fun recuperarPassword(email: String, idiomaApp: String, callback: (Result<Unit>) -> Unit) {
         auth.setLanguageCode(codigoIdiomaFirebase(idiomaApp))
-        auth.sendPasswordResetEmail(email)
+        // ActionCodeSettings sin handleCodeInApp fuerza el uso del handler estándar
+        // de Firebase (firebaseapp.com/__/auth/action), evitando Dynamic Links
+        // que fueron discontinuados en 2025 y pueden causar que el link no funcione.
+        val settings = ActionCodeSettings.newBuilder()
+            .setUrl("https://zerohaus-2a865.firebaseapp.com")
+            .setHandleCodeInApp(false)
+            .setAndroidPackageName("com.example.zerohaus", false, null)
+            .build()
+        auth.sendPasswordResetEmail(email, settings)
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
                 val m = e.message?.lowercase().orEmpty()
@@ -172,11 +246,16 @@ class RepositorioAutenticacion {
                 "Error de conexión. Comprueba tu internet e inténtalo de nuevo."
             "too many requests" in m || "quota" in m ->
                 "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
-            "password" in m || "credential" in m || "wrong-password" in m ->
-                "Contraseña incorrecta."
+            "no user record" in m || "user-not-found" in m ->
+                "No existe ninguna cuenta con ese correo."
+            "password" in m || "credential" in m || "wrong-password" in m
+                || "malformed" in m || "expired" in m ->
+                "Email o contraseña incorrectos."
             "email already" in m || "already in use" in m ->
                 "Ya existe una cuenta con ese correo."
-            else -> "Error al enviar el correo. Inténtalo de nuevo."
+            "user-disabled" in m || "disabled" in m ->
+                "Esta cuenta ha sido deshabilitada."
+            else -> "No se pudo iniciar sesión. Inténtalo de nuevo."
         }
     }
 }

@@ -48,10 +48,21 @@ fun MainScaffoldTecnico(
     var actual by remember { mutableStateOf("inicio") }
     LaunchedEffect(Unit) { chatVM.cargarChats() }
     val noLeidos = chatVM.contarNoLeidos()
+    val notificaciones = panelVM.estado.notificaciones
+    val noLeidasSolicitudes = notificaciones.count { !it.leida && it.tipo == "presupuesto" }
+    val noLeidasInicio = notificaciones.count { !it.leida && it.tipo == "valoracion" }
 
-    Scaffold(bottomBar = {
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
             tabs.forEachIndexed { idx, (ruta, icono) ->
+                val badge = when (ruta) {
+                    "mensajes" -> noLeidos
+                    "solicitudes" -> noLeidasSolicitudes
+                    "inicio" -> noLeidasInicio
+                    else -> 0
+                }
                 NavigationBarItem(
                     selected = actual == ruta,
                     onClick = {
@@ -61,10 +72,10 @@ fun MainScaffoldTecnico(
                         if (ruta == "solicitudes") presupuestosVM.cargarMisSolicitudes()
                     },
                     icon = {
-                        if (ruta == "mensajes" && noLeidos > 0) {
+                        if (badge > 0) {
                             BadgedBox(badge = {
                                 Badge(containerColor = Color(0xFFEF4444)) {
-                                    Text("$noLeidos", color = Color.White, fontSize = 10.sp)
+                                    Text("$badge", color = Color.White, fontSize = 10.sp)
                                 }
                             }) { Icon(icono, ruta) }
                         } else {
@@ -81,7 +92,7 @@ fun MainScaffoldTecnico(
             }
         }
     }) { pv ->
-        Box(Modifier.padding(pv)) {
+        Box(Modifier.padding(bottom = pv.calculateBottomPadding())) {
             when (actual) {
                 "inicio" -> PanelTecnicoScreen(
                     viewModel = panelTecnicoVM,
@@ -132,7 +143,6 @@ private fun PantallaMasTecnico(
         Spacer(Modifier.height(4.dp))
 
         OpcTecnico(Icons.Default.Person, Color(0xFF7C3AED), "Perfil", "Tu cuenta en ZeroHaus", onPerfil)
-        OpcTecnico(Icons.Default.People, MaterialTheme.colorScheme.primary, "Mis clientes", "Clientes con quienes trabajas", onMisClientes)
         OpcTecnico(Icons.Default.Settings, MaterialTheme.colorScheme.onSurfaceVariant, "Ajustes", "Preferencias de la app", onAjustes)
         OpcTecnico(Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, "Sobre la app", "Información y versión", onSobreApp)
 

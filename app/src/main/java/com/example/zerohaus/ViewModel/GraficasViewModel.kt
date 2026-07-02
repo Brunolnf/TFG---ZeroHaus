@@ -14,7 +14,7 @@ import kotlin.coroutines.resume
 
 data class GraficasEstado(
     val informes: List<InformeEnergetico> = emptyList(),
-    val cargando: Boolean = true
+    val cargando: Boolean = false
 )
 
 class GraficasViewModel : ViewModel() {
@@ -24,7 +24,10 @@ class GraficasViewModel : ViewModel() {
 
     private val repo = RepositorioInformes()
 
-    fun cargarDatos() {
+    init { cargarDatos() }
+
+    fun cargarDatos(forzar: Boolean = false) {
+        if (!forzar && estado.informes.isNotEmpty()) return
         viewModelScope.launch {
             estado = estado.copy(cargando = true)
             val lista = suspendCancellableCoroutine { cont ->

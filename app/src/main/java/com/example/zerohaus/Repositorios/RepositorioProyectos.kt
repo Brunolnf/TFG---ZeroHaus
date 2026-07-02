@@ -1,8 +1,10 @@
 package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.Proyecto
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 
 class RepositorioProyectos {
 
@@ -14,11 +16,19 @@ class RepositorioProyectos {
     fun obtenerProyectos(callback: (List<Proyecto>) -> Unit) {
         db.collection("proyectos")
             .whereEqualTo("uid", uid())
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.mapNotNull { it.toObject(Proyecto::class.java) })
+            .getOrTimeout { snap ->
+                callback(snap?.documents?.mapNotNull { it.toObject(Proyecto::class.java) } ?: emptyList())
             }
-            .addOnFailureListener { callback(emptyList()) }
+    }
+
+    /** Tiempo real: mis proyectos. Se actualiza al instante cuando acepto una ficha
+     *  (se crea el proyecto) o cambia su progreso/estado. */
+    fun escucharProyectos(callback: (List<Proyecto>) -> Unit): ListenerRegistration {
+        return db.collection("proyectos")
+            .whereEqualTo("uid", uid())
+            .addSnapshotListener { snap, _ ->
+                callback(snap?.documents?.mapNotNull { it.toObject(Proyecto::class.java) } ?: emptyList())
+            }
     }
 
     /**
@@ -34,8 +44,8 @@ class RepositorioProyectos {
         if (tecnicoUid.isNotBlank()) {
             db.collection("proyectos")
                 .whereEqualTo("tecnicoUid", tecnicoUid)
-                .get()
-                .addOnSuccessListener { snap ->
+                .getOrTimeout { snap ->
+                    if (snap == null) { buscarPorNombre(tecnicoNombre, callback); return@getOrTimeout }
                     val porUid = snap.documents.mapNotNull { it.toObject(Proyecto::class.java) }
                     if (porUid.isNotEmpty() || tecnicoNombre.isBlank()) {
                         callback(porUid.sortedByDescending { it.fechaCreacion })
@@ -44,7 +54,6 @@ class RepositorioProyectos {
                         buscarPorNombre(tecnicoNombre, callback)
                     }
                 }
-                .addOnFailureListener { buscarPorNombre(tecnicoNombre, callback) }
         } else {
             buscarPorNombre(tecnicoNombre, callback)
         }
@@ -54,14 +63,29 @@ class RepositorioProyectos {
         if (tecnicoNombre.isBlank()) { callback(emptyList()); return }
         db.collection("proyectos")
             .whereEqualTo("tecnicoNombre", tecnicoNombre)
-            .get()
-            .addOnSuccessListener { snap ->
+            .getOrTimeout { snap ->
                 callback(
-                    snap.documents.mapNotNull { it.toObject(Proyecto::class.java) }
-                        .sortedByDescending { it.fechaCreacion }
+                    snap?.documents?.mapNotNull { it.toObject(Proyecto::class.java) }
+                        ?.sortedByDescending { it.fechaCreacion } ?: emptyList()
                 )
             }
-            .addOnFailureListener { callback(emptyList()) }
+    }
+
+    /**
+     * Tiempo real: proyectos asignados al técnico actual. Usa el campo `tecnicoUid`
+     * (el fiable). Para los proyectos antiguos sin `tecnicoUid` que solo tenían
+     * `tecnicoNombre`, ya no merece la pena seguir cargándolos — eran datos de seed
+     * que se borran con la limpieza del admin.
+     */
+    fun escucharProyectosAsignados(callback: (List<Proyecto>) -> Unit): ListenerRegistration {
+        return db.collection("proyectos")
+            .whereEqualTo("tecnicoUid", uid())
+            .addSnapshotListener { snap, _ ->
+                callback(
+                    snap?.documents?.mapNotNull { it.toObject(Proyecto::class.java) }
+                        ?.sortedByDescending { it.fechaCreacion } ?: emptyList()
+                )
+            }
     }
 
     fun crearProyecto(proyecto: Proyecto, callback: (Result<Unit>) -> Unit) {

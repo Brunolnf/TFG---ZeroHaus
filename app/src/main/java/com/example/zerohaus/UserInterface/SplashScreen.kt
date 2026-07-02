@@ -6,8 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,40 +23,22 @@ import kotlinx.coroutines.delay
 fun SplashScreen(onTerminado: () -> Unit) {
     val c = LocalCadenas.current
     var iniciar by remember { mutableStateOf(false) }
-    var saltado by remember { mutableStateOf(false) }
     val escala by animateFloatAsState(targetValue = if (iniciar) 1f else 0.4f, animationSpec = tween(700, easing = EaseOutBack), label = "e")
     val opacidad by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(600), label = "o")
     val opTexto by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(500, delayMillis = 400), label = "ot")
 
     LaunchedEffect(Unit) {
         iniciar = true
-        delay(2200)
-        if (!saltado) onTerminado()
+        delay(1200)
+        onTerminado()
     }
 
     Box(
         modifier = Modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(Color(0xFF16A34A), Color(0xFF059669), Color(0xFF047857)))
+            Brush.verticalGradient(listOf(Color(0xFF16A34A), Color(0xFF065F46), Color(0xFF065F46)))
         )
     ) {
-        // Botón Saltar
-        TextButton(
-            onClick = {
-                if (!saltado) {
-                    saltado = true
-                    onTerminado()
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .statusBarsPadding()
-                .padding(end = 12.dp, top = 8.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
-        ) {
-            Text("Saltar", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-        }
-
-        // Contenido central
+        // Contenido central — logo en card blanco para destacar sobre el gradiente verde
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -67,10 +47,12 @@ fun SplashScreen(onTerminado: () -> Unit) {
                 .alpha(opacidad)
         ) {
             Box(
-                modifier = Modifier.size(100.dp).background(Color.White.copy(0.15f), RoundedCornerShape(26.dp)),
+                modifier = Modifier
+                    .size(140.dp)
+                    .background(Color.White, RoundedCornerShape(28.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                ZeroHausLogo(size = 64.dp, color = Color.White)
+                ZeroHausLogo(size = 110.dp)
             }
             Spacer(Modifier.height(20.dp))
             Text("ZeroHaus", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 32.sp, modifier = Modifier.alpha(opTexto))

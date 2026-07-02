@@ -13,13 +13,8 @@ import androidx.compose.runtime.*
 import com.example.zerohaus.Navegacion.AppNavegacion
 import com.example.zerohaus.ui.theme.ZeroHausTheme
 import com.example.zerohaus.Util.AppEstado
-import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.LocalCadenas
-import com.example.zerohaus.Util.NotificacionesLocales
 import com.example.zerohaus.Util.getCadenas
-import com.google.firebase.appcheck.AppCheckProviderFactory
-import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -30,14 +25,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Splash Screen API: muestra el icono adaptativo sobre fondo blanco
         // mientras inicializamos. Backport a Android < 12 vía core-splashscreen.
+        // La inicialización pesada (App Check, Firestore, prefs) ya se hizo en
+        // ZeroHausApp.onCreate, antes incluso de crear esta Activity.
         installSplashScreen()
         super.onCreate(savedInstanceState)
-        AppEstado.inicializar(AppPreferencias(this))
-        NotificacionesLocales.crearCanales(this)
         pedirPermisoNotificaciones()
-        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
-            appCheckFactory()
-        )
+        // Reintento de registro del token FCM en cada arranque. AppNavegacion ya
+        // lo hace cuando logueado=true, pero solo en la TRANSICIÓN false→true:
+        // si la app se relanza con sesión ya activa el LaunchedEffect no
+        // re-dispara y el token puede no haberse guardado nunca (red caída en el
+        // primer login, fallo silencioso de Firestore…). Aquí lo cubrimos.
+        ServicioNotificaciones.registrarToken()
         setContent {
             val systemDark = isSystemInDarkTheme()
             val darkTheme = when (AppEstado.tema) {
@@ -52,25 +50,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    /**
-     * Selecciona la factory de App Check según el build type.
-     * - Debug: DebugAppCheckProviderFactory (solo en classpath debug).
-     *   Cargada por reflexión para que el compilador no la exija en release.
-     * - Release: PlayIntegrityAppCheckProviderFactory.
-     */
-    private fun appCheckFactory(): AppCheckProviderFactory {
-        if (BuildConfig.DEBUG) {
-            runCatching {
-                val clazz = Class.forName(
-                    "com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory"
-                )
-                return clazz.getMethod("getInstance").invoke(null) as AppCheckProviderFactory
-            }
-            // Si la clase no existe (build raro), caemos al provider de prod.
-        }
-        return PlayIntegrityAppCheckProviderFactory.getInstance()
     }
 
     private fun pedirPermisoNotificaciones() {

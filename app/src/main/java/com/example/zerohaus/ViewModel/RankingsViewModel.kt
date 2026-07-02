@@ -5,34 +5,43 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
-import com.example.zerohaus.Repositorios.RepositorioResenas
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.google.firebase.firestore.ListenerRegistration
 
 class RankingsViewModel : ViewModel() {
 
     var ranking by mutableStateOf<List<Tecnico>>(emptyList())
         private set
-    var cargando by mutableStateOf(true)
+    var cargando by mutableStateOf(false)
         private set
 
     private val repo = RepositorioTecnicos()
-    private val repoResenas = RepositorioResenas()
+    private var listenerTec: ListenerRegistration? = null
+    private var listenerRes: ListenerRegistration? = null
 
-    fun cargarRanking() {
+    init { cargarRanking() }
+
+    /**
+     * Tiempo real: el ranking se reordena solo cuando llega una reseña nueva o
+     * cuando aparece/se modifica un técnico. Demo-friendly: el cliente ve el
+     * cambio de rating de un técnico en cuanto otro cliente publica la reseña.
+     */
+    fun cargarRanking(forzar: Boolean = false) {
+        if (listenerTec != null) return
         cargando = true
-        repo.obtenerRanking { lista ->
-            if (lista.isEmpty()) { cargando = false; return@obtenerRanking }
-            ranking = lista.map { it.copy(rating = 0.0, opiniones = 0) }
+        val (regT, regR) = repo.escucharTecnicos { lista ->
+            ranking = lista.sortedByDescending { it.rating }
             cargando = false
-            lista.forEach { t ->
-                repoResenas.obtenerResenas(t.id) { resenas ->
-                    val count = resenas.size
-                    val avg = if (count == 0) 0.0
-                              else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
-                    ranking = ranking.map { if (it.id == t.id) it.copy(rating = avg, opiniones = count) else it }
-                        .sortedByDescending { it.rating }
-                }
-            }
         }
+        listenerTec = regT
+        listenerRes = regR
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        listenerTec?.remove()
+        listenerRes?.remove()
+        listenerTec = null
+        listenerRes = null
     }
 }

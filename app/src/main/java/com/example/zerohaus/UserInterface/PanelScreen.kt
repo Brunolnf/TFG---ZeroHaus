@@ -36,7 +36,6 @@ import java.util.*
 @Composable
 fun PanelScreen(
     panelViewModel: PanelViewModel,
-    certificadoViewModel: CertificadoViewModel,
     onNuevoPreestudio: () -> Unit = {},
     onMisViviendas: () -> Unit = {},
     onMisProyectos: () -> Unit = {},
@@ -50,13 +49,8 @@ fun PanelScreen(
     val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val estado = panelViewModel.estado
-    val certEstado = certificadoViewModel.estado
     var mostrarNotif by remember { mutableStateOf(false) }
-    var mostrarCert by remember { mutableStateOf(false) }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let { certificadoViewModel.seleccionarArchivo(it, "archivo") }
-    }
-    LaunchedEffect(Unit) { panelViewModel.cargarDatos(); certificadoViewModel.cargarCertificados() }
+    LaunchedEffect(Unit) { panelViewModel.cargarDatos() }
     val nombre = estado.usuario?.nombre ?: "Usuario"
     val fotoUrl = estado.usuario?.fotoPerfil ?: ""
     val vivienda = estado.vivienda
@@ -64,6 +58,7 @@ fun PanelScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -75,9 +70,6 @@ fun PanelScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { mostrarCert = true }) {
-                        Icon(Icons.Default.AddCircle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-                    }
                     Box {
                         IconButton(onClick = { mostrarNotif = true }) {
                             Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
@@ -164,11 +156,11 @@ fun PanelScreen(
                 }
 
                 item { Text(c.panelAccionesRapidas, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground) }
-                item { TarjetaAccion(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF059669), c.panelNuevoPreestudio, c.panelNuevoPreestudioSub, onNuevoPreestudio) }
+                item { TarjetaAccion(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF065F46), c.panelNuevoPreestudio, c.panelNuevoPreestudioSub, onNuevoPreestudio) }
                 item { TarjetaAccion(Icons.Default.Home, Color(0xFFE0F2FE), Color(0xFF0284C7), c.masViviendas, c.panelMisViviendasSub, onMisViviendas) }
                 item { TarjetaAccion(Icons.Default.Menu, Color(0xFFEDE9FE), Color(0xFF7C3AED), c.masProyectos, c.panelMisProyectosSub, onMisProyectos) }
                 item { TarjetaAccion(Icons.Default.Description, Color(0xFFDBEAFE), Color(0xFF2563EB), c.masPresupuestos, c.panelPresupuestosSub, onPresupuestos) }
-                item { TarjetaAccion(Icons.Default.Assessment, Color(0xFFD1FAE5), Color(0xFF059669), c.explorarHistorial, c.panelHistorialInformesSub, onHistorialInformes) }
+                item { TarjetaAccion(Icons.Default.Assessment, Color(0xFFD1FAE5), Color(0xFF065F46), c.explorarHistorial, c.panelHistorialInformesSub, onHistorialInformes) }
                 item { TarjetaAccion(Icons.Default.ShowChart, Color(0xFFFCE7F3), Color(0xFFDB2777), c.explorarGraficas, c.panelGraficasSub, onGraficas) }
                 item { Spacer(Modifier.height(16.dp)) }
             }
@@ -226,44 +218,6 @@ fun PanelScreen(
         )
     }
 
-    if (mostrarCert) {
-        var abrirT by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { mostrarCert = false; certificadoViewModel.limpiar() },
-            title = { Text(c.panelSubirCertificado, fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(value = certEstado.nombre, onValueChange = { certificadoViewModel.cambiarNombre(it) }, label = { Text(c.panelNombreLabel) }, singleLine = true, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth())
-                    Box(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(value = certEstado.tipo, onValueChange = {}, readOnly = true, label = { Text(c.panelTipoLabel) }, trailingIcon = { IconButton(onClick = { abrirT = true }) { Icon(Icons.Default.ArrowDropDown, null) } }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth())
-                        DropdownMenu(expanded = abrirT, onDismissRequest = { abrirT = false }) {
-                            listOf("Instalación", "Auditoría", "Energías renovables", "Certificación").forEach { o ->
-                                DropdownMenuItem(text = { Text(o) }, onClick = { certificadoViewModel.cambiarTipo(o); abrirT = false })
-                            }
-                        }
-                    }
-                    OutlinedButton(onClick = { filePicker.launch("*/*") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                        Icon(Icons.Default.Add, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (certEstado.archivoUri != null) c.panelArchivoSeleccionado else c.panelSeleccionarArchivo)
-                    }
-                    if (certEstado.cargando) LinearProgressIndicator(Modifier.fillMaxWidth(), color = verde)
-                    certEstado.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    if (certEstado.exito) Text(c.panelCertificadoSubido, color = verde)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { certificadoViewModel.subirCertificado() },
-                    enabled = !certEstado.cargando && certEstado.archivoUri != null && certEstado.nombre.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = verde)
-                ) { Text(c.subir, color = Color.White) }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { mostrarCert = false; certificadoViewModel.limpiar() }) { Text(c.cancelar) }
-            }
-        )
-    }
 }
 
 @Composable

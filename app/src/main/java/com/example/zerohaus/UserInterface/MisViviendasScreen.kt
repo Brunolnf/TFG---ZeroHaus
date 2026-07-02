@@ -16,11 +16,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
 import com.example.zerohaus.ViewModel.ViviendasViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,16 +41,17 @@ fun MisViviendasScreen(
     var confirmarEliminar by remember { mutableStateOf<String?>(null) }
     var viviendaEditando by remember { mutableStateOf<Vivienda?>(null) }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(estado.mensaje, estado.error) {
-        estado.mensaje?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-        estado.error?.let { snackbarHostState.showSnackbar(it); viewModel.limpiarMensaje() }
-    }
     LaunchedEffect(Unit) { viewModel.cargarViviendas() }
 
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensaje ?: estado.error,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -110,7 +113,14 @@ fun MisViviendasScreen(
                             ) {
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(v.nombre, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                        Text(
+                                            text = v.nombre,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 16.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
                                         if (esSeleccionada) {
                                             Spacer(Modifier.width(8.dp))
                                             EstadoChip("Activa", verde, fontSize = 10)
@@ -196,12 +206,41 @@ private fun EditarViviendaDialog(
     var calefaccion by remember { mutableStateOf(vivienda.calefaccion) }
     var acs by remember { mutableStateOf(vivienda.acs) }
     var orientacion by remember { mutableStateOf(vivienda.orientacion) }
+    var provincia by remember { mutableStateOf(vivienda.provincia) }
+    var iluminacion by remember { mutableStateOf(vivienda.iluminacion) }
+    var tipoVivienda by remember { mutableStateOf(vivienda.tipoVivienda) }
+    var refrigeracion by remember { mutableStateOf(vivienda.refrigeracion) }
+    var fotovoltaica by remember { mutableStateOf(vivienda.fotovoltaica) }
+    var electrodomesticos by remember { mutableStateOf(vivienda.electrodomesticos) }
+    var ocupantes by remember { mutableStateOf(if (vivienda.ocupantes > 0) vivienda.ocupantes.toString() else "") }
 
     val optsVentanas = listOf("Vidrio simple", "Doble acristalamiento", "Triple")
     val optsAislamiento = listOf("Sin aislamiento", "Aislamiento parcial", "Aislamiento completo")
     val optsCalefaccion = listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa", "Sin calefacción")
     val optsAcs = listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia", "Sin ACS")
     val optsOrientacion = listOf("Norte", "Sur", "Este", "Oeste", "Noreste", "Noroeste", "Sureste", "Suroeste")
+    val optsIluminacion = AlgoritmoEnergetico.opcionesIluminacion
+    val optsTipoVivienda = AlgoritmoEnergetico.opcionesTipoVivienda
+    val optsRefrigeracion = AlgoritmoEnergetico.opcionesRefrigeracion
+    val optsFotovoltaica = AlgoritmoEnergetico.opcionesFotovoltaica
+    val optsElectrodomesticos = AlgoritmoEnergetico.opcionesElectrodomesticos
+
+    // Todos los campos son obligatorios. Validaciones numéricas:
+    //  - superficie: entero > 0
+    //  - año construcción: 1800 ≤ año ≤ año actual (no futuros, no antigüedades absurdas)
+    val anioActual = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
+    val superficieOk = superficie.toIntOrNull()?.let { it > 0 } == true
+    val anioOk = anio.toIntOrNull()?.let { it in 1800..anioActual } == true
+    val ocupantesOk = ocupantes.toIntOrNull()?.let { it in 1..20 } == true
+    val formularioCompleto = nombre.isNotBlank() && superficieOk && anioOk && ocupantesOk
+        && direccion.isNotBlank() && ventanas.isNotBlank() && aislamiento.isNotBlank()
+        && calefaccion.isNotBlank() && acs.isNotBlank() && orientacion.isNotBlank()
+        && provincia in AlgoritmoEnergetico.provinciasOrdenadas
+        && iluminacion in optsIluminacion
+        && tipoVivienda in optsTipoVivienda
+        && refrigeracion in optsRefrigeracion
+        && fotovoltaica in optsFotovoltaica
+        && electrodomesticos in optsElectrodomesticos
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -262,6 +301,14 @@ private fun EditarViviendaDialog(
                         )
                     }
                     OutlinedTextField(
+                        value = ocupantes,
+                        onValueChange = { if (it.all(Char::isDigit) && it.length <= 2) ocupantes = it },
+                        label = { Text("Nº de ocupantes") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
                         value = direccion,
                         onValueChange = { direccion = it },
                         label = { Text("Dirección") },
@@ -269,10 +316,23 @@ private fun EditarViviendaDialog(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Column {
+                        Text("Provincia", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(6.dp))
+                        SelectorProvincia(
+                            valor = provincia,
+                            onValor = { provincia = it }
+                        )
+                    }
+                    DropdownField("Tipo de vivienda", tipoVivienda, optsTipoVivienda) { tipoVivienda = it }
                     DropdownField("Tipo de ventanas", ventanas, optsVentanas) { ventanas = it }
                     DropdownField("Aislamiento", aislamiento, optsAislamiento) { aislamiento = it }
                     DropdownField("Calefacción", calefaccion, optsCalefaccion) { calefaccion = it }
+                    DropdownField("Refrigeración", refrigeracion, optsRefrigeracion) { refrigeracion = it }
                     DropdownField("ACS", acs, optsAcs) { acs = it }
+                    DropdownField("Iluminación", iluminacion, optsIluminacion) { iluminacion = it }
+                    DropdownField("Electrodomésticos", electrodomesticos, optsElectrodomesticos) { electrodomesticos = it }
+                    DropdownField("Fotovoltaica (autoconsumo)", fotovoltaica, optsFotovoltaica) { fotovoltaica = it }
                     DropdownField("Orientación", orientacion, optsOrientacion) { orientacion = it }
                 }
 
@@ -295,15 +355,22 @@ private fun EditarViviendaDialog(
                                     superficie = superficie.toIntOrNull() ?: vivienda.superficie,
                                     anioConstruccion = anio.toIntOrNull() ?: vivienda.anioConstruccion,
                                     direccion = direccion.trim(),
+                                    provincia = provincia,
                                     tipoVentanas = ventanas,
                                     aislamiento = aislamiento,
                                     calefaccion = calefaccion,
                                     acs = acs,
-                                    orientacion = orientacion
+                                    iluminacion = iluminacion,
+                                    orientacion = orientacion,
+                                    tipoVivienda = tipoVivienda,
+                                    refrigeracion = refrigeracion,
+                                    fotovoltaica = fotovoltaica,
+                                    ocupantes = ocupantes.toIntOrNull() ?: vivienda.ocupantes,
+                                    electrodomesticos = electrodomesticos
                                 )
                             )
                         },
-                        enabled = nombre.isNotBlank(),
+                        enabled = formularioCompleto,
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)

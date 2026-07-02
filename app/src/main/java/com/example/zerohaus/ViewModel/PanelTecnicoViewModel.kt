@@ -1,5 +1,7 @@
 package com.example.zerohaus.ViewModel
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,13 +12,14 @@ import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 
 data class PanelTecnicoEstado(
     val tecnico: Tecnico? = null,
     val solicitudesPendientes: Int = 0,
     val solicitudesPresupuestadas: Int = 0,
     val solicitudesAceptadas: Int = 0,
-    val cargando: Boolean = true
+    val cargando: Boolean = false
 )
 
 class PanelTecnicoViewModel : ViewModel() {
@@ -27,10 +30,25 @@ class PanelTecnicoViewModel : ViewModel() {
     private val repo = RepositorioTecnicos()
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val watchdog = Handler(Looper.getMainLooper())
+    private var listenerSolicitudes: ListenerRegistration? = null
 
-    fun cargar() {
+    init {
+        if (auth.currentUser != null) cargar()
+    }
+
+    fun cargar(forzar: Boolean = false) {
+        if (!forzar && estado.tecnico != null) return   // ya tiene datos
+        if (!forzar && estado.cargando) return           // carga en curso
         estado = estado.copy(cargando = true)
+        // Watchdog: la cadena de autocura encadena varias queries; si alguna se
+        // cuelga (App Check / red), soltamos el spinner a los 10s igualmente.
+        watchdog.removeCallbacksAndMessages(null)
+        watchdog.postDelayed({
+            if (estado.cargando) estado = estado.copy(cargando = false)
+        }, 10000L)
         val miUid = auth.currentUser?.uid ?: run {
+            watchdog.removeCallbacksAndMessages(null)
             estado = estado.copy(cargando = false)
             return
         }
@@ -62,7 +80,6 @@ class PanelTecnicoViewModel : ViewModel() {
         val miEmail = auth.currentUser?.email.orEmpty()
         Log.i(TAG, "Autocura: uid=$miUid email=$miEmail")
 
-        // ── Paso 0: ¿existe /tecnicos/{miUid} directamente? ──
         // Puede existir con uid vacío (datos antiguos) o de un intento previo.
         db.collection("tecnicos").document(miUid).get()
             .addOnSuccessListener { docDirecto ->
@@ -239,8 +256,16 @@ class PanelTecnicoViewModel : ViewModel() {
 
     companion object { private const val TAG = "PanelTecnicoVM" }
 
+    /**
+     * Suscribe los contadores de solicitudes en tiempo real. Antes era un one-shot get
+     * que solo se disparaba en `cargar()`: si llegaba una solicitud nueva mientras el
+     * panel estaba abierto (o el cliente rechazaba un presupuesto y reenviaba), los
+     * contadores quedaban desfasados hasta cerrar y volver a abrir la app.
+     */
     private fun cargarSolicitudesYActualizar(tec: Tecnico?) {
-        repo.obtenerSolicitudesRecibidas { solicitudes ->
+        listenerSolicitudes?.remove()
+        listenerSolicitudes = repo.escucharSolicitudesRecibidas { solicitudes ->
+            watchdog.removeCallbacksAndMessages(null)
             estado = PanelTecnicoEstado(
                 tecnico = tec,
                 solicitudesPendientes = solicitudes.count { it.estado == "Pendiente" },
@@ -249,5 +274,12 @@ class PanelTecnicoViewModel : ViewModel() {
                 cargando = false
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        watchdog.removeCallbacksAndMessages(null)
+        listenerSolicitudes?.remove()
+        listenerSolicitudes = null
     }
 }

@@ -59,7 +59,11 @@ fun GraficasConsumoScreen(
                     Column {
                         Text("Gráficas de consumo", fontWeight = FontWeight.SemiBold)
                         if (estado.informes.isNotEmpty()) {
-                            Text("${estado.informes.size} informes generados", color = gris, fontSize = 12.sp)
+                            val subtitulo = if (estado.informes.size > 5)
+                                "Últimos 5 de ${estado.informes.size} informes"
+                            else
+                                "${estado.informes.size} informes generados"
+                            Text(subtitulo, color = gris, fontSize = 12.sp)
                         }
                     }
                 },
@@ -98,7 +102,7 @@ fun GraficasConsumoScreen(
                     )
                     Spacer(Modifier.height(14.dp))
                     OutlinedButton(
-                        onClick = { viewModel.cargarDatos() },
+                        onClick = { viewModel.cargarDatos(forzar = true) },
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
@@ -110,7 +114,7 @@ fun GraficasConsumoScreen(
             return@Scaffold
         }
 
-        val datos = estado.informes
+        val datos = estado.informes.takeLast(5)
 
         Column(
             modifier = Modifier
@@ -134,7 +138,7 @@ fun GraficasConsumoScreen(
                     Text("Resumen", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        ResumenStat("Informes", "${datos.size}", gris)
+                        ResumenStat("Informes", "${estado.informes.size}", gris)
                         ResumenStat("Consumo actual", Formato.formatEnergia(ultimo.consumoEstimado), gris)
                         ResumenStat("Etiqueta", ultimo.etiqueta, etiquetaColor(ultimo.etiqueta))
                     }

@@ -2,7 +2,10 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,18 +63,34 @@ fun MapaTecnicosScreen(
 
     var tecnicoSeleccionado by remember { mutableStateOf<Tecnico?>(null) }
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
+    LaunchedEffect(Unit) { viewModel.cargarTecnicos(forzar = true) }
 
-    // Coordenadas reales si existen; si no, posición de fallback determinista por ID del técnico
-    // (misma posición siempre para el mismo técnico, independientemente del orden de lista)
+    // Coordenadas: reales > ciudad conocida > fallback por hash.
+    // Si varios técnicos comparten la misma posición exacta, se aplica
+    // un pequeño desplazamiento (~300-500m) para que no se solapen.
     val tecnicosConPos = remember(estado.tecnicos) {
+        val posiciones = mutableMapOf<String, Int>() // clave → contador de repeticiones
         estado.tecnicos.map { t ->
-            val pos = if (t.latitud != 0.0 || t.longitud != 0.0) {
-                LatLng(t.latitud, t.longitud)
-            } else {
-                val idx = Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size
-                UBICACIONES_RESIDENCIALES_FALLBACK[idx]
+            val base = when {
+                t.latitud != 0.0 || t.longitud != 0.0 ->
+                    LatLng(t.latitud, t.longitud)
+                t.ciudad.isNotBlank() -> {
+                    val coords = com.example.zerohaus.Repositorios.RepositorioTecnicos.coordenadasDeCiudad(t.ciudad)
+                    if (coords != null) LatLng(coords.first, coords.second)
+                    else UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
+                }
+                else ->
+                    UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
             }
+            // Desplazar si hay colisión
+            val clave = "%.4f,%.4f".format(base.latitude, base.longitude)
+            val n = posiciones.getOrDefault(clave, 0)
+            posiciones[clave] = n + 1
+            val pos = if (n > 0) {
+                // Distribuir en círculo alrededor del punto (radio ~0.004° ≈ 400m)
+                val angulo = Math.toRadians(n * 72.0) // 5 posiciones max en circulo
+                LatLng(base.latitude + 0.004 * Math.cos(angulo), base.longitude + 0.004 * Math.sin(angulo))
+            } else base
             t to pos
         }
     }
@@ -108,15 +128,104 @@ fun MapaTecnicosScreen(
                     uiSettings = MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = false)
                 ) {
                     tecnicosConPos.forEach { (tecnico, posicion) ->
-                        Marker(
+                        val esSeleccionado = tecnicoSeleccionado?.id == tecnico.id
+                        MarkerComposable(
+                            keys = arrayOf(tecnico.id, esSeleccionado),
                             state = MarkerState(position = posicion),
                             title = tecnico.nombre,
-                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.joinToString(", ")}",
+                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull() ?: ""}",
                             onClick = {
-                                tecnicoSeleccionado = tecnico
-                                false
+                                tecnicoSeleccionado = if (esSeleccionado) null else tecnico
+                                true // consume el click para no mostrar InfoWindow nativo
                             }
-                        )
+                        ) {
+                            val burbuja  = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.surface
+                            val txtColor = if (esSeleccionado) Color.White
+                                           else MaterialTheme.colorScheme.onSurface
+                            val pinColor = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                           else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                            ) {
+                                // Pill con icono, nombre y rating
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = burbuja,
+                                    shadowElevation = if (esSeleccionado) 8.dp else 4.dp,
+                                    border = if (!esSeleccionado)
+                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                    else null
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Build, null,
+                                            modifier = Modifier.size(11.dp),
+                                            tint = if (esSeleccionado) Color.White
+                                                   else MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            tecnico.nombre.split(" ").take(2).joinToString(" "),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = txtColor,
+                                            maxLines = 1
+                                        )
+                                        if (tecnico.rating > 0f) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = if (esSeleccionado) Color.White.copy(alpha = 0.18f)
+                                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            ) {
+                                                Row(
+                                                    Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Star, null,
+                                                        modifier = Modifier.size(9.dp),
+                                                        tint = if (esSeleccionado) Color(0xFFFFD700)
+                                                               else Color(0xFFF59E0B)
+                                                    )
+                                                    Text(
+                                                        "%.1f".format(tecnico.rating),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = if (esSeleccionado) Color.White
+                                                                else MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Triángulo puntero dibujado con Canvas
+                                Canvas(Modifier.size(width = 14.dp, height = 7.dp)) {
+                                    drawPath(
+                                        path = Path().apply {
+                                            moveTo(0f, 0f)
+                                            lineTo(size.width, 0f)
+                                            lineTo(size.width / 2f, size.height)
+                                            close()
+                                        },
+                                        color = burbuja
+                                    )
+                                }
+                                // Punto de anclaje
+                                Surface(
+                                    shape = CircleShape,
+                                    color = pinColor,
+                                    modifier = Modifier.size(7.dp)
+                                ) {}
+                            }
+                        }
                     }
                 }
 

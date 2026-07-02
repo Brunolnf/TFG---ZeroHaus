@@ -72,6 +72,14 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            val msg = estado.mensajeToast ?: estado.error
+            ZeroToast(
+                mensaje   = msg,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -84,6 +92,39 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                     IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
+        },
+        // Botón fijo abajo: en móviles bajos el Column con scroll dejaba el
+        // botón fuera del viewport y los usuarios no podían guardar sin recortar
+        // contenido. Subiéndolo a bottomBar siempre se ve.
+        //
+        // navigationBarsPadding(): respeta la barra de gestos / botones del
+        // sistema. Sin esto, en móviles con barra de 3 botones el botón
+        // quedaba parcialmente tapado por encima de Home/Back/Recents.
+        bottomBar = {
+            if (!estado.cargando) {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.navigationBarsPadding()
+                ) {
+                    Button(
+                        onClick = { viewModel.guardar() },
+                        enabled = !estado.guardando,
+                        colors = ButtonDefaults.buttonColors(containerColor = verde),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentPadding = PaddingValues(vertical = 14.dp)
+                    ) {
+                        if (estado.guardando) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(c.ajustesGuardar, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
         }
     ) { pv ->
         if (estado.cargando) {
@@ -260,49 +301,6 @@ fun AjustesScreen(viewModel: AjustesViewModel, onVolver: () -> Unit = {}) {
                     }
                 }
 
-                // Guardar
-                Button(
-                    onClick = { viewModel.guardar() },
-                    enabled = !estado.guardando,
-                    colors = ButtonDefaults.buttonColors(containerColor = verde),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) {
-                    if (estado.guardando) {
-                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text(c.ajustesGuardar, color = Color.White, fontWeight = FontWeight.SemiBold)
-                }
-
-                if (estado.exito) {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFD1FAE5))
-                    ) {
-                        Row(Modifier.padding(12.dp)) {
-                            Icon(Icons.Default.CheckCircle, null, tint = verde)
-                            Spacer(Modifier.width(8.dp))
-                            Text(c.ajustesGuardados, color = Color(0xFF065F46))
-                        }
-                    }
-                }
-
-                estado.error?.let {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEE2E2))
-                    ) {
-                        Row(Modifier.padding(12.dp)) {
-                            Icon(Icons.Default.Warning, null, tint = Color(0xFFDC2626))
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, color = Color(0xFF991B1B))
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
             }
         }
     }

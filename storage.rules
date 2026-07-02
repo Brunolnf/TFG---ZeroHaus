@@ -4,7 +4,7 @@ service firebase.storage {
 
     // Imágenes y archivos del chat — solo participantes del chat
     // Usamos cross-service rules para consultar la membresía en Firestore.
-    match /chat/{chatId}/{archivo=**} {
+    match /chats/{chatId}/{archivo=**} {
       allow read: if request.auth != null
                   && request.auth.uid in firestore.get(
                        /databases/(default)/documents/chats/$(chatId)
@@ -13,8 +13,7 @@ service firebase.storage {
                    && request.auth.uid in firestore.get(
                         /databases/(default)/documents/chats/$(chatId)
                       ).data.participantes
-                   && request.resource.size < 15 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*|application/pdf|video/.*');
+                   && request.resource.size < 15 * 1024 * 1024;
     }
 
     // Fotos de perfil — lectura por logueados, escritura solo del propio uid, solo imágenes

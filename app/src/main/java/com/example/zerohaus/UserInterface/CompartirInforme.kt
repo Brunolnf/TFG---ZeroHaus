@@ -14,6 +14,14 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
+/** Genera el PDF y lo guarda en [destino] sin abrir ningún intent. */
+fun compartirInformeSilencioso(context: Context, informe: InformeEnergetico, destino: File) {
+    val pdf = generarPdf(context, informe)
+    if (pdf.canonicalPath != destino.canonicalPath) {
+        pdf.copyTo(destino, overwrite = true)
+    }
+}
+
 fun compartirInforme(context: Context, informe: InformeEnergetico) {
     val pdfFile = try { generarPdf(context, informe) } catch (_: Exception) { null }
     if (pdfFile != null) {
@@ -57,7 +65,6 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
 
     var y = 0f
 
-    // ─── CABECERA VERDE ───
     paint.color = verde
     canvas.drawRect(0f, 0f, pageWidth.toFloat(), 80f, paint)
 
@@ -76,7 +83,6 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.textAlign = Paint.Align.LEFT
     y = 106f
 
-    // ─── ETIQUETA ENERGÉTICA ───
     val badgeColor = etiquetaColorPdf(informe.etiqueta)
     paint.color = badgeColor
     canvas.drawRoundRect(RectF(24f, y, 74f, y + 50f), 10f, 10f, paint)
@@ -97,12 +103,10 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     canvas.drawText("Calificación energética", 90f, y + 40f, paint)
     y += 72f
 
-    // ─── DIVISOR ───
     paint.color = grisClaro
     canvas.drawRect(24f, y, (pageWidth - 24).toFloat(), y + 1f, paint)
     y += 16f
 
-    // ─── 3 CAJAS DE ESTADÍSTICAS ───
     val boxW = (pageWidth - 48f - 16f) / 3f
     val stats = listOf(
         Triple("CONSUMO", Formato.formatEnergiaAnual(informe.consumoEstimado, 0), "Energía primaria"),
@@ -128,7 +132,6 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     }
     y += 92f
 
-    // ─── RECOMENDACIONES ───
     if (informe.recomendaciones.isNotEmpty()) {
         paint.color = negro
         paint.textSize = 14f
@@ -165,7 +168,6 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
         }
     }
 
-    // ─── PIE DE PÁGINA ───
     paint.color = gris
     paint.textSize = 8f
     paint.isFakeBoldText = false

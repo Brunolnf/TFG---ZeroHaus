@@ -13,7 +13,7 @@ data class ResenasRecibidasEstado(
     val media: Double = 0.0,
     val totales: Int = 0,
     val distribucion: Map<Int, Int> = emptyMap(), // 1..5 -> nº reseñas
-    val cargando: Boolean = true
+    val cargando: Boolean = false
 )
 
 class ResenasRecibidasViewModel : ViewModel() {
@@ -24,7 +24,11 @@ class ResenasRecibidasViewModel : ViewModel() {
     private val repoResenas = RepositorioResenas()
     private val repoTecnicos = RepositorioTecnicos()
 
-    fun cargar() {
+    init { cargar() }
+
+    fun cargar(forzar: Boolean = false) {
+        if (!forzar && estado.resenas.isNotEmpty()) return
+        if (!forzar && estado.cargando) return
         estado = estado.copy(cargando = true)
         repoTecnicos.obtenerMiPerfilTecnico { miPerfil ->
             if (miPerfil == null) {

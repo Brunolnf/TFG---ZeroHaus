@@ -10,13 +10,15 @@ import com.example.zerohaus.Repositorios.RepositorioInformes
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 data class HistorialEstado(
     val informes: List<InformeEnergetico> = emptyList(),
     val informeSeleccionado: InformeEnergetico? = null,
     val informeComparar: InformeEnergetico? = null,
     val modoComparar: Boolean = false,
-    val cargando: Boolean = true
+    val cargando: Boolean = false,
+    val error: String? = null
 )
 
 class HistorialInformesViewModel : ViewModel() {
@@ -26,13 +28,26 @@ class HistorialInformesViewModel : ViewModel() {
 
     private val repo = RepositorioInformes()
 
-    fun cargarInformes() {
+    init { cargarInformes() }
+
+    fun cargarInformes(forzar: Boolean = false) {
+        if (!forzar && estado.informes.isNotEmpty()) return
         viewModelScope.launch {
-            estado = estado.copy(cargando = true)
-            val lista = suspendCancellableCoroutine { cont ->
-                repo.obtenerInformes { cont.resume(it) }
+            estado = estado.copy(cargando = true, error = null)
+            try {
+                val lista = suspendCancellableCoroutine<List<InformeEnergetico>> { cont ->
+                    repo.obtenerInformes(
+                        onSuccess = { cont.resume(it) },
+                        onError = { cont.resumeWithException(it) }
+                    )
+                }
+                estado = estado.copy(informes = lista, cargando = false)
+            } catch (e: Exception) {
+                estado = estado.copy(
+                    cargando = false,
+                    error = "Error al cargar informes. Comprueba tu conexión e inténtalo de nuevo."
+                )
             }
-            estado = estado.copy(informes = lista, cargando = false)
         }
     }
 
@@ -50,5 +65,20 @@ class HistorialInformesViewModel : ViewModel() {
 
     fun limpiarComparacion() {
         estado = estado.copy(informeSeleccionado = null, informeComparar = null, modoComparar = false)
+    }
+
+    fun eliminarInforme(informeId: String) {
+        viewModelScope.launch {
+            val ok = suspendCancellableCoroutine { cont ->
+                repo.eliminarInforme(informeId) { cont.resume(it) }
+            }
+            if (ok) {
+                estado = estado.copy(
+                    informes = estado.informes.filter { it.id != informeId },
+                    informeSeleccionado = if (estado.informeSeleccionado?.id == informeId) null else estado.informeSeleccionado,
+                    informeComparar = if (estado.informeComparar?.id == informeId) null else estado.informeComparar
+                )
+            }
+        }
     }
 }

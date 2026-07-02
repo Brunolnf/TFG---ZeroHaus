@@ -58,4 +58,14 @@ class LoginViewModel : ViewModel() {
     fun limpiarError() {
         estado = estado.copy(error = null)
     }
+
+    /**
+     * Resetea el estado del formulario a vacío. Se llama al entrar a la
+     * pantalla de login (tras logout, o si el proceso quedó vivo y el
+     * usuario reabre la app) para que no aparezcan credenciales o errores
+     * de un intento anterior.
+     */
+    fun resetear() {
+        estado = LoginEstado()
+    }
 }

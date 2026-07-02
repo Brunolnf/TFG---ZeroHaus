@@ -1,5 +1,7 @@
 package com.example.zerohaus.UserInterface
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,12 +15,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Modelos.Certificado
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.ViewModel.AdminViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 private val VERDE = Color(0xFF16A34A)
 private val ROJO = Color(0xFFDC2626)
@@ -33,24 +40,13 @@ fun AdminScreen(
 ) {
     LaunchedEffect(Unit) { viewModel.cargar() }
 
+    val context = LocalContext.current
+    var tabSeleccionado by remember { mutableIntStateOf(0) }
     var mostrarCrear by remember { mutableStateOf(false) }
     var usuarioEditar by remember { mutableStateOf<Usuario?>(null) }
     var usuarioConfirmarEliminar by remember { mutableStateOf<Usuario?>(null) }
-    var usuarioConfirmarBorrarDefinitivo by remember { mutableStateOf<Usuario?>(null) }
-
-    val snackbarHost = remember { SnackbarHostState() }
-    LaunchedEffect(viewModel.mensaje.value) {
-        viewModel.mensaje.value?.let {
-            snackbarHost.showSnackbar(it)
-            viewModel.limpiarMensaje()
-        }
-    }
-    LaunchedEffect(viewModel.error.value) {
-        viewModel.error.value?.let {
-            snackbarHost.showSnackbar(it)
-            viewModel.limpiarError()
-        }
-    }
+    var certRechazarDialog by remember { mutableStateOf<Certificado?>(null) }
+    var motivoRechazo by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -88,60 +84,200 @@ fun AdminScreen(
                 text = { Text("Nuevo usuario", fontWeight = FontWeight.SemiBold) }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHost) }
+        snackbarHost = {
+            val msg = viewModel.mensaje.value ?: viewModel.error.value
+            ZeroToast(
+                mensaje   = msg,
+                tipo      = if (viewModel.error.value != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje(); viewModel.limpiarError() }
+            )
+        }
     ) { pv ->
         Column(Modifier.fillMaxSize().padding(pv)) {
 
-            // Buscador
-            OutlinedTextField(
-                value = viewModel.filtro.value,
-                onValueChange = { viewModel.filtro.value = it },
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                placeholder = { Text("Buscar por nombre o email") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = VERDE,
-                    cursorColor = VERDE
+            val pendientes = viewModel.pendientesCount
+            TabRow(
+                selectedTabIndex = tabSeleccionado,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = VERDE
+            ) {
+                Tab(
+                    selected = tabSeleccionado == 0,
+                    onClick = { tabSeleccionado = 0 },
+                    text = { Text("Usuarios (${viewModel.usuarios.size})") }
                 )
-            )
-
-            if (viewModel.cargando.value && viewModel.usuarios.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = VERDE)
-                }
-            } else {
-                val lista = viewModel.usuariosFiltrados()
-                if (lista.isEmpty()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "Sin resultados",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(lista, key = { it.uid }) { u ->
-                            UsuarioCard(
-                                usuario = u,
-                                esAdminProtegido = AdminConfig.esAdmin(u.email),
-                                onEditar = { usuarioEditar = u },
-                                onBloquear = { viewModel.toggleBloqueo(u) },
-                                onEliminar = { usuarioConfirmarEliminar = u },
-                                onRestaurar = { viewModel.restaurar(u) },
-                                onBorrarDefinitivo = { usuarioConfirmarBorrarDefinitivo = u }
-                            )
+                Tab(
+                    selected = tabSeleccionado == 1,
+                    onClick = { tabSeleccionado = 1 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Certificados")
+                            if (pendientes > 0) {
+                                Box(
+                                    Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(ROJO)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("$pendientes", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
-                        item { Spacer(Modifier.height(80.dp)) } // espacio para el FAB
+                    }
+                )
+            }
+
+            when (tabSeleccionado) {
+
+                0 -> {
+                    OutlinedTextField(
+                        value = viewModel.filtro.value,
+                        onValueChange = { viewModel.filtro.value = it },
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        placeholder = { Text("Buscar por nombre o email") },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VERDE, cursorColor = VERDE)
+                    )
+                    if (viewModel.cargando.value) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = VERDE)
+                        }
+                    } else {
+                        val lista = viewModel.usuariosFiltrados()
+                        if (lista.isEmpty()) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Sin resultados", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                val miUid = AdminConfig.adminUid
+                                items(lista, key = { it.uid }) { u ->
+                                    UsuarioCard(
+                                        usuario = u,
+                                        esAdminProtegido = miUid != null && u.uid == miUid,
+                                        onEditar = { usuarioEditar = u },
+                                        onBloquear = { viewModel.toggleBloqueo(u) },
+                                        onEliminar = { usuarioConfirmarEliminar = u }
+                                    )
+                                }
+                                item { Spacer(Modifier.height(80.dp)) }
+                            }
+                        }
+                    }
+                }
+
+                1 -> {
+                    if (viewModel.cargandoCerts.value) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = VERDE)
+                        }
+                    } else if (viewModel.todosCertificados.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(0.4f), modifier = Modifier.size(52.dp))
+                                Text("No hay certificados subidos", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Medium)
+                                OutlinedButton(onClick = { viewModel.cargarCertificados() }, shape = RoundedCornerShape(12.dp)) {
+                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Actualizar")
+                                }
+                            }
+                        }
+                    } else {
+                        Column {
+                            // Filtros
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("Todos", "Pendientes", "Verificados", "Rechazados").forEach { f ->
+                                    val sel = viewModel.filtroCerts.value == f
+                                    FilterChip(
+                                        selected = sel,
+                                        onClick = { viewModel.filtroCerts.value = f },
+                                        label = { Text(f, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = VERDE.copy(0.15f),
+                                            selectedLabelColor = VERDE
+                                        )
+                                    )
+                                }
+                            }
+
+                            val lista = viewModel.certificadosFiltrados()
+                            if (lista.isEmpty()) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Text("Sin certificados en esta categoría", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(lista, key = { it.id }) { cert ->
+                                        CertificadoAdminCard(
+                                            cert = cert,
+                                            onAprobar = { viewModel.aprobarCertificado(cert) },
+                                            onRechazar = { certRechazarDialog = cert; motivoRechazo = "" },
+                                            onVerArchivo = {
+                                                if (cert.urlArchivo.isNotBlank()) {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cert.urlArchivo)))
+                                                }
+                                            }
+                                        )
+                                    }
+                                    item { Spacer(Modifier.height(80.dp)) }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Diálogo rechazo de certificado
+    certRechazarDialog?.let { cert ->
+        AlertDialog(
+            onDismissRequest = { certRechazarDialog = null },
+            icon = { Icon(Icons.Default.Cancel, null, tint = ROJO) },
+            title = { Text("Rechazar certificado", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Certificado: ${cert.nombre}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Técnico: ${cert.tecnicoNombre.ifBlank { "—" }}", fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = motivoRechazo,
+                        onValueChange = { motivoRechazo = it },
+                        label = { Text("Motivo del rechazo *") },
+                        placeholder = { Text("Explica al técnico qué tiene que corregir", fontSize = 12.sp) },
+                        minLines = 2,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.rechazarCertificado(cert, motivoRechazo.trim())
+                        certRechazarDialog = null
+                    },
+                    enabled = motivoRechazo.trim().length >= 5,
+                    colors = ButtonDefaults.buttonColors(containerColor = ROJO)
+                ) { Text("Rechazar", color = Color.White, fontWeight = FontWeight.SemiBold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { certRechazarDialog = null }) { Text("Cancelar") }
+            }
+        )
     }
 
     // Diálogo Crear
@@ -171,25 +307,26 @@ fun AdminScreen(
         )
     }
 
-    // Confirmación eliminar (soft delete, reversible)
+    // Confirmación eliminar
     usuarioConfirmarEliminar?.let { u ->
         AlertDialog(
             onDismissRequest = { usuarioConfirmarEliminar = null },
-            icon = { Icon(Icons.Default.Warning, null, tint = ROJO) },
+            icon = { Icon(Icons.Default.Delete, null, tint = ROJO) },
             title = { Text("Eliminar usuario") },
             text = {
                 Text(
-                    "¿Seguro que quieres eliminar a ${u.nombre.ifBlank { u.email }}? " +
-                            "No podrá iniciar sesión. Podrás restaurarlo más tarde."
+                    "¿Seguro que quieres eliminar a ${u.nombre.ifBlank { u.email }}?\n\n" +
+                            "Se borrarán todos sus datos: viviendas, informes, proyectos, chats, valoraciones y solicitudes."
                 )
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         viewModel.eliminar(u)
                         usuarioConfirmarEliminar = null
-                    }
-                ) { Text("Eliminar", color = ROJO, fontWeight = FontWeight.Bold) }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ROJO)
+                ) { Text("Eliminar", color = Color.White, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { usuarioConfirmarEliminar = null }) { Text("Cancelar") }
@@ -197,62 +334,6 @@ fun AdminScreen(
         )
     }
 
-    // Confirmación borrado DEFINITIVO (irreversible, requiere doble verificación)
-    usuarioConfirmarBorrarDefinitivo?.let { u ->
-        var confirmText by remember { mutableStateOf("") }
-        val palabraClave = "ELIMINAR"
-        val confirmado = confirmText.trim().equals(palabraClave, ignoreCase = false)
-
-        AlertDialog(
-            onDismissRequest = { usuarioConfirmarBorrarDefinitivo = null },
-            icon = { Icon(Icons.Default.Delete, null, tint = ROJO) },
-            title = { Text("Eliminar definitivamente", color = ROJO, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Esta acción es IRREVERSIBLE. Se borrarán de forma definitiva:\n" +
-                                "  • La cuenta de Firebase Auth\n" +
-                                "  • Todos los datos de ${u.nombre.ifBlank { u.email }} en Firestore\n" +
-                                "  • Viviendas, informes, proyectos, certificados, chats, reseñas…\n\n" +
-                                "La cuenta NO podrá ser restaurada."
-                    )
-                    Text(
-                        "Escribe \"$palabraClave\" para confirmar:",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = confirmText,
-                        onValueChange = { confirmText = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = ROJO,
-                            cursorColor = ROJO
-                        )
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = confirmado,
-                    onClick = {
-                        viewModel.eliminarDefinitivamente(u)
-                        usuarioConfirmarBorrarDefinitivo = null
-                    }
-                ) {
-                    Text(
-                        "Borrar para siempre",
-                        color = if (confirmado) ROJO else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { usuarioConfirmarBorrarDefinitivo = null }) { Text("Cancelar") }
-            }
-        )
-    }
 }
 
 @Composable
@@ -261,9 +342,7 @@ private fun UsuarioCard(
     esAdminProtegido: Boolean,
     onEditar: () -> Unit,
     onBloquear: () -> Unit,
-    onEliminar: () -> Unit,
-    onRestaurar: () -> Unit,
-    onBorrarDefinitivo: () -> Unit
+    onEliminar: () -> Unit
 ) {
     var menuExpandido by remember { mutableStateOf(false) }
 
@@ -310,11 +389,8 @@ private fun UsuarioCard(
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     EtiquetaMini(usuario.tipoUsuario, AZUL)
-                    when {
-                        usuario.eliminado -> EtiquetaMini("Eliminado", ROJO)
-                        usuario.bloqueado -> EtiquetaMini("Bloqueado", NARANJA)
-                        else -> EtiquetaMini("Activo", VERDE)
-                    }
+                    if (usuario.bloqueado) EtiquetaMini("Bloqueado", NARANJA)
+                    else EtiquetaMini("Activo", VERDE)
                 }
             }
 
@@ -336,41 +412,27 @@ private fun UsuarioCard(
                     expanded = menuExpandido,
                     onDismissRequest = { menuExpandido = false }
                 ) {
-                    if (usuario.eliminado) {
-                        DropdownMenuItem(
-                            text = { Text("Restaurar") },
-                            leadingIcon = { Icon(Icons.Default.Refresh, null, tint = VERDE) },
-                            onClick = { menuExpandido = false; onRestaurar() }
-                        )
-                        HorizontalDivider()
-                        DropdownMenuItem(
-                            text = { Text("Eliminar definitivamente", color = ROJO) },
-                            leadingIcon = { Icon(Icons.Default.DeleteForever, null, tint = ROJO) },
-                            onClick = { menuExpandido = false; onBorrarDefinitivo() }
-                        )
-                    } else {
-                        DropdownMenuItem(
-                            text = { Text("Editar") },
-                            leadingIcon = { Icon(Icons.Default.Edit, null, tint = AZUL) },
-                            onClick = { menuExpandido = false; onEditar() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (usuario.bloqueado) "Desbloquear" else "Bloquear") },
-                            leadingIcon = {
-                                Icon(
-                                    if (usuario.bloqueado) Icons.Default.LockOpen else Icons.Default.Lock,
-                                    null,
-                                    tint = NARANJA
-                                )
-                            },
-                            onClick = { menuExpandido = false; onBloquear() }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Eliminar", color = ROJO) },
-                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = ROJO) },
-                            onClick = { menuExpandido = false; onEliminar() }
-                        )
-                    }
+                    DropdownMenuItem(
+                        text = { Text("Editar") },
+                        leadingIcon = { Icon(Icons.Default.Edit, null, tint = AZUL) },
+                        onClick = { menuExpandido = false; onEditar() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (usuario.bloqueado) "Desbloquear" else "Bloquear") },
+                        leadingIcon = {
+                            Icon(
+                                if (usuario.bloqueado) Icons.Default.LockOpen else Icons.Default.Lock,
+                                null,
+                                tint = NARANJA
+                            )
+                        },
+                        onClick = { menuExpandido = false; onBloquear() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Eliminar", color = ROJO) },
+                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = ROJO) },
+                        onClick = { menuExpandido = false; onEliminar() }
+                    )
                 }
             }
         }
@@ -389,14 +451,107 @@ private fun EtiquetaMini(texto: String, color: Color) {
     }
 }
 
+@Composable
+private fun CertificadoAdminCard(
+    cert: Certificado,
+    onAprobar: () -> Unit,
+    onRechazar: () -> Unit,
+    onVerArchivo: () -> Unit
+) {
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+    val esPendiente = !cert.verificado && !cert.rechazado
+    val (estadoColor, estadoTexto) = when {
+        cert.verificado -> VERDE to "Verificado"
+        cert.rechazado  -> ROJO to "Rechazado"
+        else            -> NARANJA to "Pendiente"
+    }
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(cert.nombre, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    Text(cert.tipo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Box(
+                    Modifier.clip(RoundedCornerShape(8.dp)).background(estadoColor.copy(0.13f)).padding(horizontal = 8.dp, vertical = 3.dp)
+                ) { Text(estadoTexto, color = estadoColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+            }
+            if (cert.tecnicoNombre.isNotBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(cert.tecnicoNombre, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (cert.rechazado && cert.motivoRechazo.isNotBlank()) {
+                Text("Motivo: ${cert.motivoRechazo}", fontSize = 12.sp, color = ROJO.copy(0.8f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Subido: ${sdf.format(Date(cert.fechaSubida))}", fontSize = 11.sp, color = Color(0xFF9CA3AF))
+                if (cert.numArchivos > 1) {
+                    Box(
+                        Modifier.clip(RoundedCornerShape(6.dp))
+                            .background(AZUL.copy(0.12f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("${cert.numArchivos} archivos", color = AZUL, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            HorizontalDivider()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onVerArchivo,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (cert.numArchivos > 1) "Ver archivo 1" else "Ver archivo", fontSize = 12.sp)
+                }
+                if (esPendiente || cert.rechazado) {
+                    Button(
+                        onClick = onAprobar,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = VERDE),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Check, null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Aprobar", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+                if (esPendiente || cert.verificado) {
+                    Button(
+                        onClick = onRechazar,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ROJO),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Rechazar", color = Color.White, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun avatarColor(u: Usuario): Pair<Color, String> {
     val inicial = (u.nombre.firstOrNull() ?: u.email.firstOrNull() ?: '?').uppercaseChar().toString()
     val colores = listOf(VERDE, AZUL, NARANJA, Color(0xFF7C3AED), Color(0xFFEA580C))
     val hash = (u.uid.hashCode() and Int.MAX_VALUE) % colores.size
     return colores[hash] to inicial
 }
-
-// ────────────────────────── Diálogos ──────────────────────────
 
 @Composable
 private fun DialogoCrearUsuario(

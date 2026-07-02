@@ -52,19 +52,20 @@ class ChatViewModel : ViewModel() {
         if (auth.currentUser == null) {
             listenerChats?.remove(); listenerChats = null
             listenerMensajes?.remove(); listenerMensajes = null
-            listaEstado = ChatListEstado()
+            // cargando = false: evita spinner huérfano durante el logout.
+            listaEstado = ChatListEstado(cargando = false)
             chatEstado = ChatEstado()
         }
     }
 
     init {
         FirebaseAuth.getInstance().addAuthStateListener(authStateListener)
+        // Carga inmediata desde caché de Firestore si hay sesión activa.
+        if (FirebaseAuth.getInstance().currentUser != null) cargarChats()
     }
 
-    // ───────────── LISTA CHATS ─────────────
-
     fun cargarChats() {
-        listenerChats?.remove()
+        if (listenerChats != null) return  // ya escuchando, no duplicar
         listaEstado = listaEstado.copy(cargando = true)
 
         listenerChats = repo.escucharChats { chats ->
@@ -78,8 +79,6 @@ class ChatViewModel : ViewModel() {
     fun contarNoLeidos(): Int {
         return listaEstado.chats.count { it.tieneNoLeidos(miUid) }
     }
-
-    // ───────────── CHAT ─────────────
 
     fun abrirChat(chatId: String) {
         listenerMensajes?.remove()
@@ -181,7 +180,11 @@ class ChatViewModel : ViewModel() {
         }
     }
 
-    // ───────────── CREAR CHAT ─────────────
+    fun eliminarMensaje(chatId: String, mensajeId: String) {
+        repo.eliminarMensaje(chatId, mensajeId) { ok ->
+            if (!ok) chatEstado = chatEstado.copy(error = "Error eliminando mensaje")
+        }
+    }
 
     fun iniciarChatConTecnico(
         tecnicoUid: String,
@@ -202,8 +205,6 @@ class ChatViewModel : ViewModel() {
         listenerMensajes?.remove()
     }
 
-    // ───────────── SOLICITAR PRESUPUESTO DESDE CHAT ─────────────
-
     /**
      * Envía una solicitud de presupuesto al técnico con el que estoy chateando.
      * El chat debe ser con un técnico (`otroTecnicoDocId` no vacío).
@@ -221,7 +222,9 @@ class ChatViewModel : ViewModel() {
             return
         }
 
-        repoAuth.obtenerUsuario { u ->
+        // obtenerUsuarioUnaVez (no obtenerUsuario): el callback debe ejecutarse una
+        // sola vez. El doble disparo caché+servidor crearía dos solicitudes idénticas.
+        repoAuth.obtenerUsuarioUnaVez { u ->
             val solicitud = SolicitudPresupuesto(
                 uidCliente = repoAuth.getUid() ?: "",
                 nombreCliente = u?.nombre ?: "Usuario",

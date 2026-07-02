@@ -2,6 +2,7 @@ package com.example.zerohaus.Repositorios
 
 
 import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -29,18 +30,9 @@ class RepositorioViviendas {
     fun obtenerViviendas(callback: (List<Vivienda>) -> Unit) {
         db.collection("viviendas")
             .whereEqualTo("uid", uid())
-            .get()
-            .addOnSuccessListener { snap ->
-                val lista = snap.documents.mapNotNull { it.toObject(Vivienda::class.java) }
-                callback(lista)
+            .getOrTimeout { snap ->
+                callback(snap?.documents?.mapNotNull { it.toObject(Vivienda::class.java) } ?: emptyList())
             }
-            .addOnFailureListener { callback(emptyList()) }
-    }
-
-    fun obtenerVivienda(id: String, callback: (Vivienda?) -> Unit) {
-        db.collection("viviendas").document(id).get()
-            .addOnSuccessListener { doc -> callback(doc.toObject(Vivienda::class.java)) }
-            .addOnFailureListener { callback(null) }
     }
 
     fun eliminarVivienda(id: String, callback: (Result<Unit>) -> Unit) {

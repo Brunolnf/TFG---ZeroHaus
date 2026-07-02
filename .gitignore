@@ -51,3 +51,8 @@ preview_*.html
 # Android Studio device manager (per-machine)
 .idea/deviceManager.xml
 .idea/appInsightsSettings.xml
+.idea/deploymentTargetSelector.xml
+.idea/markdown.xml
+
+# Activos generados para Play Store (locales al desarrollador)
+playstore-assets/

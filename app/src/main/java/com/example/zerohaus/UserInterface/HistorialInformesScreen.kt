@@ -1,9 +1,11 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,13 +14,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.ViewModel.ChatViewModel
 import com.example.zerohaus.ViewModel.HistorialInformesViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -27,6 +34,7 @@ import java.util.*
 @Composable
 fun HistorialInformesScreen(
     viewModel: HistorialInformesViewModel,
+    chatViewModel: ChatViewModel? = null,
     onVolver: () -> Unit = {},
     onVerInforme: (InformeEnergetico) -> Unit = {}
 ) {
@@ -38,10 +46,26 @@ fun HistorialInformesScreen(
     val ctx = LocalContext.current
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
-    LaunchedEffect(Unit) { viewModel.cargarInformes() }
+    // Estado para el diálogo de compartir
+    var informeACompartir by remember { mutableStateOf<InformeEnergetico?>(null) }
+    var informeAEliminar by remember { mutableStateOf<InformeEnergetico?>(null) }
+    var enviandoAChat by remember { mutableStateOf(false) }
+    var mensajeEnvio by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.cargarInformes()
+        chatViewModel?.cargarChats()
+    }
 
     Scaffold(
         containerColor = fondo,
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = mensajeEnvio,
+                tipo      = ToastTipo.EXITO,
+                alOcultar = { mensajeEnvio = null }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -66,6 +90,21 @@ fun HistorialInformesScreen(
         if (estado.cargando) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = verde)
+            }
+        } else if (estado.error != null) {
+            Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFDC2626), modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Error al cargar informes", color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(estado.error!!, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = { viewModel.cargarInformes(forzar = true) },
+                        colors = ButtonDefaults.buttonColors(containerColor = verde)
+                    ) { Text("Reintentar", color = Color.White) }
+                }
             }
         } else if (estado.informes.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
@@ -159,7 +198,7 @@ fun HistorialInformesScreen(
                                     "Consumo",
                                     Formato.formatEnergia(a.consumoEstimado),
                                     Formato.formatEnergia(b.consumoEstimado),
-                                    b.consumoEstimado - a.consumoEstimado,
+                                    Formato.convertirEnergia(b.consumoEstimado - a.consumoEstimado),
                                     verde, gris
                                 )
                                 FilaComparacion(
@@ -173,7 +212,7 @@ fun HistorialInformesScreen(
                                     "Coste",
                                     Formato.formatMoneda(a.costeAnual, 1),
                                     Formato.formatMoneda(b.costeAnual, 1),
-                                    b.costeAnual - a.costeAnual,
+                                    Formato.convertirMoneda(b.costeAnual - a.costeAnual),
                                     verde, gris
                                 )
 
@@ -192,7 +231,7 @@ fun HistorialInformesScreen(
                 }
 
                 // Lista de informes
-                items(estado.informes) { informe ->
+                items(estado.informes, key = { it.id }) { informe ->
                     val seleccionado = informe.id == estado.informeSeleccionado?.id || informe.id == estado.informeComparar?.id
                     Card(
                         onClick = {
@@ -223,10 +262,16 @@ fun HistorialInformesScreen(
                                     EtiquetaBadge(informe.etiqueta)
                                     if (!estado.modoComparar) {
                                         IconButton(
-                                            onClick = { compartirInforme(ctx, informe) },
+                                            onClick = { informeACompartir = informe },
                                             modifier = Modifier.size(32.dp)
                                         ) {
                                             Icon(Icons.Default.Share, "Compartir", tint = gris, modifier = Modifier.size(18.dp))
+                                        }
+                                        IconButton(
+                                            onClick = { informeAEliminar = informe },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, "Eliminar", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -243,6 +288,171 @@ fun HistorialInformesScreen(
             }
         }
     }
+
+    informeAEliminar?.let { informe ->
+        AlertDialog(
+            onDismissRequest = { informeAEliminar = null },
+            icon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
+            title = { Text("Eliminar informe", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Text("¿Quieres eliminar el informe de \"${informe.nombreVivienda}\"? Esta acción no se puede deshacer.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.eliminarInforme(informe.id)
+                        informeAEliminar = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) { Text("Eliminar", color = Color.White) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { informeAEliminar = null }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    informeACompartir?.let { informe ->
+        val chats = chatViewModel?.listaEstado?.chats ?: emptyList()
+        val miUid = chatViewModel?.miUid ?: ""
+
+        AlertDialog(
+            onDismissRequest = { informeACompartir = null },
+            icon = { Icon(Icons.Default.Share, null, tint = verde) },
+            title = { Text("Compartir informe", fontWeight = FontWeight.SemiBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("\"${informe.nombreVivienda}\"", fontSize = 13.sp, color = gris)
+                    Spacer(Modifier.height(4.dp))
+
+                    // Botón: Compartir externamente
+                    OutlinedButton(
+                        onClick = {
+                            informeACompartir = null
+                            compartirInforme(ctx, informe)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Compartir externamente")
+                    }
+
+                    if (chats.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text("Enviar a un técnico de la app:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        chats.forEach { chat ->
+                            val otroNombre = chat.nombresParticipantes
+                                .filterKeys { it != miUid }
+                                .values.firstOrNull() ?: "Usuario"
+                            val otroUid = chat.participantes.firstOrNull { it != miUid } ?: ""
+
+                            Card(
+                                onClick = {
+                                    if (!enviandoAChat) {
+                                        enviandoAChat = true
+                                        informeACompartir = null
+                                        enviarInformeAChat(ctx, informe, chat.id, otroNombre) { ok ->
+                                            enviandoAChat = false
+                                            mensajeEnvio = if (ok) "Informe enviado a $otroNombre" else "Error al enviar"
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        Modifier.size(36.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                            .background(verde.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            otroNombre.take(1).uppercase(),
+                                            color = verde,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                    }
+                                    Text(otroNombre, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            "No tienes chats activos. Contacta con un técnico primero para poder enviarle informes.",
+                            fontSize = 12.sp,
+                            color = gris
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { informeACompartir = null }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    if (enviandoAChat) {
+        AlertDialog(
+            onDismissRequest = {},
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CircularProgressIndicator(color = verde, modifier = Modifier.size(24.dp))
+                    Text("Enviando informe...")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+}
+
+private fun enviarInformeAChat(
+    context: android.content.Context,
+    informe: InformeEnergetico,
+    chatId: String,
+    destinatario: String,
+    onResult: (Boolean) -> Unit
+) {
+    try {
+        val pdfFile = generarPdfParaChat(context, informe)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
+        val nombre = "Informe_${informe.nombreVivienda.replace(" ", "_")}.pdf"
+        val bytes = pdfFile.length()
+        val repo = RepositorioChat()
+        repo.enviarArchivo(chatId, uri, nombre, bytes) { ok -> onResult(ok) }
+    } catch (e: Exception) {
+        onResult(false)
+    }
+}
+
+private fun generarPdfParaChat(
+    context: android.content.Context,
+    informe: InformeEnergetico
+): java.io.File {
+    // Reutiliza la función de generación de PDF de CompartirInforme
+    val dir = java.io.File(context.cacheDir, "informes")
+    dir.mkdirs()
+    val nombreSeguro = informe.nombreVivienda
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
+        .ifBlank { "vivienda" }
+        .take(40)
+    val fileName = "informe_${nombreSeguro}_${informe.fechaGeneracion}.pdf"
+    val file = java.io.File(dir, fileName)
+    if (!file.exists()) {
+        // Llamar a la función interna del CompartirInforme
+        compartirInformeSilencioso(context, informe, file)
+    }
+    return file
 }
 
 @Composable

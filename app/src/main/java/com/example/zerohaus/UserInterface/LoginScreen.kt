@@ -29,13 +29,28 @@ fun LoginScreen(
     val c = LocalCadenas.current
     val estado = viewModel.estado
     val verde = MaterialTheme.colorScheme.primary
-    val fondo = Color(0xFFEEF8F5)
+    // Fondo siempre del tema (background) — antes hardcodeaba #EEF8F5 y
+    // chocaba en dark mode. Detectamos light/dark según el background del
+    // tema en lugar de isSystemInDarkTheme() porque la app respeta su propia
+    // preferencia (AppEstado.tema) que puede divergir del modo del sistema.
+    val esDark = MaterialTheme.colorScheme.background.red < 0.5f
+    val fondo = if (esDark) MaterialTheme.colorScheme.background else Color(0xFFEEF8F5)
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val borde = Color(0xFFD1D5DB)
+    val borde = MaterialTheme.colorScheme.outline
     var verContrasena by remember { mutableStateOf(false) }
 
+    // Al abrir el LoginScreen, limpiamos cualquier credencial o error que
+    // hubiera quedado de un intento anterior (importante tras logout o tras
+    // reabrir la app si el proceso seguía vivo).
+    LaunchedEffect(Unit) {
+        viewModel.resetear()
+    }
+
     LaunchedEffect(estado.loginCorrecto) {
-        if (estado.loginCorrecto) onLoginExitoso()
+        if (estado.loginCorrecto) {
+            viewModel.resetear()   // consume el flag (one-shot): evita re-disparos en reentradas
+            onLoginExitoso()
+        }
     }
 
     Scaffold(containerColor = fondo) { pv ->

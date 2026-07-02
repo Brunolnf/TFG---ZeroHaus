@@ -6,9 +6,10 @@ package com.example.zerohaus.Modelos
  *   "Presupuestado"       → técnico envió precio, cliente aún no decide
  *   "Aceptado"            → cliente aceptó el presupuesto, falta la ficha de inicio
  *   "FichaEnviada"        → técnico envió la ficha de inicio, cliente debe aceptarla
+ *   "FichaRechazada"      → cliente rechazó la ficha, técnico debe reenviarla
  *   "EnCurso"             → cliente aceptó la ficha; existe un /proyectos asociado
  *   "PendientePago"       → técnico marcó el trabajo como terminado, falta cobrar
- *   "PagoEnVerificacion"  → cliente dice haber pagado por PayPal/Bizum; técnico debe confirmar
+ *   "PagoEnVerificacion"  → cliente dice haber pagado; técnico debe confirmar
  *   "Completado"          → técnico confirmó el cobro; reforma cerrada (puede valorar)
  *   "Rechazado"           → cliente rechazó el presupuesto (fin)
  */
@@ -27,20 +28,30 @@ data class SolicitudPresupuesto(
     val fechaCreacion: Long = System.currentTimeMillis(),
     val fechaRespuesta: Long = 0L,
 
-    // ── Ficha de inicio (la envía el técnico tras "Aceptado") ──
     val fichaFechaInicio: Long = 0L,
     val fichaFechaFinEstimada: Long = 0L,
     val fichaDescripcion: String = "",
     val fichaPrecioFinal: Double = 0.0,
     val fichaTareas: List<String> = emptyList(),
 
-    // ── Vínculo con el proyecto creado tras aceptar la ficha ──
     val proyectoId: String = "",
 
-    // ── Pago ──
     val pagado: Boolean = false,
     val fechaPago: Long = 0L,
-    val metodoPago: String = "",         // "paypal" | "bizum" | "otro"
+    val metodoPago: String = "",         // "tarjeta" | "efectivo"
     val referenciaPago: String = "",     // referencia/concepto opcional indicado por el cliente
-    val fechaPagoCliente: Long = 0L      // cuando el cliente marca "ya he pagado"
+    val fechaPagoCliente: Long = 0L,     // cuando el cliente marca "ya he pagado"
+
+    // Motivo opcional cuando el cliente rechaza la ficha de inicio. Lo guarda
+    // el cliente y lo lee el trigger `on_solicitud_estado_cambiado` para
+    // incluirlo en la notif al técnico.
+    val motivoRechazoFicha: String = ""
 )
+
+/**
+ * Una solicitud está expirada si lleva más de 30 días en estado "Pendiente"
+ * sin que el técnico haya respondido.
+ */
+val SolicitudPresupuesto.estaExpirada: Boolean
+    get() = estado == "Pendiente" &&
+            System.currentTimeMillis() - fechaCreacion > 30L * 24 * 60 * 60 * 1000

@@ -59,7 +59,6 @@ fun RecuperarPasswordScreen(
             Spacer(Modifier.height(32.dp))
 
             if (enviado) {
-                // ── Estado éxito (mensaje neutro: no revela si existe) ──
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = verde.copy(alpha = 0.10f),
@@ -112,7 +111,6 @@ fun RecuperarPasswordScreen(
                     Text(c.recuperarReenviar, color = verde, fontSize = 13.sp)
                 }
             } else {
-                // ── Formulario ──
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = verde.copy(alpha = 0.10f),

@@ -1,5 +1,9 @@
-﻿package com.example.zerohaus.UserInterface
+package com.example.zerohaus.UserInterface
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,9 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.TecnicosViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,6 +47,7 @@ fun TecnicosScreen(
     val amarillo = Color(0xFFFFC107)
     val estado = viewModel.estado
     val filtrados = viewModel.tecnicosFiltrados()
+    val ctx = LocalContext.current
 
     var mostrarFiltros by remember { mutableStateOf(false) }
     var tecnicoParaPresupuesto by remember { mutableStateOf<com.example.zerohaus.Modelos.Tecnico?>(null) }
@@ -47,23 +58,36 @@ fun TecnicosScreen(
         "Auditorías", "Rehabilitación", "Biomasa", "Certificación", "Consultoría"
     )
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
-
-    val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(estado.mensajeExito, estado.error) {
-        estado.mensajeExito?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.limpiarMensaje()
+    // Pedir ubicación y actualizar distancias
+    val locationPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+    }
+    LaunchedEffect(Unit) {
+        viewModel.cargarTecnicos()
+        val tienePermiso = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (tienePermiso) {
+            obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+        } else {
+            locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        estado.error?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.limpiarMensaje()
+        // Fallback: si tras 3s no hay ubicación, usar Madrid
+        kotlinx.coroutines.delay(3000)
+        if (viewModel.estado.latUsuario == 0.0) {
+            viewModel.actualizarUbicacion(40.4168, -3.7038)
         }
     }
 
     Scaffold(
         containerColor = fondo,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = estado.mensajeExito ?: estado.error,
+                tipo      = if (estado.error != null) ToastTipo.ERROR else ToastTipo.EXITO,
+                alOcultar = { viewModel.limpiarMensaje() }
+            )
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -142,8 +166,31 @@ fun TecnicosScreen(
                         }
                     }
 
+                    // Chips de ordenamiento
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        listOf(
+                            OrdenTecnicos.VALORACION to "⭐ Valoración",
+                            OrdenTecnicos.PROXIMIDAD to "📍 Proximidad",
+                            OrdenTecnicos.PROYECTOS  to "🔨 Proyectos"
+                        ).forEach { (orden, label) ->
+                            FilterChip(
+                                selected = estado.orden == orden,
+                                onClick = { viewModel.cambiarOrden(orden) },
+                                label = { Text(label, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = verde.copy(0.15f),
+                                    selectedLabelColor = verde
+                                )
+                            )
+                        }
+                    }
+
                     estado.filtro?.let {
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(6.dp))
                         AssistChip(
                             onClick = { viewModel.cambiarFiltro(null) },
                             label = { Text("Filtro: $it  ✕") },
@@ -215,70 +262,90 @@ fun TecnicosScreen(
                                     color = verde.copy(alpha = 0.1f)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            t.nombre.take(1).uppercase(),
-                                            color = verde,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 20.sp
-                                        )
+                                        if (t.nombre.isNotBlank()) {
+                                            Text(
+                                                t.nombre.take(1).uppercase(),
+                                                color = verde,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = verde,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
                                     }
                                 }
 
                                 // Nombre, ciudad, especialidades
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        t.nombre,
+                                        t.nombre.ifBlank { "Técnico" },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
-                                    if (t.ciudad.isNotEmpty()) {
+                                    val ubicConocida = viewModel.tieneUbicacionConocida(t)
+                                    if (t.ciudad.isNotEmpty() || ubicConocida) {
                                         Spacer(Modifier.height(2.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.LocationOn,
-                                                null,
-                                                tint = gris,
-                                                modifier = Modifier.size(13.dp)
-                                            )
+                                            Icon(Icons.Default.LocationOn, null, tint = gris, modifier = Modifier.size(13.dp))
                                             Spacer(Modifier.width(2.dp))
-                                            Text(t.ciudad, color = gris, fontSize = 13.sp)
-                                        }
-                                    } else if (t.distanciaKm > 0.0) {
-                                        Spacer(Modifier.height(2.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.LocationOn,
-                                                null,
-                                                tint = gris,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(Modifier.width(2.dp))
-                                            Text("${t.distanciaKm} km", color = gris, fontSize = 13.sp)
+                                            val textoUbic = buildString {
+                                                if (t.ciudad.isNotEmpty()) append(t.ciudad)
+                                                if (ubicConocida) {
+                                                    if (t.ciudad.isNotEmpty()) append(" · ")
+                                                    // distanciaKm == 0 con coords conocidas = mismo punto que el
+                                                    // usuario; mostramos "<1 km" en vez de "0.0 km" o esconderla.
+                                                    append(
+                                                        if (t.distanciaKm < 1.0) "<1 km"
+                                                        else "${t.distanciaKm} km"
+                                                    )
+                                                }
+                                            }
+                                            Text(textoUbic, color = gris, fontSize = 13.sp)
                                         }
                                     }
                                 }
 
                                 // Badge de rating (arriba a la derecha)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = amarillo.copy(alpha = 0.15f)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                if (t.opiniones > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = amarillo.copy(alpha = 0.15f)
                                     ) {
-                                        Icon(
-                                            Icons.Default.Star,
-                                            null,
-                                            tint = amarillo,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                null,
+                                                tint = amarillo,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                "%.1f".format(t.rating),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF92400E)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = gris.copy(alpha = 0.12f)
+                                    ) {
                                         Text(
-                                            "%.1f".format(t.rating),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF92400E)
+                                            "Nuevo",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = gris
                                         )
                                     }
                                 }
@@ -383,12 +450,15 @@ fun TecnicosScreen(
                     Text("Técnico: ${t.nombre}", fontWeight = FontWeight.Medium)
                     OutlinedTextField(
                         value = descripcionPresupuesto,
-                        onValueChange = { descripcionPresupuesto = it },
+                        onValueChange = { if (it.length <= 500) descripcionPresupuesto = it },
                         label = { Text("Describe lo que necesitas") },
                         placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 3
+                        minLines = 3,
+                        supportingText = {
+                            Text("${descripcionPresupuesto.length} / 500", fontSize = 11.sp)
+                        }
                     )
                 }
             },
@@ -401,6 +471,7 @@ fun TecnicosScreen(
                         )
                         tecnicoParaPresupuesto = null
                     },
+                    enabled = !viewModel.estado.enviandoSolicitud && descripcionPresupuesto.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
                 ) { Text("Enviar solicitud", color = Color.White) }
             },
@@ -409,4 +480,37 @@ fun TecnicosScreen(
             }
         )
     }
+}
+
+@androidx.annotation.RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+private fun obtenerUbicacion(context: android.content.Context, onResult: (Double, Double) -> Unit) {
+    try {
+        val client = LocationServices.getFusedLocationProviderClient(context)
+        // Intentar primero con lastLocation (rápido)
+        client.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                onResult(loc.latitude, loc.longitude)
+            } else {
+                // En emulador lastLocation suele ser null — pedir ubicación fresca
+                val request = com.google.android.gms.location.CurrentLocationRequest.Builder()
+                    .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+                    .setDurationMillis(5000)
+                    .build()
+                client.getCurrentLocation(request, null)
+                    .addOnSuccessListener { freshLoc ->
+                        if (freshLoc != null) onResult(freshLoc.latitude, freshLoc.longitude)
+                    }
+            }
+        }.addOnFailureListener {
+            // Fallback directo a getCurrentLocation
+            val request = com.google.android.gms.location.CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+                .setDurationMillis(5000)
+                .build()
+            client.getCurrentLocation(request, null)
+                .addOnSuccessListener { freshLoc ->
+                    if (freshLoc != null) onResult(freshLoc.latitude, freshLoc.longitude)
+                }
+        }
+    } catch (_: Exception) {}
 }

@@ -14,8 +14,5 @@ data class Tecnico(
     val telefono: String = "",
     val emailContacto: String = "",
     val latitud: Double = 0.0,
-    val longitud: Double = 0.0,
-    // Métodos de cobro del técnico
-    val paypalUsername: String = "",   // p.ej. "carlosgomez" → paypal.me/carlosgomez
-    val bizumTelefono: String = ""     // p.ej. "+34600123456"
+    val longitud: Double = 0.0
 )
