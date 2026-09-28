@@ -51,8 +51,11 @@ node_modules/
 *.bak
 .claude/
 claude.exe
-# Material gráfico de la ficha de Google Play (local del desarrollador)
-playstore-assets/
+# Ficha de Google Play: se versiona todo salvo credenciales de la cuenta de
+# prueba, datos de contacto personales y la política de privacidad antigua
+playstore-assets/textos/2-data-safety.md
+playstore-assets/textos/4-app-access-tester.md
+playstore-assets/privacy-policy/
 # Previsualizaciones HTML generadas por herramientas
 logo_*.html
 preview_*.html
