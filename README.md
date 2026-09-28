@@ -209,7 +209,7 @@ venv/Scripts/pip install -r requirements.txt   # en Linux/macOS: venv/bin/pip
 ## Tests
 
 ```bash
-# App (JUnit): algoritmo energético, traducciones, especialidades, estadísticas y ubicaciones
+# App (JUnit): algoritmo, traducciones, especialidades, estadísticas, ubicaciones y formato
 ./gradlew :app:testDebugUnitTest
 
 # Reglas de seguridad de Firestore (emulador)
