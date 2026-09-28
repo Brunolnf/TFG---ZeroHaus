@@ -8,6 +8,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - **Del informe al profesional**: cada mejora que hace un profesional tiene un botón que abre el directorio filtrado por su especialidad.
 - **Catálogo único de especialidades**: el profesional las elige de una lista en su perfil y se muestran traducidas en todas las pantallas; el buscador encuentra también por el nombre traducido.
 - **Distancias sin GPS**: si el usuario no da permiso de ubicación, el directorio mide desde la capital de la provincia de su vivienda, lo indica y marca las distancias como aproximadas; con un toque se puede usar el GPS.
+- **Aviso sin conexión** en toda la app: explica que se ven los datos guardados y que los cambios se enviarán al reconectar.
 - El PDF del informe muestra el consumo por m² (kWh/m²·año), que es lo que decide la etiqueta.
 - Icono temático de Android 13+ (capa monocroma del icono adaptativo).
 - El administrador puede marcar un email como verificado (para la cuenta de prueba de los revisores de Google Play).
@@ -18,6 +19,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
 ### Cambiado
+- Las compilaciones de depuración permiten capturas de pantalla; la versión publicada las sigue bloqueando.
 - Los números siguen el idioma elegido en la app (no el del sistema) y llevan separador de miles: «12.345,6 kWh» en español, «12,345.6 kWh» en inglés.
 - `AppCadenas` pasa de una `data class` con ~580 parámetros a mapas por idioma: la JVM no admite más de 255 parámetros, por lo que la clase no se podía cargar en tests ni en las vistas previas de Compose. Si a un idioma le falta un texto, se muestra en español.
 
@@ -28,6 +30,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Los canales de notificación aparecían en español en los ajustes de Android fuera cual fuera el idioma de la app.
 - «Usar mi ubicación» no hacía nada si el permiso se había denegado dos veces; ahora abre los ajustes de la app.
 - Los nombres largos de vivienda o de mejora se salían de la página en el PDF.
+- La verificación del email decía «Sin conexión» ante cualquier error del servidor (por ejemplo, con la función aún sin desplegar); ahora distingue la falta de red de un servicio no disponible, igual que los consejos de IA.
 - `gradlew` no tenía permiso de ejecución en el repositorio (fallaba en Linux y macOS).
 
 ## [2.2.0] — 2026-09-28 · versionCode 5
