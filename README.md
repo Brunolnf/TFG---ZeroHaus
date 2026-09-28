@@ -4,6 +4,7 @@
 
 **Eficiencia energética para tu hogar, y los profesionales que te ayudan a conseguirla.**
 
+[![CI](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml/badge.svg)](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml)
 ![Versión](https://img.shields.io/badge/versión-2.2.0-1F6E43)
 ![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
@@ -26,6 +27,7 @@
 - [Estructura del repositorio](#estructura-del-repositorio)
 - [Puesta en marcha](#puesta-en-marcha)
 - [Tests](#tests)
+- [Textos e idiomas](#textos-e-idiomas)
 - [Despliegue](#despliegue)
 - [Versionado y flujo de trabajo](#versionado-y-flujo-de-trabajo)
 - [Autor](#autor)
@@ -161,6 +163,9 @@ ZeroHaus/
 │   ├── requirements.txt
 │   └── set_admin_claim.py        Concede o retira el rol de administrador
 ├── rules-tests/                  Tests de las reglas de Firestore (emulador)
+├── herramientas/i18n.py          Mantenimiento de los textos en los 14 idiomas
+├── playstore-assets/             Ficha de Google Play: gráficos, logos y textos
+├── .github/workflows/ci.yml      Integración continua
 ├── public/                       Web (Firebase Hosting): privacidad, términos, datos
 ├── firestore.rules               Reglas de Firestore
 ├── firestore.indexes.json        Índices de Firestore
@@ -204,11 +209,24 @@ venv/Scripts/pip install -r requirements.txt   # en Linux/macOS: venv/bin/pip
 ## Tests
 
 ```bash
-# Algoritmo energético (JUnit)
+# App (JUnit): algoritmo energético, traducciones, especialidades y estadísticas
 ./gradlew :app:testDebugUnitTest
 
 # Reglas de seguridad de Firestore (emulador)
 cd rules-tests && npm install && npm test
+```
+
+La **integración continua** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) ejecuta en cada push y pull request a `main`: los tests de la app, la compilación del APK, los tests de reglas con el emulador y la validación del backend y de los 14 idiomas.
+
+## Textos e idiomas
+
+Los textos de la interfaz están en `Util/AppCadenas.kt` (una propiedad por texto) y `Util/Traducciones.kt` (un mapa por idioma). Para no editarlos a mano en los 14 idiomas:
+
+```bash
+python herramientas/i18n.py añadir textos.json   # {"clave": ["Español", "English", …14 textos]}
+python herramientas/i18n.py cambiar textos.json  # cambia textos existentes
+python herramientas/i18n.py sin-uso --borrar     # borra claves que ya no usa el código
+python herramientas/i18n.py comprobar            # verifica que los 14 idiomas están completos
 ```
 
 ## Despliegue
