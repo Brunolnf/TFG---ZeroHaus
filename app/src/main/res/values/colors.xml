@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fondo del system splash screen (Android 12+).
+         Verde forest del primer stop del gradiente del SplashScreen Compose
+         (Color(0xFF16A34A)). Igualar los dos colores evita el "flash" blanco
+         entre la splash del sistema y la pantalla Compose verde. -->
+    <color name="zerohaus_splash_bg">#FF16A34A</color>
+</resources>

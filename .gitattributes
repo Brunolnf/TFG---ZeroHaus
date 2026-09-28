@@ -1,0 +1,19 @@
+# Ficheros de texto normalizados a LF dentro del repositorio; cada sistema
+# operativo usa sus saltos de línea al hacer checkout (evita diffs de
+# "todo el fichero cambiado" entre Windows, macOS y Linux).
+* text=auto
+
+# Scripts de Windows: CRLF obligatorio
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: nunca convertir
+*.png      binary
+*.jpg      binary
+*.webp     binary
+*.ico      binary
+*.jar      binary
+*.aab      binary
+*.apk      binary
+*.jks      binary
+*.keystore binary

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Política de privacidad · ZeroHaus</title>
+<style>
+  :root{--verde:#1F6E43;--verde2:#14512F;--tinta:#1c2321;--gris:#5b6763;--linea:#e4e9e6;--bg:#f6f8f7}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--tinta);background:var(--bg);line-height:1.65}
+  header{background:linear-gradient(135deg,var(--verde),var(--verde2));color:#fff;padding:38px 20px}
+  .wrap{max-width:820px;margin:0 auto;padding:0 20px}
+  header .wrap{display:flex;align-items:center;gap:12px}
+  .logo{width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px}
+  header h1{margin:0;font-size:22px;font-weight:700}
+  header p{margin:2px 0 0;opacity:.85;font-size:14px}
+  main{background:#fff;max-width:820px;margin:-18px auto 40px;padding:34px 30px;border-radius:16px;box-shadow:0 6px 30px rgba(20,81,47,.07)}
+  h2{color:var(--verde2);font-size:19px;margin:30px 0 8px;padding-top:6px}
+  h2:first-child{margin-top:0}
+  h3{font-size:16px;margin:18px 0 4px}
+  p,li{font-size:15px;color:#2a322f}
+  a{color:var(--verde)}
+  .meta{color:var(--gris);font-size:13px;margin-bottom:4px}
+  .callout{background:#fff8e6;border:1px solid #f2d98a;border-radius:12px;padding:12px 16px;font-size:14px;color:#6b5314;margin:18px 0}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--linea);vertical-align:top}
+  th{color:var(--verde2)}
+  footer{max-width:820px;margin:0 auto 50px;padding:0 30px;color:var(--gris);font-size:13px;text-align:center}
+  footer a{margin:0 8px;color:var(--gris)}
+</style>
+</head>
+<body>
+<header><div class="wrap"><div class="logo">Z</div><div><h1>Política de privacidad</h1><p>ZeroHaus · Eficiencia energética</p></div></div></header>
+<main>
+  <p class="meta">Última actualización: 25 de septiembre de 2026</p>
+
+  <div class="callout">Responsable del tratamiento: <strong>ZeroHaus</strong> — [titular legal: nombre/razón social, NIF y domicilio a completar]. Contacto: <a href="mailto:soporte@zerohaus.es">soporte@zerohaus.es</a>.</div>
+
+  <p>Esta política explica qué datos personales trata la aplicación ZeroHaus (paquete <code>es.zerohaus.app</code>), con qué fines, sobre qué base legal y qué derechos tienes. Al usar la app aceptas este tratamiento en los términos aquí descritos.</p>
+
+  <h2>1. Datos que tratamos</h2>
+  <table>
+    <tr><th>Categoría</th><th>Datos</th></tr>
+    <tr><td>Cuenta</td><td>Correo electrónico, nombre, tipo de usuario (propietario, técnico o empresa) y contraseña (gestionada y cifrada por Firebase Authentication; nunca la vemos en claro).</td></tr>
+    <tr><td>Perfil</td><td>Foto de perfil (opcional). En profesionales: especialidades, descripción, teléfono y correo de contacto que decides mostrar.</td></tr>
+    <tr><td>Ubicación</td><td>Ubicación aproximada del dispositivo, solo cuando la concedes, para mostrarte profesionales cercanos. La ubicación pública de un profesional puede mostrarse en el mapa del directorio.</td></tr>
+    <tr><td>Vivienda y energía</td><td>Datos de tu vivienda e informes/preestudios energéticos que generas (estimaciones de consumo, emisiones y coste).</td></tr>
+    <tr><td>Comunicaciones</td><td>Mensajes de chat entre clientes y profesionales, y valoraciones que publicas. Para valorar a un profesional debe existir una conversación previa con él.</td></tr>
+    <tr><td>Verificación del correo</td><td>Al registrarte te enviamos por email un código de 6 dígitos. Guardamos solo una huella cifrada (HMAC) de cada código, nunca el código en claro, para impedir que se repita; caduca a los 10 minutos.</td></tr>
+    <tr><td>Estadísticas de profesionales</td><td>Cuando visitas el perfil de un profesional o le contactas (chat o llamada) registramos ese evento para que el profesional vea cuántas visitas y contactos recibe. El evento individual (que incluye tu identificador) se <strong>borra a las 48 horas</strong>; el profesional solo ve totales, nunca quién le visitó.</td></tr>
+    <tr><td>Consejos con IA</td><td>Solo si pulsas «Generar consejos» en un informe: enviamos a Google Gemini las <strong>características técnicas</strong> de la vivienda (superficie, año, provincia, sistemas…) y los resultados del informe. <strong>Nunca</strong> tu nombre, dirección, email ni el nombre de la vivienda. La respuesta se guarda en tu informe. Máximo 10 consultas al día.</td></tr>
+    <tr><td>Técnicos</td><td>Identificador de notificaciones (token FCM), modelo y versión del dispositivo, e informes de errores y rendimiento.</td></tr>
+    <tr><td>Suscripciones</td><td>Estado de la suscripción del profesional. Los pagos los procesa Google Play: <strong>no recibimos ni almacenamos datos de tarjeta</strong>.</td></tr>
+  </table>
+
+  <h2>2. Para qué usamos los datos y base legal</h2>
+  <ul>
+    <li><strong>Prestar el servicio</strong> (cuenta, directorio, chat, preestudios, valoraciones) — base: ejecución del contrato.</li>
+    <li><strong>Mostrar profesionales cercanos</strong> — base: consentimiento (permiso de ubicación), revocable en los ajustes del sistema.</li>
+    <li><strong>Notificaciones push</strong> de mensajes y valoraciones — base: consentimiento; puedes desactivarlas (todas o por tipo) en Ajustes o en el sistema.</li>
+    <li><strong>Avisos por email</strong> de mensajes y valoraciones — base: consentimiento; están desactivados por defecto y se activan en <em>Ajustes → Notificaciones</em>.</li>
+    <li><strong>Verificar tu correo</strong> con un código de un solo uso — base: ejecución del contrato y seguridad (evitar cuentas con correos ajenos).</li>
+    <li><strong>Estadísticas agregadas para profesionales</strong> — base: interés legítimo (que el profesional conozca el alcance de su perfil), sin identificar a los visitantes.</li>
+    <li><strong>Consejos personalizados con IA</strong> — base: tu solicitud expresa al pulsar el botón.</li>
+    <li><strong>Gestionar suscripciones de profesionales</strong> — base: ejecución del contrato.</li>
+    <li><strong>Seguridad, prevención de fraude y mejora</strong> (Crashlytics, Performance, App Check) — base: interés legítimo.</li>
+    <li><strong>Analítica de uso</strong> agregada — base: consentimiento/interés legítimo.</li>
+  </ul>
+
+  <h2>3. Con quién se comparten</h2>
+  <p>No vendemos tus datos. Se tratan a través de encargados que actúan por cuenta nuestra:</p>
+  <ul>
+    <li><strong>Google Firebase</strong> (Authentication, Firestore, Storage, Cloud Messaging, Analytics, Crashlytics, Performance, Functions y Hosting) — alojamiento y funciones de la app. Firestore y las funciones se ejecutan en la región <em>europe-west1</em> (UE).</li>
+    <li><strong>Google Play Billing</strong> — procesamiento de los pagos de suscripción.</li>
+    <li><strong>Google Maps</strong> — visualización de mapas y ubicación.</li>
+    <li><strong>Google Cloud Vertex AI (Gemini)</strong> — generación de los consejos con IA, solo cuando los pides y con los datos técnicos indicados arriba. Se procesa preferentemente en la UE (<em>europe-west1</em>).</li>
+    <li><strong>Proveedor de correo (Google Gmail, SMTP)</strong> — envío de los códigos de verificación y de los avisos por email.</li>
+  </ul>
+  <p>Algunos servicios de Google pueden implicar transferencias internacionales, amparadas en las cláusulas contractuales tipo de la UE.</p>
+
+  <h2>4. Conservación</h2>
+  <p>Conservamos tus datos mientras tu cuenta esté activa. Cuando eliminas tu cuenta desde la app (<em>Ajustes → Seguridad de la cuenta → Eliminar cuenta</em>), se borran de forma permanente tu perfil, mensajes, viviendas, informes y datos asociados. Podemos conservar lo mínimo exigido por obligaciones legales (p. ej. facturación).</p>
+
+  <h2>5. Tus derechos</h2>
+  <p>Puedes ejercer los derechos de acceso, rectificación, supresión, portabilidad, limitación y oposición, así como retirar tu consentimiento:</p>
+  <ul>
+    <li><strong>Supresión inmediata</strong>: desde la propia app, en <em>Ajustes → Eliminar cuenta</em>.</li>
+    <li><strong>Resto de derechos</strong>: escribiendo a <a href="mailto:soporte@zerohaus.es">soporte@zerohaus.es</a>.</li>
+  </ul>
+  <p>Si crees que no atendemos bien tu solicitud, puedes reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" target="_blank" rel="noopener">aepd.es</a>).</p>
+
+  <h2>6. Seguridad</h2>
+  <p>Aplicamos cifrado en tránsito (TLS con fijación de certificados), verificación de integridad de la app (App Check / Play Integrity), almacenamiento local cifrado (AES-256) y reglas de acceso estrictas en el servidor para proteger tus datos.</p>
+
+  <h2>7. Menores</h2>
+  <p>ZeroHaus no está dirigida a menores de 16 años y no recopilamos conscientemente sus datos.</p>
+
+  <h2>8. Cambios</h2>
+  <p>Podemos actualizar esta política; publicaremos la nueva versión en esta página con su fecha. El uso continuado tras un cambio implica su aceptación.</p>
+
+  <h2>9. Contacto</h2>
+  <p>Para cualquier cuestión sobre privacidad: <a href="mailto:soporte@zerohaus.es">soporte@zerohaus.es</a>.</p>
+</main>
+<footer>
+  <div><a href="/privacidad">Privacidad</a> · <a href="/terminos">Términos</a> · <a href="/datos">Gestión de datos</a></div>
+  <p>© 2026 ZeroHaus. Todos los derechos reservados.</p>
+</footer>
+</body>
+</html>

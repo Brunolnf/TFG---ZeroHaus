@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reglas de Auto Backup (API < 31).
+  android:allowBackup="false" en el manifest desactiva el backup por completo,
+  así que este archivo no se utiliza en la práctica. Lo mantenemos por
+  compatibilidad y para excluir explícitamente datos sensibles en caso de
+  reactivar el backup en el futuro.
+
+  Datos a EXCLUIR siempre que se reactive el backup:
+    - sharedpref "ajustes" → puede contener tokens FCM
+    - cualquier credencial de Firebase Auth
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="ajustes.xml" />
+    <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+    <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
+    <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
+    <exclude domain="file" path="firebase-installations-store" />
+    <exclude domain="sharedpref" path="__androidx_security_crypto_encrypted_prefs__.xml" />
+</full-backup-content>

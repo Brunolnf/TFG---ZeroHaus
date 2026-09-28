@@ -1,0 +1,40 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Igual que en Firestore: sin el email verificado (código de 6 dígitos)
+    // no se puede leer ni subir nada.
+    function verificado() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // Imágenes y archivos del chat — solo participantes del chat
+    // Usamos cross-service rules para consultar la membresía en Firestore.
+    match /chats/{chatId}/{archivo=**} {
+      allow read: if verificado()
+                  && request.auth.uid in firestore.get(
+                       /databases/(default)/documents/chats/$(chatId)
+                     ).data.participantes;
+      allow write: if verificado()
+                   && request.auth.uid in firestore.get(
+                        /databases/(default)/documents/chats/$(chatId)
+                      ).data.participantes
+                   && request.resource.size < 15 * 1024 * 1024;
+    }
+
+    // Fotos de perfil — lectura por usuarios verificados, escritura solo del
+    // propio uid, solo imágenes de hasta 5 MB
+    match /perfiles/{uid}/{archivo=**} {
+      allow read:  if verificado();
+      allow write: if verificado() && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Cualquier otra ruta (incluidos los certificados de la función ya
+    // eliminada) queda denegada
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

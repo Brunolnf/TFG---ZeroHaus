@@ -1,0 +1,292 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Sesión iniciada aunque el email aún no esté verificado. Solo se usa para
+    // lo imprescindible antes de verificar: crear/leer tu propio perfil y ajustes.
+    function autenticado() { return request.auth != null; }
+    // Sesión con el email verificado (código de 6 dígitos): requisito para
+    // todo lo demás. Así, aunque alguien modifique la app, sin verificar no
+    // puede leer ni escribir nada.
+    function logueado() {
+      return autenticado() && request.auth.token.email_verified == true;
+    }
+    function esMio(uid) { return logueado() && request.auth.uid == uid; }
+    function esMioSinVerificar(uid) { return autenticado() && request.auth.uid == uid; }
+    function uid()      { return request.auth.uid; }
+    function noMuta(campo) {
+      return campo in request.resource.data.keys()
+          && request.resource.data[campo] == resource.data[campo];
+    }
+    function noMutaOpcional(campo) {
+      return (!(campo in resource.data.keys())
+              && !(campo in request.resource.data.keys()))
+          || (campo in resource.data.keys()
+              && campo in request.resource.data.keys()
+              && request.resource.data[campo] == resource.data[campo]);
+    }
+    function esAdmin() {
+      return logueado()
+        && 'admin' in request.auth.token
+        && request.auth.token.admin == true;
+    }
+    function tipoUsuarioDe(u) {
+      return get(/databases/$(database)/documents/usuarios/$(u)).data.tipoUsuario;
+    }
+    function tamanoDocMaximo() {
+      return request.resource.data.keys().size() <= 40;
+    }
+    // Límites de los campos editables del perfil profesional
+    function camposPerfilValidos() {
+      let d = request.resource.data;
+      return (!('nombre' in d.keys()) || (d.nombre is string && d.nombre.size() <= 100))
+          && (!('descripcion' in d.keys()) || (d.descripcion is string && d.descripcion.size() <= 2000))
+          && (!('telefono' in d.keys()) || (d.telefono is string && d.telefono.size() <= 20))
+          && (!('emailContacto' in d.keys()) || (d.emailContacto is string && d.emailContacto.size() <= 254));
+    }
+
+    match /usuarios/{userId} {
+      // Leer y crear tu propio perfil se permite antes de verificar: el registro
+      // lo crea justo después de crear la cuenta y el login comprueba bloqueos.
+      allow read: if esMioSinVerificar(userId) || esAdmin();
+      allow create: if (esMioSinVerificar(userId)
+                    && tamanoDocMaximo()
+                    && request.resource.data.uid == userId
+                    && request.resource.data.tipoUsuario in ['Propietario', 'Técnico', 'Empresa']
+                    && request.resource.data.bloqueado == false
+                    && request.resource.data.eliminado == false
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() <= 60
+                    && request.resource.data.email is string
+                    && request.resource.data.email.size() <= 254)
+                    || esAdmin();
+      allow update: if esAdmin()
+                    || (esMio(userId)
+                        && tamanoDocMaximo()
+                        && noMuta('uid')
+                        && noMuta('email')
+                        && noMuta('tipoUsuario')
+                        && noMuta('fechaRegistro')
+                        && noMuta('bloqueado')
+                        && noMuta('eliminado')
+                        && (!('nombre' in request.resource.data.keys())
+                            || (request.resource.data.nombre is string
+                                && request.resource.data.nombre.size() <= 60)));
+      allow delete: if esMio(userId) || esAdmin();
+    }
+
+    match /viviendas/{docId} {
+      allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow create: if (logueado()
+                    && tamanoDocMaximo()
+                    && request.resource.data.uid == uid()
+                    && request.resource.data.keys().hasAll(['uid', 'nombre'])
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() <= 100)
+                    || esAdmin();
+      allow update: if (logueado() && resource.data.uid == uid()
+                    && tamanoDocMaximo()
+                    && noMuta('uid'))
+                    || esAdmin();
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+    }
+
+    match /informes/{docId} {
+      allow read:   if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow create: if (logueado()
+                    && tamanoDocMaximo()
+                    && request.resource.data.uid == uid())
+                    || esAdmin();
+      allow update: if (logueado() && resource.data.uid == uid()
+                    && tamanoDocMaximo()
+                    && noMuta('uid'))
+                    || esAdmin();
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+    }
+
+    match /tecnicos/{docId} {
+      allow read:   if logueado();
+      // El perfil profesional también se crea en el registro, antes de verificar
+      allow create: if (autenticado()
+                    && tamanoDocMaximo()
+                    && docId == uid()
+                    && request.resource.data.uid == uid()
+                    && tipoUsuarioDe(uid()) in ['Técnico', 'Empresa']
+                    && request.resource.data.tipoProfesional in ['TECNICO', 'EMPRESA']
+                    && (request.resource.data.tipoProfesional == 'EMPRESA')
+                        == (tipoUsuarioDe(uid()) == 'Empresa')
+                    && request.resource.data.rating == 0
+                    && request.resource.data.opiniones == 0
+                    && request.resource.data.proyectosCompletados == 0
+                    && request.resource.data.nombre is string
+                    && request.resource.data.nombre.size() <= 100
+                    && (!('descripcion' in request.resource.data.keys())
+                        || request.resource.data.descripcion.size() <= 2000)
+                    && (!('telefono' in request.resource.data.keys())
+                        || request.resource.data.telefono.size() <= 20)
+                    && (!('emailContacto' in request.resource.data.keys())
+                        || request.resource.data.emailContacto.size() <= 254))
+                    || esAdmin();
+      allow update: if esAdmin()
+                    || ((logueado() && resource.data.uid == uid() && noMuta('uid'))
+                        && tamanoDocMaximo()
+                        && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
+                        && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
+                        && noMutaOpcional('tipoProfesional')
+                        && camposPerfilValidos())
+                    || ((logueado() && docId == uid() && request.resource.data.uid == uid())
+                        && tamanoDocMaximo()
+                        && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
+                        && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
+                        && noMutaOpcional('tipoProfesional')
+                        && camposPerfilValidos())
+                    // Reclamar un perfil legacy sin uid: solo con el email VERIFICADO
+                    // (si no, cualquiera podría registrarse con el correo de otro).
+                    || ((logueado()
+                        && request.auth.token.email_verified == true
+                        && resource.data.emailContacto == request.auth.token.email
+                        && (resource.data.uid == '' || resource.data.uid == null)
+                        && request.resource.data.uid == uid())
+                        && tamanoDocMaximo()
+                        && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
+                        && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
+                        && noMutaOpcional('tipoProfesional')
+                        && camposPerfilValidos());
+      allow delete: if esAdmin();
+
+      // Eventos para las estadísticas del profesional (visita al perfil,
+      // contacto por chat o llamada). Como mucho uno por cliente, día (UTC) y
+      // tipo gracias al id determinista; el día lo fija el reloj del servidor,
+      // así que no se pueden inventar fechas. Nadie los lee desde la app: la
+      // Cloud Function los agrega en /estadisticas y los borra a las 48 h.
+      match /eventos/{eventoId} {
+        allow create: if logueado()
+          && request.resource.data.keys().hasOnly(['dia', 'tipo'])
+          && request.resource.data.tipo in ['visita', 'chat', 'llamada']
+          && request.resource.data.dia == request.time.year() * 10000
+                                          + request.time.month() * 100
+                                          + request.time.day()
+          && eventoId == uid() + '_' + string(request.resource.data.dia) + '_' + request.resource.data.tipo
+          && docId != uid()
+          && get(/databases/$(database)/documents/tecnicos/$(docId)).data.uid != uid();
+        allow read, update, delete: if esAdmin();
+      }
+    }
+
+    // Agregados de estadísticas: solo los escribe la Cloud Function.
+    match /estadisticas/{tecnicoId} {
+      allow read: if (logueado()
+                      && (tecnicoId == uid()
+                          || get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data.uid == uid()))
+                  || esAdmin();
+      allow write: if false;
+    }
+
+    match /suscripciones/{token} {
+      allow read: if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow write: if false;
+    }
+
+    match /notificaciones/{docId} {
+      allow read, update, delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow create: if logueado()
+                    && tamanoDocMaximo()
+                    && request.resource.data.uid == uid()
+                    && request.resource.data.titulo is string
+                    && request.resource.data.titulo.size() <= 200
+                    && request.resource.data.detalle is string
+                    && request.resource.data.detalle.size() <= 1000;
+    }
+
+    // Solo se puede valorar a un profesional con quien existe una conversación
+    // real (chat con mensajes). Evita reseñas falsas desde cuentas sin relación.
+    function conversacionReal(chatId, tecnicoId) {
+      let chat = get(/databases/$(database)/documents/chats/$(chatId)).data;
+      let prof = get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data;
+      return uid() in chat.participantes
+          && prof.uid in chat.participantes
+          && chat.get('fechaUltimoMensaje', 0) > 0;
+    }
+
+    match /resenas/{docId} {
+      allow read: if logueado();
+      allow create: if (logueado()
+                    && tamanoDocMaximo()
+                    && request.resource.data.uid == uid()
+                    && request.resource.data.tecnicoId is string
+                    && request.resource.data.tecnicoId.size() > 0
+                    && request.resource.data.tecnicoId.size() <= 128
+                    && request.resource.data.tecnicoId != uid()
+                    && docId == uid() + '_' + request.resource.data.tecnicoId
+                    && request.resource.data.chatId is string
+                    && conversacionReal(request.resource.data.chatId, request.resource.data.tecnicoId)
+                    && request.resource.data.puntuacion is number
+                    && request.resource.data.puntuacion >= 1
+                    && request.resource.data.puntuacion <= 5
+                    && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
+                    && (!('comentario' in request.resource.data.keys())
+                        || (request.resource.data.comentario is string
+                            && request.resource.data.comentario.size() <= 1000)))
+                    || esAdmin();
+      allow update: if esAdmin()
+                    || (logueado()
+                        && tamanoDocMaximo()
+                        && resource.data.uid == uid()
+                        && noMuta('uid')
+                        && noMuta('tecnicoId')
+                        && request.resource.data.puntuacion is number
+                        && request.resource.data.puntuacion >= 1
+                        && request.resource.data.puntuacion <= 5
+                        && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
+                        && (!('comentario' in request.resource.data.keys())
+                            || (request.resource.data.comentario is string
+                                && request.resource.data.comentario.size() <= 1000)));
+      allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+    }
+
+    match /chats/{chatId} {
+      allow read, delete: if (logueado() && uid() in resource.data.participantes) || esAdmin();
+      allow create: if (logueado()
+                    && tamanoDocMaximo()
+                    && uid() in request.resource.data.participantes
+                    && request.resource.data.participantes.size() == 2
+                    && request.resource.data.participantes is list)
+                    || esAdmin();
+      allow update: if (logueado() && uid() in resource.data.participantes
+                    && tamanoDocMaximo()
+                    && noMuta('participantes'))
+                    || esAdmin();
+
+      match /mensajes/{mensajeId} {
+        allow read: if (logueado() &&
+          uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes)
+          || esAdmin();
+        allow create: if (logueado()
+          && uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes
+          && request.resource.data.emisorUid == uid()
+          && (!('texto' in request.resource.data.keys())
+              || (request.resource.data.texto is string
+                  && request.resource.data.texto.size() <= 2000))
+          && request.resource.data.keys().size() <= 15)
+          || esAdmin();
+        allow update, delete: if (logueado() && resource.data.emisorUid == uid()) || esAdmin();
+      }
+    }
+
+    // Ajustes propios (idioma, tema, token de notificaciones) también antes de
+    // verificar: el token FCM se registra en cuanto hay sesión.
+    match /ajustes/{userId} {
+      allow read, write: if esMioSinVerificar(userId) || esAdmin();
+    }
+
+    // /verificaciones_email (huellas de los códigos) y /limites_ia: solo las
+    // Cloud Functions con Admin SDK. Caen en el deny-all de abajo.
+
+    // La feature de certificados está eliminada: no se define regla, así que
+    // cae en el deny-all de abajo. NO abrir esta colección sin schema real.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

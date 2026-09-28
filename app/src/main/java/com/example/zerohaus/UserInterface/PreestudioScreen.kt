@@ -1,0 +1,458 @@
+package com.example.zerohaus.UserInterface
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.zerohaus.ViewModel.PreestudioViewModel
+import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.TextosEnergia
+
+/**
+ * Formulario del preestudio energético. Permite partir de una vivienda
+ * guardada o crear una nueva, y genera el informe al enviarlo.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PreestudioScreen(
+    viewModel: PreestudioViewModel,
+    onVolver: () -> Unit = {},
+    onInformeGenerado: () -> Unit = {}
+) {
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+    val borde = MaterialTheme.colorScheme.outline
+    val estado = viewModel.estado
+    val c = LocalCadenas.current
+
+    // Cargar viviendas guardadas para el selector
+    LaunchedEffect(Unit) { viewModel.cargarViviendas() }
+
+    // Cuando se genera el informe, navegar automáticamente
+    LaunchedEffect(estado.informeGenerado) {
+        if (estado.informeGenerado != null) onInformeGenerado()
+    }
+
+    Scaffold(
+        containerColor = fondo,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(c.preTitulo, fontWeight = FontWeight.SemiBold)
+                        Text(c.preSubtitulo, color = gris, fontSize = 12.sp)
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onVolver) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver)
+                    }
+                }
+            )
+        }
+    ) { ps ->
+        Column(Modifier.padding(ps).fillMaxSize()) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (estado.cargandoViviendas || estado.viviendas.isNotEmpty()) {
+                    Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp)) {
+                            CabeceraSeccion(
+                                iconoColorFondo = Color(0xFFECFDF5),
+                                iconoTint       = Color(0xFF059669),
+                                icono           = Icons.Default.Home,
+                                titulo          = c.preViviendaEstudio
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            if (estado.cargandoViviendas) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = verde
+                                    )
+                                    Text(c.preCargandoViviendas, fontSize = 13.sp, color = gris)
+                                }
+                            } else {
+                                ViviendaSelectorDropdown(
+                                    seleccionada = estado.viviendaSeleccionada,
+                                    viviendas    = estado.viviendas,
+                                    borde        = borde,
+                                    verde        = verde,
+                                    onNueva      = { viewModel.usarNuevaVivienda() },
+                                    onSeleccionar = { v -> viewModel.seleccionarViviendaExistente(v) }
+                                )
+                                if (estado.viviendaSeleccionada != null) {
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, null,
+                                            tint = Color(0xFF059669),
+                                            modifier = Modifier.size(14.dp))
+                                        Text(
+                                            "${c.preDatosCargados} «${estado.viviendaSeleccionada!!.nombre}»",
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF059669)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Datos básicos
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        CabeceraSeccion(Color(0xFFD1FAE5), Color(0xFF065F46), Icons.Default.Info, c.preDatosBasicos)
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo(c.preNombre)
+                        CampoTexto(estado.nombreVivienda, { viewModel.cambiarNombre(it) }, c.preNombreEj, borde)
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Column(Modifier.weight(1f)) {
+                                EtiquetaCampo(c.preSuperficie)
+                                CampoTexto(estado.superficie, { viewModel.cambiarSuperficie(it) }, "100", borde)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                EtiquetaCampo(c.preAnio)
+                                CampoTexto(estado.anio, { viewModel.cambiarAnio(it) }, "2000", borde)
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo(c.preOcupantes)
+                        CampoTexto(estado.ocupantes, { viewModel.cambiarOcupantes(it.filter(Char::isDigit).take(2)) }, "3", borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preTipoVivienda, estado.tipoVivienda,
+                            AlgoritmoEnergetico.opcionesTipoVivienda,
+                            { viewModel.cambiarTipoVivienda(it) }, borde)
+                    }
+                }
+
+                // Envolvente térmica
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        CabeceraSeccion(Color(0xFFDBEAFE), Color(0xFF2563EB), Icons.Default.Warning, c.preEnvolvente)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preVentanas, estado.ventanas,
+                            listOf("Vidrio simple", "Doble acristalamiento", "Triple"),
+                            { viewModel.cambiarVentanas(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preAislamiento, estado.aislamiento,
+                            listOf("Sin aislamiento", "Aislamiento parcial", "Aislamiento completo"),
+                            { viewModel.cambiarAislamiento(it) }, borde)
+                    }
+                }
+
+                // Sistemas energéticos
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        CabeceraSeccion(Color(0xFFEDE9FE), Color(0xFF7C3AED), Icons.Default.Build, c.preSistemas)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preCalefaccion, estado.calefaccion,
+                            listOf("Caldera de gas", "Eléctrica", "Aerotermia", "Biomasa"),
+                            { viewModel.cambiarCalefaccion(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preAcs, estado.acs,
+                            listOf("Gas", "Eléctrico", "Solar térmica", "Aerotermia"),
+                            { viewModel.cambiarAcs(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preIluminacion, estado.iluminacion,
+                            AlgoritmoEnergetico.opcionesIluminacion,
+                            { viewModel.cambiarIluminacion(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preRefrigeracion, estado.refrigeracion,
+                            AlgoritmoEnergetico.opcionesRefrigeracion,
+                            { viewModel.cambiarRefrigeracion(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preFotovoltaica, estado.fotovoltaica,
+                            AlgoritmoEnergetico.opcionesFotovoltaica,
+                            { viewModel.cambiarFotovoltaica(it) }, borde)
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preElectrodomesticos, estado.electrodomesticos,
+                            AlgoritmoEnergetico.opcionesElectrodomesticos,
+                            { viewModel.cambiarElectrodomesticos(it) }, borde)
+                    }
+                }
+
+                // Ubicación
+                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp)) {
+                        CabeceraSeccion(Color(0xFFFFEDD5), Color(0xFFEA580C), Icons.Default.LocationOn, c.preUbicacion)
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo(c.preDireccion)
+                        CampoTexto(estado.direccion, { viewModel.cambiarDireccion(it) }, c.preDireccionEj, borde)
+                        Spacer(Modifier.height(10.dp))
+                        EtiquetaCampo(c.preProvincia)
+                        SelectorProvincia(
+                            valor = estado.provincia,
+                            onValor = { viewModel.cambiarProvincia(it) },
+                            borde = borde
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        SelectorCompacto(c.preOrientacion, estado.orientacion,
+                            listOf("Norte", "Sur", "Este", "Oeste"),
+                            { viewModel.cambiarOrientacion(it) }, borde)
+                    }
+                }
+
+                // Error
+                estado.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+
+                // Validación: TODOS los campos son obligatorios. La superficie tiene
+                // que ser un entero > 0 y el año entre 1900 y el año actual.
+                val anioActual = remember { java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) }
+                val superficieOk = estado.superficie.toIntOrNull()?.let { it > 0 } == true
+                val anioOk = estado.anio.toIntOrNull()?.let { it in 1900..anioActual } == true
+                val ocupantesOk = estado.ocupantes.toIntOrNull()?.let { it in 1..20 } == true
+                val preestudioCompleto = estado.nombreVivienda.isNotBlank()
+                    && superficieOk && anioOk && ocupantesOk
+                    && estado.direccion.isNotBlank()
+                    && estado.ventanas.isNotBlank() && estado.aislamiento.isNotBlank()
+                    && estado.calefaccion.isNotBlank() && estado.acs.isNotBlank()
+                    && estado.orientacion.isNotBlank()
+                    && estado.provincia in AlgoritmoEnergetico.provinciasOrdenadas
+                    && estado.iluminacion in AlgoritmoEnergetico.opcionesIluminacion
+                    && estado.tipoVivienda in AlgoritmoEnergetico.opcionesTipoVivienda
+                    && estado.refrigeracion in AlgoritmoEnergetico.opcionesRefrigeracion
+                    && estado.fotovoltaica in AlgoritmoEnergetico.opcionesFotovoltaica
+                    && estado.electrodomesticos in AlgoritmoEnergetico.opcionesElectrodomesticos
+
+                // Botón generar informe
+                Button(
+                    onClick = { viewModel.generarInforme() },
+                    enabled = !estado.cargando && preestudioCompleto,
+                    colors = ButtonDefaults.buttonColors(containerColor = verde),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(vertical = 14.dp)
+                ) {
+                    if (estado.cargando) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(c.preGenerar, color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CabeceraSeccion(iconoColorFondo: Color, iconoTint: Color, icono: androidx.compose.ui.graphics.vector.ImageVector, titulo: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(30.dp).background(iconoColorFondo, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icono, null, tint = iconoTint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(titulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun EtiquetaCampo(texto: String) {
+    Text(texto, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun CampoTexto(valor: String, onValor: (String) -> Unit, placeholder: String, borde: Color) {
+    val verde = MaterialTheme.colorScheme.primary
+    OutlinedTextField(
+        value = valor, onValueChange = onValor,
+        placeholder = { Text(placeholder, fontSize = 13.sp) },
+        singleLine = true, shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            unfocusedBorderColor = borde, focusedBorderColor = verde,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+/** Dropdown que lista las viviendas guardadas + opción "Nueva vivienda". */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ViviendaSelectorDropdown(
+    seleccionada: Vivienda?,
+    viviendas: List<Vivienda>,
+    borde: Color,
+    verde: Color,
+    onNueva: () -> Unit,
+    onSeleccionar: (Vivienda) -> Unit
+) {
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val c = LocalCadenas.current
+    var expandido by remember { mutableStateOf(false) }
+    val textoMostrado = seleccionada?.nombre ?: c.preNuevaVivienda
+
+    EtiquetaCampo(c.preUsarGuardada)
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
+        OutlinedTextField(
+            value = textoMostrado,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            leadingIcon = {
+                Icon(
+                    if (seleccionada != null) Icons.Default.Home else Icons.Default.Add,
+                    null,
+                    tint = if (seleccionada != null) Color(0xFF059669) else gris,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = borde,
+                focusedBorderColor   = verde,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor   = MaterialTheme.colorScheme.surface
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, null, tint = verde, modifier = Modifier.size(16.dp))
+                        Text(c.preNuevaVivienda, fontWeight = FontWeight.SemiBold)
+                    }
+                },
+                onClick = { onNueva(); expandido = false }
+            )
+            if (viviendas.isNotEmpty()) HorizontalDivider()
+            viviendas.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(v.nombre) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Home, null,
+                            tint = gris,
+                            modifier = Modifier.size(16.dp))
+                    },
+                    onClick = { onSeleccionar(v); expandido = false }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Selector de provincia con búsqueda por texto (ignorando tildes/mayúsculas).
+ * El estado del texto está totalmente levantado: el caller mantiene `valor`
+ * y la lista oficial de provincias está en [AlgoritmoEnergetico.provinciasOrdenadas].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectorProvincia(
+    valor: String,
+    onValor: (String) -> Unit,
+    borde: Color = MaterialTheme.colorScheme.outline,
+    placeholder: String = LocalCadenas.current.preBuscaProvincia
+) {
+    val verde = MaterialTheme.colorScheme.primary
+    var expandido by remember { mutableStateOf(false) }
+
+    val filtradas = remember(valor) {
+        val opciones = AlgoritmoEnergetico.provinciasOrdenadas
+        if (valor.isBlank()) opciones
+        else {
+            val q = valor.quitarAcentos()
+            opciones.filter { it.quitarAcentos().contains(q, ignoreCase = true) }
+        }
+    }
+
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
+        OutlinedTextField(
+            value = valor,
+            onValueChange = { onValor(it); expandido = true },
+            placeholder = { Text(placeholder, fontSize = 13.sp) },
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = borde, focusedBorderColor = verde,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                focusedContainerColor = MaterialTheme.colorScheme.surface
+            ),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+        )
+        if (filtradas.isNotEmpty()) {
+            ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+                filtradas.take(50).forEach { p ->
+                    DropdownMenuItem(
+                        text = { Text(p) },
+                        onClick = { onValor(p); expandido = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun String.quitarAcentos(): String =
+    java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SelectorCompacto(
+    etiqueta: String, valor: String, opciones: List<String>,
+    onSeleccion: (String) -> Unit, borde: Color
+) {
+    val verde = MaterialTheme.colorScheme.primary
+    val c = LocalCadenas.current
+    var expandido by remember { mutableStateOf(false) }
+    EtiquetaCampo(etiqueta)
+    ExposedDropdownMenuBox(expanded = expandido, onExpandedChange = { expandido = it }) {
+        OutlinedTextField(
+            value = TextosEnergia.opcion(valor, c), onValueChange = {}, readOnly = true, singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = borde, focusedBorderColor = verde,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface
+            ),
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = expandido, onDismissRequest = { expandido = false }) {
+            opciones.forEach { opt ->
+                DropdownMenuItem(text = { Text(TextosEnergia.opcion(opt, c)) }, onClick = { onSeleccion(opt); expandido = false })
+            }
+        }
+    }
+}

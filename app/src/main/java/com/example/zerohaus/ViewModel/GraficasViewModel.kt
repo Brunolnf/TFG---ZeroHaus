@@ -1,0 +1,48 @@
+
+package com.example.zerohaus.ViewModel
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Repositorios.RepositorioInformes
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+
+/**
+ * Estado de la pantalla de gráficas.
+ */
+data class GraficasEstado(
+    val informes: List<InformeEnergetico> = emptyList(),
+    val cargando: Boolean = false
+)
+
+/**
+ * Carga los informes del usuario para las gráficas de evolución.
+ */
+class GraficasViewModel : ViewModel() {
+
+    var estado by mutableStateOf(GraficasEstado())
+        private set
+
+    private val repo = RepositorioInformes()
+
+    init { cargarDatos() }
+
+    fun cargarDatos(forzar: Boolean = false) {
+        if (!forzar && estado.informes.isNotEmpty()) return
+        viewModelScope.launch {
+            estado = estado.copy(cargando = true)
+            val lista = suspendCancellableCoroutine { cont ->
+                repo.obtenerInformes { cont.resume(it) }
+            }
+            estado = estado.copy(
+                informes = lista.sortedBy { it.fechaGeneracion },
+                cargando = false
+            )
+        }
+    }
+}

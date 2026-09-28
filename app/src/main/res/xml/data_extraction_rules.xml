@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Reglas de extracción de datos (API 31+).
+  android:allowBackup="false" en el manifest desactiva el cloud-backup,
+  pero device-transfer (transferencia entre dispositivos) sigue siendo posible.
+  Excluimos explícitamente tokens y datos sensibles.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="ajustes.xml" />
+        <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+        <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
+        <exclude domain="file" path="firebase-installations-store" />
+        <exclude domain="sharedpref" path="__androidx_security_crypto_encrypted_prefs__.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+        <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
+        <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
+        <exclude domain="file" path="firebase-installations-store" />
+        <exclude domain="sharedpref" path="__androidx_security_crypto_encrypted_prefs__.xml" />
+    </device-transfer>
+</data-extraction-rules>

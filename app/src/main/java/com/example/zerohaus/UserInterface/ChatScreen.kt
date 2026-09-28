@@ -1,0 +1,802 @@
+package com.example.zerohaus.UserInterface
+
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.ViewModel.ChatViewModel
+import com.google.firebase.auth.FirebaseAuth
+import java.text.SimpleDateFormat
+import java.util.*
+
+/**
+ * Conversación: mensajes en tiempo real (paginados de 50 en 50), envío de
+ * texto, fotos y archivos (máx. 15 MB), visor de imágenes y borrado de mensajes.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    chatId: String,
+    onVolver: () -> Unit = {},
+    onVerPerfil: (String) -> Unit = {}
+) {
+    val verde = MaterialTheme.colorScheme.primary
+    val verdeClaro = Color(0xFF22C55E)
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val fondo = MaterialTheme.colorScheme.background
+
+    val estado = viewModel.chatEstado
+    val cad = LocalCadenas.current
+    val miUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+    val sdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val context = LocalContext.current
+    val listState = rememberLazyListState()
+    var errorLocal by remember { mutableStateOf<String?>(null) }
+    var toastExito by remember { mutableStateOf(false) }
+
+    // Estado del visor de imagen fullscreen
+    var imagenAmpliada by remember { mutableStateOf<String?>(null) }
+    var archivoAmpliado by remember { mutableStateOf<MensajeChat?>(null) }
+    var mensajeAEliminar by remember { mutableStateOf<MensajeChat?>(null) }
+
+    val imagenLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { viewModel.seleccionarImagen(it) } }
+
+    val archivoLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            var nombre = "archivo"; var bytes = 0L
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val si = c.getColumnIndex(OpenableColumns.SIZE)
+                    if (ni >= 0) nombre = c.getString(ni) ?: "archivo"
+                    if (si >= 0) bytes = c.getLong(si)
+                }
+            }
+            // Mismo tope que storage.rules (15 MB): si no, el upload sería
+            // rechazado por el servidor con un error genérico.
+            if (bytes > 15 * 1024 * 1024) {
+                errorLocal = cad.chatArchivoLimite
+            } else {
+                viewModel.enviarArchivo(chatId, uri, nombre, bytes)
+            }
+        }
+    }
+
+    LaunchedEffect(chatId) { viewModel.abrirChat(chatId) }
+    DisposableEffect(Unit) { onDispose { viewModel.cerrarChat() } }
+    // Baja al final solo cuando llega un mensaje NUEVO (no al cargar anteriores)
+    LaunchedEffect(estado.mensajes.lastOrNull()?.id) {
+        if (estado.mensajes.isNotEmpty()) {
+            val cabecera = if (estado.hayMasMensajes) 1 else 0
+            listState.animateScrollToItem(estado.mensajes.lastIndex + cabecera)
+        }
+    }
+
+    Scaffold(
+        containerColor = fondo,
+        snackbarHost = {
+            ZeroToast(
+                mensaje   = errorLocal,
+                tipo      = if (toastExito) ToastTipo.EXITO else ToastTipo.ERROR,
+                alOcultar = { errorLocal = null; toastExito = false }
+            )
+        },
+        topBar = {
+            TopAppBar(
+                title = {
+                    val clickMod = if (estado.otroTecnicoDocId.isNotEmpty())
+                        Modifier.clickable { onVerPerfil(estado.otroTecnicoDocId) }
+                    else Modifier
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = clickMod) {
+                        val inicial = estado.nombreOtroUsuario.firstOrNull()?.uppercase() ?: "?"
+                        Box(
+                            Modifier.size(36.dp).background(verde, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(inicial, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                estado.nombreOtroUsuario.ifEmpty { "Chat" },
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            when {
+                                estado.otroTecnicoDocId.isNotEmpty() ->
+                                    Text(cad.chatVerPerfil, color = verde, fontSize = 11.sp)
+                                estado.nombreOtroUsuario.isNotEmpty() ->
+                                    Text(cad.chatConversacion, color = gris, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onVolver) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, cad.volver)
+                    }
+                }
+            )
+        }
+    ) { padding ->
+
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .imePadding()
+        ) {
+
+            if (estado.mensajes.isEmpty()) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Send, null,
+                            tint = gris.copy(alpha = 0.3f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(cad.chatVacio, color = gris)
+                        Text(cad.chatVacioSub, color = gris.copy(0.7f), fontSize = 13.sp)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (estado.hayMasMensajes) {
+                        item(key = "cargar_anteriores") {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                if (estado.cargandoAnteriores) {
+                                    CircularProgressIndicator(Modifier.size(20.dp), color = verde, strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(onClick = { viewModel.cargarMensajesAnteriores() }) {
+                                        Text(cad.chatAnteriores, color = verde, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    items(estado.mensajes, key = { it.id }) { msg ->
+                        val esMio = msg.emisorUid == miUid
+                        Column(
+                            Modifier.fillMaxWidth(),
+                            horizontalAlignment = if (esMio) Alignment.End else Alignment.Start
+                        ) {
+                            if (!esMio && estado.nombreOtroUsuario.isNotEmpty()) {
+                                Text(
+                                    msg.emisorNombre, fontSize = 11.sp, color = gris,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp)
+                                )
+                            }
+                            BurbujaMensaje(
+                                msg, esMio, gris, verde, sdf, context,
+                                onVerImagen = { imagenAmpliada = it },
+                                onVerArchivo = { archivoAmpliado = it },
+                                onEliminar = if (esMio) { { mensajeAEliminar = msg } } else null
+                            )
+                        }
+                    }
+                    item { Spacer(Modifier.height(4.dp)) }
+                }
+            }
+
+            Surface(
+                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    if (estado.subiendoMedia) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth(), color = verde)
+                    }
+
+                    if (estado.imagenPendiente != null) {
+                        BarraPreviewImagen(
+                            uri = estado.imagenPendiente!!,
+                            caption = estado.captionImagen,
+                            onCaptionChange = { viewModel.cambiarCaptionImagen(it) },
+                            onEnviar = { viewModel.enviarImagenPendiente(chatId) },
+                            onCancelar = { viewModel.cancelarImagenPendiente() },
+                            verde = verde, gris = gris,
+                            enviando = estado.subiendoMedia
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    imagenLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(20.dp),
+                                border = BorderStroke(1.dp, verde.copy(alpha = 0.45f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = verde),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircle, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(cad.chatFoto, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                            OutlinedButton(
+                                onClick = { archivoLauncher.launch(arrayOf("*/*")) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(20.dp),
+                                border = BorderStroke(1.dp, verde.copy(alpha = 0.45f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = verde),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Description, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(cad.chatArchivo, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        Row(
+                            modifier = Modifier
+                                .padding(start = 10.dp, end = 8.dp, top = 5.dp, bottom = 5.dp)
+                                .fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = estado.texto,
+                                onValueChange = { if (it.length <= 2000) viewModel.cambiarTexto(it) },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text(cad.chatEscribe, color = gris) },
+                                shape = RoundedCornerShape(24.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                                    focusedBorderColor = verde,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                maxLines = 4
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            FilledIconButton(
+                                onClick = { viewModel.enviarMensaje(chatId) },
+                                enabled = estado.texto.isNotBlank() && !estado.enviando,
+                                colors = IconButtonDefaults.filledIconButtonColors(containerColor = verde)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, cad.chatEnviar, tint = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    mensajeAEliminar?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { mensajeAEliminar = null },
+            icon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
+            title = { Text(cad.chatEliminarTitulo, fontWeight = FontWeight.SemiBold) },
+            text = { Text(cad.chatEliminarMsg) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.eliminarMensaje(chatId, msg.id)
+                        mensajeAEliminar = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+                ) { Text(cad.comEliminar, color = Color.White) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { mensajeAEliminar = null }) { Text(cad.cancelar) }
+            }
+        )
+    }
+
+    imagenAmpliada?.let { url ->
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+        // Resetear zoom al abrir una nueva imagen
+        LaunchedEffect(url) { scale = 1f; offset = Offset.Zero }
+
+        Dialog(
+            onDismissRequest = { imagenAmpliada = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = false   // evita cierre accidental al hacer pan
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f))
+                    .clickable(enabled = scale <= 1.05f) { imagenAmpliada = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = cad.chatImagen,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y
+                        }
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(0.5f, 6f)
+                                offset = if (scale > 1f) offset + pan else Offset.Zero
+                            }
+                        },
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { imagenAmpliada = null },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                ) {
+                    Icon(Icons.Default.Close, cad.cerrar, tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+                // Indicador de zoom al hacer pinch
+                if (scale > 1.1f) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 16.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "${(scale * 10).toInt() / 10f}×",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    archivoAmpliado?.let { msg ->
+        val ext = msg.mediaNombre.substringAfterLast('.', "").uppercase()
+        val esImagen = ext in listOf("JPG", "JPEG", "PNG", "GIF", "WEBP", "BMP")
+        var scaleArch by remember { mutableFloatStateOf(1f) }
+        var offsetArch by remember { mutableStateOf(Offset.Zero) }
+        LaunchedEffect(msg.id) { scaleArch = 1f; offsetArch = Offset.Zero }
+
+        Dialog(
+            onDismissRequest = { archivoAmpliado = null },
+            properties = androidx.compose.ui.window.DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnClickOutside = !esImagen
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.95f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (esImagen) {
+                    // Imagen a pantalla completa con zoom
+                    AsyncImage(
+                        model = msg.mediaUrl,
+                        contentDescription = msg.mediaNombre,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .graphicsLayer {
+                                scaleX = scaleArch
+                                scaleY = scaleArch
+                                translationX = offsetArch.x
+                                translationY = offsetArch.y
+                            }
+                            .pointerInput(Unit) {
+                                detectTransformGestures { _, pan, zoom, _ ->
+                                    scaleArch = (scaleArch * zoom).coerceIn(0.5f, 6f)
+                                    offsetArch = if (scaleArch > 1f) offsetArch + pan else Offset.Zero
+                                }
+                            },
+                        contentScale = ContentScale.Fit
+                    )
+                    if (scaleArch > 1.1f) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 16.dp)
+                                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${(scaleArch * 10).toInt() / 10f}×",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                } else {
+                    // Para otros archivos: tarjeta con info y botón abrir
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(20.dp))
+                            .padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        val extColor = archivoColor(ext, gris)
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .background(extColor.copy(alpha = 0.12f), RoundedCornerShape(18.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(archivoIcono(ext), null, tint = extColor, modifier = Modifier.size(40.dp))
+                        }
+                        Text(msg.mediaNombre, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        if (msg.mediaBytes > 0L) {
+                            Text(formatBytes(msg.mediaBytes), color = gris, fontSize = 13.sp)
+                        }
+                        Button(
+                            onClick = {
+                                archivoAmpliado = null
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = verde),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(cad.chatAbrirArchivo, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        }
+                        OutlinedButton(
+                            onClick = { archivoAmpliado = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(cad.cerrar) }
+                    }
+                }
+                IconButton(
+                    onClick = { archivoAmpliado = null },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
+                ) {
+                    Icon(Icons.Default.Close, cad.cerrar, tint = Color.White, modifier = Modifier.size(28.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BarraPreviewImagen(
+    uri: Uri,
+    caption: String,
+    onCaptionChange: (String) -> Unit,
+    onEnviar: () -> Unit,
+    onCancelar: () -> Unit,
+    verde: Color,
+    gris: Color,
+    enviando: Boolean
+) {
+    val cad = LocalCadenas.current
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box {
+                AsyncImage(
+                    model = uri, contentDescription = null,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .align(Alignment.TopEnd)
+                        .background(Color(0xFF111827).copy(alpha = 0.65f), CircleShape)
+                        .clickable(enabled = !enviando, onClick = onCancelar),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Close, cad.cancelar, tint = Color.White, modifier = Modifier.size(12.dp))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            OutlinedTextField(
+                value = caption,
+                onValueChange = onCaptionChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(cad.chatAnadirDescripcion, color = gris, fontSize = 13.sp) },
+                shape = RoundedCornerShape(20.dp),
+                singleLine = true,
+                enabled = !enviando,
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedBorderColor = verde,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledIconButton(
+                onClick = onEnviar,
+                enabled = !enviando,
+                colors = IconButtonDefaults.filledIconButtonColors(containerColor = verde)
+            ) {
+                if (enviando) {
+                    CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.AutoMirrored.Filled.Send, cad.chatEnviar, tint = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BurbujaMensaje(
+    msg: MensajeChat,
+    esMio: Boolean,
+    gris: Color,
+    verde: Color,
+    sdf: SimpleDateFormat,
+    context: android.content.Context,
+    onVerImagen: (String) -> Unit = {},
+    onVerArchivo: (MensajeChat) -> Unit = {},
+    onEliminar: (() -> Unit)? = null
+) {
+    val cad = LocalCadenas.current
+    val shape = RoundedCornerShape(
+        topStart = if (esMio) 18.dp else 4.dp,
+        topEnd = if (esMio) 4.dp else 18.dp,
+        bottomStart = 18.dp,
+        bottomEnd = 18.dp
+    )
+    val hora = sdf.format(Date(msg.fecha))
+
+    when (msg.tipo) {
+        "imagen" -> {
+            Card(
+                shape = shape,
+                modifier = Modifier
+                    .widthIn(max = 240.dp)
+                    .combinedClickable(
+                        onClick = { if (msg.mediaUrl.isNotEmpty()) onVerImagen(msg.mediaUrl) },
+                        onLongClick = { onEliminar?.invoke() }
+                    )
+            ) {
+                Column {
+                    AsyncImage(
+                        model = msg.mediaUrl,
+                        contentDescription = cad.chatImagen,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp),
+                        contentScale = ContentScale.Crop
+                    )
+                    if (msg.texto.isNotEmpty()) {
+                        Text(
+                            msg.texto, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
+                        )
+                    }
+                    Text(
+                        hora, fontSize = 10.sp, color = gris,
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .padding(end = 8.dp, bottom = 4.dp, top = 2.dp)
+                    )
+                }
+            }
+        }
+
+        "archivo" -> {
+            val ext = msg.mediaNombre.substringAfterLast('.', "").uppercase()
+            val extColor = archivoColor(ext, gris)
+            Card(
+                shape = shape,
+                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .widthIn(max = 270.dp)
+                    .combinedClickable(
+                        onClick = { if (msg.mediaUrl.isNotEmpty()) onVerArchivo(msg) },
+                        onLongClick = { onEliminar?.invoke() }
+                    )
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .background(
+                                if (esMio) Color.White.copy(alpha = 0.18f)
+                                else extColor.copy(alpha = 0.12f),
+                                RoundedCornerShape(12.dp)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            archivoIcono(ext), null,
+                            tint = if (esMio) Color.White else extColor,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            msg.mediaNombre,
+                            color = if (esMio) Color.White else MaterialTheme.colorScheme.onSurface,
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (ext.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (esMio) Color.White.copy(alpha = 0.22f)
+                                            else extColor.copy(alpha = 0.14f),
+                                            RoundedCornerShape(4.dp)
+                                        )
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        ext, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                        color = if (esMio) Color.White else extColor
+                                    )
+                                }
+                            }
+                            if (msg.mediaBytes > 0L) {
+                                Text(
+                                    formatBytes(msg.mediaBytes),
+                                    color = if (esMio) Color.White.copy(alpha = 0.75f) else gris,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    hora, fontSize = 10.sp,
+                    color = if (esMio) Color.White.copy(alpha = 0.7f) else gris,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(end = 12.dp, bottom = 8.dp)
+                )
+            }
+        }
+
+        else -> {
+            Card(
+                shape = shape,
+                colors = CardDefaults.cardColors(containerColor = if (esMio) verde else MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { onEliminar?.invoke() }
+                    )
+            ) {
+                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(
+                        msg.texto,
+                        color = if (esMio) Color.White else MaterialTheme.colorScheme.onSurface,
+                        fontSize = 15.sp
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        hora, fontSize = 10.sp,
+                        color = if (esMio) Color.White.copy(alpha = 0.7f) else gris,
+                        modifier = Modifier.align(Alignment.End)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun archivoColor(ext: String, fallback: Color): Color = when (ext) {
+    "PDF" -> Color(0xFFDC2626)
+    "DOC", "DOCX" -> Color(0xFF2563EB)
+    "XLS", "XLSX" -> Color(0xFF16A34A)
+    "PPT", "PPTX" -> Color(0xFFEA580C)
+    "ZIP", "RAR", "7Z" -> Color(0xFFF59E0B)
+    "MP4", "MOV", "AVI", "MKV", "WEBM" -> Color(0xFF9333EA)
+    "MP3", "WAV", "M4A", "OGG", "FLAC" -> Color(0xFFEC4899)
+    "JPG", "JPEG", "PNG", "WEBP", "GIF" -> Color(0xFF0891B2)
+    else -> fallback
+}
+
+private fun archivoIcono(ext: String): ImageVector = when (ext) {
+    "PDF" -> Icons.Default.PictureAsPdf
+    "DOC", "DOCX", "TXT" -> Icons.AutoMirrored.Filled.Article
+    "XLS", "XLSX" -> Icons.Default.TableChart
+    "PPT", "PPTX" -> Icons.Default.Slideshow
+    "ZIP", "RAR", "7Z" -> Icons.Default.Archive
+    "MP4", "MOV", "AVI", "MKV", "WEBM" -> Icons.Default.Movie
+    "MP3", "WAV", "M4A", "OGG", "FLAC" -> Icons.Default.MusicNote
+    else -> Icons.Default.Description
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes <= 0L -> ""
+    bytes < 1_024L -> "$bytes B"
+    bytes < 1_048_576L -> "${bytes / 1024} KB"
+    else -> "${"%.1f".format(bytes / 1_048_576.0)} MB"
+}

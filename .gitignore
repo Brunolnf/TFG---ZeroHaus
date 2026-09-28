@@ -1,0 +1,58 @@
+# ─── Android / Gradle ─────────────────────────────────────────────────────
+.gradle/
+/build
+/captures
+.externalNativeBuild
+.cxx
+.kotlin/
+*.iml
+local.properties
+
+# ─── Android Studio (configuración de cada máquina) ──────────────────────
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.idea/deviceManager.xml
+.idea/appInsightsSettings.xml
+.idea/deploymentTargetSelector.xml
+.idea/markdown.xml
+
+# ─── Secretos: NUNCA al repositorio ──────────────────────────────────────
+# Keystores de firma (sus contraseñas van en local.properties)
+*.jks
+*.keystore
+# Credenciales de cuentas de servicio de Firebase / Google Cloud
+firebase-*-admin*.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+# Variables de entorno locales de Cloud Functions
+functions/.env*
+
+# ─── Cloud Functions (Python) ────────────────────────────────────────────
+# El entorno virtual lo recrea el CLI / Cloud Build a partir de requirements.txt
+functions/venv/
+**/__pycache__/
+*.pyc
+
+# ─── Firebase CLI y emuladores ───────────────────────────────────────────
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# ─── Tests de reglas (Node) ──────────────────────────────────────────────
+node_modules/
+
+# ─── Otros ───────────────────────────────────────────────────────────────
+.DS_Store
+*.bak
+.claude/
+claude.exe
+# Material gráfico de la ficha de Google Play (local del desarrollador)
+playstore-assets/
+# Previsualizaciones HTML generadas por herramientas
+logo_*.html
+preview_*.html
