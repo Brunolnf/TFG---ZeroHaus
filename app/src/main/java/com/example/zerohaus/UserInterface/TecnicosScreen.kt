@@ -1,7 +1,13 @@
 package com.example.zerohaus.UserInterface
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -27,7 +33,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import kotlin.math.roundToInt
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -70,10 +78,34 @@ fun TecnicosScreen(
     val especialidades = Especialidades.TODAS
 
     // Pedir ubicación y actualizar distancias
+    var permisoDenegado by remember { mutableStateOf(false) }
     val locationPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
+        permisoDenegado = !granted
         if (granted) obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+    }
+    val usarMiUbicacion = {
+        val actividad = ctx.buscarActivity()
+        // Tras dos negativas Android ya no muestra el diálogo y la petición
+        // falla sin más: solo queda llevar al usuario a los ajustes de la app.
+        if (permisoDenegado && actividad != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(actividad, Manifest.permission.ACCESS_FINE_LOCATION)
+        ) {
+            actividad.startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))
+            )
+        } else {
+            locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+    // Al volver de los ajustes con el permiso concedido, se lee el GPS
+    LifecycleResumeEffect(Unit) {
+        if (permisoDenegado && ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            permisoDenegado = false
+            obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
+        }
+        onPauseOrDispose { }
     }
     LaunchedEffect(Unit) {
         viewModel.cargarTecnicos()
@@ -234,7 +266,7 @@ fun TecnicosScreen(
                             Spacer(Modifier.width(4.dp))
                             Text(avisoUbicacion, color = gris, fontSize = 12.sp, modifier = Modifier.weight(1f))
                             TextButton(
-                                onClick = { locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                                onClick = usarMiUbicacion,
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             ) { Text(c.tecUsarUbicacion, fontSize = 12.sp) }
                         }
@@ -513,6 +545,13 @@ fun TecnicosScreen(
             }
         }
     }
+}
+
+/** La Activity que hay detrás de un contexto de Compose (puede venir envuelta). */
+private tailrec fun Context.buscarActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.buscarActivity()
+    else -> null
 }
 
 @androidx.annotation.RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
