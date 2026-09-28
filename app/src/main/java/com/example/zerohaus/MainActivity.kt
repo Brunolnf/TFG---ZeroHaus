@@ -23,6 +23,7 @@ import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.SecurityUtil
 import com.example.zerohaus.Util.getCadenas
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.auth.FirebaseAuth
 
 /**
@@ -90,6 +91,8 @@ class MainActivity : ComponentActivity() {
                 else -> systemDark
             }
             val cadenas = remember(AppEstado.idioma) { getCadenas(AppEstado.idioma) }
+            // Contexto de los informes de Crashlytics (idioma y tipo de usuario)
+            LaunchedEffect(AppEstado.idioma, AppEstado.tipoUsuarioCache) { Diagnostico.actualizarContexto() }
             // Árabe se dibuja de derecha a izquierda; el resto de izquierda a derecha.
             val direccion = if (AppEstado.idioma == "العربية") LayoutDirection.Rtl else LayoutDirection.Ltr
             CompositionLocalProvider(

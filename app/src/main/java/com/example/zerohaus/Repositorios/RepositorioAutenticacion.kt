@@ -5,6 +5,7 @@ import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.codigoIdioma
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -259,6 +260,7 @@ class RepositorioAutenticacion {
                 callback(Result.success(Unit))
             }
             .addOnFailureListener { e ->
+                Diagnostico.errorDeFuncion("eliminar_mi_cuenta", e)
                 callback(Result.failure(Exception(e.message ?: "No se pudo eliminar la cuenta.")))
             }
     }

@@ -54,7 +54,8 @@ android {
             // la inicialización de Firebase. Si en el futuro quieres debug y
             // release instaladas en paralelo, hay que registrar
             // "es.zerohaus.app.debug" como app aparte en Firebase Console.
-            // Evita ensuciar Crashlytics / Performance con builds locales
+            // No sube el mapping de R8 en debug. Los fallos de debug no se
+            // envían a Crashlytics: lo desactiva Util/Diagnostico.kt
             configure<com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension> {
                 mappingFileUploadEnabled = false
             }

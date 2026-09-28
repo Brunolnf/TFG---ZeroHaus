@@ -8,6 +8,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - **Del informe al profesional**: cada mejora que hace un profesional tiene un botón que abre el directorio filtrado por su especialidad.
 - **Catálogo único de especialidades**: el profesional las elige de una lista en su perfil y se muestran traducidas en todas las pantallas; el buscador encuentra también por el nombre traducido.
 - **Distancias sin GPS**: si el usuario no da permiso de ubicación, el directorio mide desde la capital de la provincia de su vivienda, lo indica y marca las distancias como aproximadas; con un toque se puede usar el GPS.
+- **Crashlytics más útil**: cada informe lleva el idioma y el tipo de usuario (sin datos personales) y los fallos del servidor en las Cloud Functions se registran como errores no fatales; las compilaciones de depuración ya no envían fallos.
 - **Aviso sin conexión** en toda la app: explica que se ven los datos guardados y que los cambios se enviarán al reconectar.
 - El PDF del informe muestra el consumo por m² (kWh/m²·año), que es lo que decide la etiqueta.
 - Icono temático de Android 13+ (capa monocroma del icono adaptativo).

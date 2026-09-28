@@ -1,6 +1,7 @@
 package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Util.esFalloDeRed
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
@@ -45,7 +46,7 @@ class RepositorioVerificacion {
                     esperaSeg = (m["esperaSeg"] as? Number)?.toInt() ?: 0
                 )))
             }
-            .addOnFailureListener { callback(Result.failure(VerificacionException(traducir(it)))) }
+            .addOnFailureListener { callback(Result.failure(VerificacionException(traducir("enviar_codigo_verificacion", it)))) }
     }
 
     /** Comprueba el código y, si es correcto, refresca la sesión para que el
@@ -56,7 +57,7 @@ class RepositorioVerificacion {
             .addOnSuccessListener { refrescarSesion { ok ->
                 callback(if (ok) Result.success(Unit) else Result.failure(VerificacionException(ErrorVerificacion.SinConexion)))
             } }
-            .addOnFailureListener { callback(Result.failure(VerificacionException(traducir(it)))) }
+            .addOnFailureListener { callback(Result.failure(VerificacionException(traducir("verificar_codigo_email", it)))) }
     }
 
     /** Recarga el usuario y fuerza un token nuevo. Devuelve si el email ya está verificado. */
@@ -68,8 +69,17 @@ class RepositorioVerificacion {
             .addOnFailureListener { callback(auth.currentUser?.isEmailVerified == true) }
     }
 
-    private fun traducir(e: Exception): ErrorVerificacion {
+    private fun traducir(funcion: String, e: Exception): ErrorVerificacion {
         if (e.esFalloDeRed()) return ErrorVerificacion.SinConexion
+        val error = traducirRespuesta(e)
+        // Código incorrecto, caducado o límites son uso normal; el resto, un fallo
+        if (error == ErrorVerificacion.Servicio || error == ErrorVerificacion.NoEnviado) {
+            Diagnostico.errorDeFuncion(funcion, e)
+        }
+        return error
+    }
+
+    private fun traducirRespuesta(e: Exception): ErrorVerificacion {
         val fe = e as? FirebaseFunctionsException ?: return ErrorVerificacion.Servicio
         val detalles = fe.details as? Map<*, *>
         return when (fe.code) {

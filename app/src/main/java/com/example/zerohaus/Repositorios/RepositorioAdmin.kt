@@ -3,6 +3,7 @@ package com.example.zerohaus.Repositorios
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.getOrTimeout
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -194,6 +195,7 @@ class RepositorioAdmin {
             .call(hashMapOf("uid" to uid))
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
+                Diagnostico.errorDeFuncion("marcar_email_verificado", e)
                 callback(Result.failure(Exception(e.message ?: "No se pudo verificar el email")))
             }
     }
@@ -203,6 +205,7 @@ class RepositorioAdmin {
             .call(hashMapOf("uid" to uid))
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
+                Diagnostico.errorDeFuncion("eliminar_usuario_completo", e)
                 callback(Result.failure(Exception(e.message ?: "No se pudo eliminar el usuario")))
             }
     }
