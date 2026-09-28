@@ -17,6 +17,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.example.zerohaus.Navegacion.AppNavegacion
+import com.example.zerohaus.UserInterface.ConAvisoSinConexion
 import com.example.zerohaus.ui.theme.ZeroHausTheme
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.LocalCadenas
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
                 LocalLayoutDirection provides direccion
             ) {
                 ZeroHausTheme(darkTheme = darkTheme) {
-                    AppNavegacion()
+                    ConAvisoSinConexion { AppNavegacion() }
                 }
             }
         }

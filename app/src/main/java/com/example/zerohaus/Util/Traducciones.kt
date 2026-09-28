@@ -603,7 +603,7 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Demasiados intentos. Pide un código nuevo.",
     "verErrLimite" to "Has pedido demasiados códigos hoy. Inténtalo mañana.",
     "verErrEnvio" to "No se pudo enviar el email. Inténtalo en unos minutos.",
-    "verErrRed" to "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
+    "errorRed" to "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
     "verOtraCuenta" to "Usar otra cuenta",
     "subPlanNoDisponible" to "Este plan no está disponible en Google Play ahora mismo.",
     "subErrorIniciar" to "Google Play no pudo iniciar el pago. Inténtalo de nuevo.",
@@ -631,6 +631,8 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notificaciones sin sonido (sonido desactivado en Ajustes)",
     "canalGeneral" to "General",
     "canalGeneralDesc" to "Notificaciones generales de ZeroHaus",
+    "sinConexion" to "Sin conexión: ves los últimos datos guardados y tus cambios se enviarán al reconectar",
+    "verErrServicio" to "El servicio de verificación no está disponible ahora mismo. Inténtalo más tarde.",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1195,7 +1197,7 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Too many attempts. Request a new code.",
     "verErrLimite" to "You've requested too many codes today. Try again tomorrow.",
     "verErrEnvio" to "Couldn't send the email. Try again in a few minutes.",
-    "verErrRed" to "No connection. Check your internet and try again.",
+    "errorRed" to "No connection. Check your internet and try again.",
     "verOtraCuenta" to "Use another account",
     "subPlanNoDisponible" to "This plan isn't available on Google Play right now.",
     "subErrorIniciar" to "Google Play couldn't start the payment. Please try again.",
@@ -1223,6 +1225,8 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notifications without sound (sound turned off in Settings)",
     "canalGeneral" to "General",
     "canalGeneralDesc" to "General ZeroHaus notifications",
+    "sinConexion" to "Offline: you're seeing the latest saved data and your changes will be sent when you reconnect",
+    "verErrServicio" to "The verification service isn't available right now. Please try again later.",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1787,7 +1791,7 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Massa intents. Demana un codi nou.",
     "verErrLimite" to "Has demanat massa codis avui. Torna-ho a provar demà.",
     "verErrEnvio" to "No s'ha pogut enviar el correu. Torna-ho a provar d'aquí a uns minuts.",
-    "verErrRed" to "Sense connexió. Revisa internet i torna-ho a provar.",
+    "errorRed" to "Sense connexió. Revisa internet i torna-ho a provar.",
     "verOtraCuenta" to "Fer servir un altre compte",
     "subPlanNoDisponible" to "Aquest pla no està disponible a Google Play ara mateix.",
     "subErrorIniciar" to "Google Play no ha pogut iniciar el pagament. Torna-ho a provar.",
@@ -1815,6 +1819,8 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notificacions sense so (so desactivat a Configuració)",
     "canalGeneral" to "General",
     "canalGeneralDesc" to "Notificacions generals de ZeroHaus",
+    "sinConexion" to "Sense connexió: veus les últimes dades desades i els canvis s'enviaran en tornar a connectar",
+    "verErrServicio" to "El servei de verificació no està disponible ara mateix. Torna-ho a provar més tard.",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2379,7 +2385,7 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Saiakera gehiegi. Eskatu kode berri bat.",
     "verErrLimite" to "Gaur kode gehiegi eskatu dituzu. Saiatu bihar.",
     "verErrEnvio" to "Ezin izan da posta bidali. Saiatu minutu batzuk barru.",
-    "verErrRed" to "Konexiorik ez. Egiaztatu internet eta saiatu berriro.",
+    "errorRed" to "Konexiorik ez. Egiaztatu internet eta saiatu berriro.",
     "verOtraCuenta" to "Beste kontu bat erabili",
     "subPlanNoDisponible" to "Plan hau ez dago eskuragarri Google Play-n une honetan.",
     "subErrorIniciar" to "Google Play-k ezin izan du ordainketa hasi. Saiatu berriro.",
@@ -2407,6 +2413,8 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Soinurik gabeko jakinarazpenak (soinua desaktibatuta Ezarpenetan)",
     "canalGeneral" to "Orokorra",
     "canalGeneralDesc" to "ZeroHaus-en jakinarazpen orokorrak",
+    "sinConexion" to "Konexiorik gabe: gordetako azken datuak ikusten ari zara eta aldaketak berriro konektatzean bidaliko dira",
+    "verErrServicio" to "Egiaztatze-zerbitzua ez dago erabilgarri une honetan. Saiatu berriro geroago.",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2971,7 +2979,7 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Demasiados intentos. Pide un código novo.",
     "verErrLimite" to "Pediches demasiados códigos hoxe. Téntao mañá.",
     "verErrEnvio" to "Non se puido enviar o correo. Téntao nuns minutos.",
-    "verErrRed" to "Sen conexión. Revisa internet e téntao de novo.",
+    "errorRed" to "Sen conexión. Revisa internet e téntao de novo.",
     "verOtraCuenta" to "Usar outra conta",
     "subPlanNoDisponible" to "Este plan non está dispoñible en Google Play agora mesmo.",
     "subErrorIniciar" to "Google Play non puido iniciar o pagamento. Téntao de novo.",
@@ -2999,6 +3007,8 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notificacións sen son (son desactivado en Axustes)",
     "canalGeneral" to "Xeral",
     "canalGeneralDesc" to "Notificacións xerais de ZeroHaus",
+    "sinConexion" to "Sen conexión: ves os últimos datos gardados e os cambios enviaranse ao reconectar",
+    "verErrServicio" to "O servizo de verificación non está dispoñible agora mesmo. Téntao máis tarde.",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3563,7 +3573,7 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Demasiadas tentativas. Peça um novo código.",
     "verErrLimite" to "Pediu demasiados códigos hoje. Tente amanhã.",
     "verErrEnvio" to "Não foi possível enviar o email. Tente dentro de minutos.",
-    "verErrRed" to "Sem ligação. Verifique a internet e tente de novo.",
+    "errorRed" to "Sem ligação. Verifique a internet e tente de novo.",
     "verOtraCuenta" to "Usar outra conta",
     "subPlanNoDisponible" to "Este plano não está disponível no Google Play neste momento.",
     "subErrorIniciar" to "O Google Play não conseguiu iniciar o pagamento. Tente novamente.",
@@ -3591,6 +3601,8 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notificações sem som (som desativado nas Definições)",
     "canalGeneral" to "Geral",
     "canalGeneralDesc" to "Notificações gerais do ZeroHaus",
+    "sinConexion" to "Sem ligação: está a ver os últimos dados guardados e as alterações serão enviadas ao voltar a ligar",
+    "verErrServicio" to "O serviço de verificação não está disponível neste momento. Tente mais tarde.",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4155,7 +4167,7 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Trop de tentatives. Demandez un nouveau code.",
     "verErrLimite" to "Vous avez demandé trop de codes aujourd'hui. Réessayez demain.",
     "verErrEnvio" to "Impossible d'envoyer l'e-mail. Réessayez dans quelques minutes.",
-    "verErrRed" to "Pas de connexion. Vérifiez internet et réessayez.",
+    "errorRed" to "Pas de connexion. Vérifiez internet et réessayez.",
     "verOtraCuenta" to "Utiliser un autre compte",
     "subPlanNoDisponible" to "Cette offre n'est pas disponible sur Google Play pour le moment.",
     "subErrorIniciar" to "Google Play n'a pas pu lancer le paiement. Réessayez.",
@@ -4183,6 +4195,8 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notifications sans son (son désactivé dans les Paramètres)",
     "canalGeneral" to "Général",
     "canalGeneralDesc" to "Notifications générales de ZeroHaus",
+    "sinConexion" to "Hors ligne : vous voyez les dernières données enregistrées et vos modifications seront envoyées à la reconnexion",
+    "verErrServicio" to "Le service de vérification n'est pas disponible pour le moment. Réessayez plus tard.",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4747,7 +4761,7 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Zu viele Versuche. Fordere einen neuen Code an.",
     "verErrLimite" to "Du hast heute zu viele Codes angefordert. Versuch es morgen wieder.",
     "verErrEnvio" to "Die E-Mail konnte nicht gesendet werden. Versuch es in ein paar Minuten.",
-    "verErrRed" to "Keine Verbindung. Prüfe dein Internet und versuch es erneut.",
+    "errorRed" to "Keine Verbindung. Prüfe dein Internet und versuch es erneut.",
     "verOtraCuenta" to "Anderes Konto verwenden",
     "subPlanNoDisponible" to "Dieser Plan ist bei Google Play gerade nicht verfügbar.",
     "subErrorIniciar" to "Google Play konnte die Zahlung nicht starten. Versuch es erneut.",
@@ -4775,6 +4789,8 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Benachrichtigungen ohne Ton (Ton in den Einstellungen deaktiviert)",
     "canalGeneral" to "Allgemein",
     "canalGeneralDesc" to "Allgemeine Benachrichtigungen von ZeroHaus",
+    "sinConexion" to "Offline: Du siehst die zuletzt gespeicherten Daten, deine Änderungen werden nach der Verbindung gesendet",
+    "verErrServicio" to "Der Bestätigungsdienst ist gerade nicht verfügbar. Bitte versuche es später erneut.",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5339,7 +5355,7 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Troppi tentativi. Richiedi un nuovo codice.",
     "verErrLimite" to "Hai richiesto troppi codici oggi. Riprova domani.",
     "verErrEnvio" to "Impossibile inviare l'email. Riprova tra qualche minuto.",
-    "verErrRed" to "Nessuna connessione. Controlla internet e riprova.",
+    "errorRed" to "Nessuna connessione. Controlla internet e riprova.",
     "verOtraCuenta" to "Usa un altro account",
     "subPlanNoDisponible" to "Questo piano non è disponibile su Google Play al momento.",
     "subErrorIniciar" to "Google Play non è riuscito ad avviare il pagamento. Riprova.",
@@ -5367,6 +5383,8 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notifiche senza suono (suono disattivato nelle Impostazioni)",
     "canalGeneral" to "Generali",
     "canalGeneralDesc" to "Notifiche generali di ZeroHaus",
+    "sinConexion" to "Offline: vedi gli ultimi dati salvati e le modifiche verranno inviate alla riconnessione",
+    "verErrServicio" to "Il servizio di verifica non è disponibile al momento. Riprova più tardi.",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5931,7 +5949,7 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "محاولات كثيرة. اطلب رمزاً جديداً.",
     "verErrLimite" to "طلبت رموزاً كثيرة اليوم. حاول غداً.",
     "verErrEnvio" to "تعذّر إرسال البريد. حاول بعد دقائق.",
-    "verErrRed" to "لا يوجد اتصال. تحقق من الإنترنت وحاول مجدداً.",
+    "errorRed" to "لا يوجد اتصال. تحقق من الإنترنت وحاول مجدداً.",
     "verOtraCuenta" to "استخدام حساب آخر",
     "subPlanNoDisponible" to "هذه الخطة غير متاحة على Google Play حالياً.",
     "subErrorIniciar" to "تعذّر على Google Play بدء الدفع. حاول مجدداً.",
@@ -5959,6 +5977,8 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "إشعارات بدون صوت (الصوت متوقف في الإعدادات)",
     "canalGeneral" to "عام",
     "canalGeneralDesc" to "إشعارات ZeroHaus العامة",
+    "sinConexion" to "غير متصل: تعرض آخر البيانات المحفوظة وسيتم إرسال تغييراتك عند إعادة الاتصال",
+    "verErrServicio" to "خدمة التحقق غير متاحة حاليًا. حاول مرة أخرى لاحقًا.",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6523,7 +6543,7 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "尝试次数过多，请重新获取验证码。",
     "verErrLimite" to "今天请求的验证码过多，请明天再试。",
     "verErrEnvio" to "邮件发送失败，请几分钟后重试。",
-    "verErrRed" to "无网络连接，请检查网络后重试。",
+    "errorRed" to "无网络连接，请检查网络后重试。",
     "verOtraCuenta" to "使用其他账户",
     "subPlanNoDisponible" to "该套餐目前在 Google Play 上不可用。",
     "subErrorIniciar" to "Google Play 无法发起支付，请重试。",
@@ -6551,6 +6571,8 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "无声通知（已在设置中关闭声音）",
     "canalGeneral" to "常规",
     "canalGeneralDesc" to "ZeroHaus 常规通知",
+    "sinConexion" to "离线：显示的是最近保存的数据，恢复连接后将发送您的更改",
+    "verErrServicio" to "验证服务暂时不可用，请稍后再试。",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7115,7 +7137,7 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Prea multe încercări. Cere un cod nou.",
     "verErrLimite" to "Ai cerut prea multe coduri azi. Încearcă mâine.",
     "verErrEnvio" to "Emailul nu a putut fi trimis. Încearcă peste câteva minute.",
-    "verErrRed" to "Fără conexiune. Verifică internetul și încearcă din nou.",
+    "errorRed" to "Fără conexiune. Verifică internetul și încearcă din nou.",
     "verOtraCuenta" to "Folosește alt cont",
     "subPlanNoDisponible" to "Acest plan nu este disponibil acum în Google Play.",
     "subErrorIniciar" to "Google Play nu a putut iniția plata. Încearcă din nou.",
@@ -7143,6 +7165,8 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Notificări fără sunet (sunet dezactivat în Setări)",
     "canalGeneral" to "Generale",
     "canalGeneralDesc" to "Notificări generale ZeroHaus",
+    "sinConexion" to "Fără conexiune: vezi ultimele date salvate, iar modificările vor fi trimise la reconectare",
+    "verErrServicio" to "Serviciul de verificare nu este disponibil momentan. Încearcă mai târziu.",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7707,7 +7731,7 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Te veel pogingen. Vraag een nieuwe code aan.",
     "verErrLimite" to "Je hebt vandaag te veel codes aangevraagd. Probeer het morgen.",
     "verErrEnvio" to "Kon de e-mail niet versturen. Probeer het over een paar minuten.",
-    "verErrRed" to "Geen verbinding. Controleer je internet en probeer opnieuw.",
+    "errorRed" to "Geen verbinding. Controleer je internet en probeer opnieuw.",
     "verOtraCuenta" to "Ander account gebruiken",
     "subPlanNoDisponible" to "Dit abonnement is nu niet beschikbaar in Google Play.",
     "subErrorIniciar" to "Google Play kon de betaling niet starten. Probeer het opnieuw.",
@@ -7735,6 +7759,8 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Meldingen zonder geluid (geluid uitgeschakeld in Instellingen)",
     "canalGeneral" to "Algemeen",
     "canalGeneralDesc" to "Algemene meldingen van ZeroHaus",
+    "sinConexion" to "Offline: je ziet de laatst opgeslagen gegevens en je wijzigingen worden verzonden zodra je weer verbinding hebt",
+    "verErrServicio" to "De verificatieservice is nu niet beschikbaar. Probeer het later opnieuw.",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8299,7 +8325,7 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "verErrIntentos" to "Zbyt wiele prób. Poproś o nowy kod.",
     "verErrLimite" to "Poprosiłeś dziś o zbyt wiele kodów. Spróbuj jutro.",
     "verErrEnvio" to "Nie udało się wysłać e-maila. Spróbuj za kilka minut.",
-    "verErrRed" to "Brak połączenia. Sprawdź internet i spróbuj ponownie.",
+    "errorRed" to "Brak połączenia. Sprawdź internet i spróbuj ponownie.",
     "verOtraCuenta" to "Użyj innego konta",
     "subPlanNoDisponible" to "Ten plan nie jest teraz dostępny w Google Play.",
     "subErrorIniciar" to "Google Play nie mógł rozpocząć płatności. Spróbuj ponownie.",
@@ -8327,4 +8353,6 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "canalSilencioDesc" to "Powiadomienia bez dźwięku (dźwięk wyłączony w Ustawieniach)",
     "canalGeneral" to "Ogólne",
     "canalGeneralDesc" to "Ogólne powiadomienia ZeroHaus",
+    "sinConexion" to "Brak połączenia: widzisz ostatnio zapisane dane, a zmiany zostaną wysłane po ponownym połączeniu",
+    "verErrServicio" to "Usługa weryfikacji jest teraz niedostępna. Spróbuj ponownie później.",
 ), respaldo = espanol) }

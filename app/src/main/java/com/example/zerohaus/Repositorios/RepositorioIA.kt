@@ -1,5 +1,6 @@
 package com.example.zerohaus.Repositorios
 
+import com.example.zerohaus.Util.esFalloDeRed
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 
@@ -20,7 +21,7 @@ data class SugerenciasIA(
 )
 
 /** Motivo de fallo, para mostrar el mensaje traducido en la UI. */
-enum class ErrorIA { LIMITE_DIARIO, NO_DISPONIBLE }
+enum class ErrorIA { LIMITE_DIARIO, SIN_CONEXION, NO_DISPONIBLE }
 
 class ErrorIAException(val tipo: ErrorIA) : Exception(tipo.name)
 
@@ -51,9 +52,12 @@ class RepositorioIA {
                 callback(Result.success(parsear(m)))
             }
             .addOnFailureListener { e ->
-                val tipo = if ((e as? FirebaseFunctionsException)?.code ==
-                    FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED) ErrorIA.LIMITE_DIARIO
-                else ErrorIA.NO_DISPONIBLE
+                val tipo = when {
+                    e.esFalloDeRed() -> ErrorIA.SIN_CONEXION
+                    (e as? FirebaseFunctionsException)?.code ==
+                        FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED -> ErrorIA.LIMITE_DIARIO
+                    else -> ErrorIA.NO_DISPONIBLE
+                }
                 callback(Result.failure(ErrorIAException(tipo)))
             }
     }

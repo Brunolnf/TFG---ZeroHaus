@@ -94,7 +94,8 @@ fun VerificarEmailScreen(
                 ErrorVerificacion.DemasiadosIntentos -> c.verErrIntentos
                 ErrorVerificacion.LimiteEnvios -> c.verErrLimite
                 ErrorVerificacion.NoEnviado -> c.verErrEnvio
-                ErrorVerificacion.SinConexion -> c.verErrRed
+                ErrorVerificacion.SinConexion -> c.errorRed
+                ErrorVerificacion.Servicio -> c.verErrServicio
                 null -> null
             }
             when {

@@ -452,7 +452,11 @@ private fun SugerenciasIACard(viewModel: InformeViewModel, verde: Color, gris: C
 
             viewModel.errorIA?.let { e ->
                 Text(
-                    if (e == ErrorIA.LIMITE_DIARIO) c.iaErrorLimite else c.iaErrorNoDisponible,
+                    when (e) {
+                        ErrorIA.LIMITE_DIARIO -> c.iaErrorLimite
+                        ErrorIA.SIN_CONEXION -> c.errorRed
+                        ErrorIA.NO_DISPONIBLE -> c.iaErrorNoDisponible
+                    },
                     color = MaterialTheme.colorScheme.error, fontSize = 13.sp
                 )
             }

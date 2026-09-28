@@ -1,5 +1,6 @@
 package com.example.zerohaus.Repositorios
 
+import com.example.zerohaus.Util.esFalloDeRed
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
@@ -12,6 +13,8 @@ sealed class ErrorVerificacion {
     object LimiteEnvios : ErrorVerificacion()
     object NoEnviado : ErrorVerificacion()
     object SinConexion : ErrorVerificacion()
+    // El servidor respondió con un error inesperado (o la función no existe)
+    object Servicio : ErrorVerificacion()
 }
 
 class VerificacionException(val error: ErrorVerificacion) : Exception(error.toString())
@@ -66,7 +69,8 @@ class RepositorioVerificacion {
     }
 
     private fun traducir(e: Exception): ErrorVerificacion {
-        val fe = e as? FirebaseFunctionsException ?: return ErrorVerificacion.SinConexion
+        if (e.esFalloDeRed()) return ErrorVerificacion.SinConexion
+        val fe = e as? FirebaseFunctionsException ?: return ErrorVerificacion.Servicio
         val detalles = fe.details as? Map<*, *>
         return when (fe.code) {
             FirebaseFunctionsException.Code.INVALID_ARGUMENT -> {
@@ -75,12 +79,12 @@ class RepositorioVerificacion {
             }
             FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
                 if (detalles?.get("motivo") == "caducado") ErrorVerificacion.Caducado
-                else ErrorVerificacion.SinConexion
+                else ErrorVerificacion.Servicio
             FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
                 if (detalles?.get("motivo") == "envios") ErrorVerificacion.LimiteEnvios
                 else ErrorVerificacion.DemasiadosIntentos
             FirebaseFunctionsException.Code.UNAVAILABLE -> ErrorVerificacion.NoEnviado
-            else -> ErrorVerificacion.SinConexion
+            else -> ErrorVerificacion.Servicio
         }
     }
 }

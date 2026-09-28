@@ -649,7 +649,7 @@ class AppCadenas internal constructor(
     val verErrIntentos: String get() = t("verErrIntentos")
     val verErrLimite: String get() = t("verErrLimite")
     val verErrEnvio: String get() = t("verErrEnvio")
-    val verErrRed: String get() = t("verErrRed")
+    val errorRed: String get() = t("errorRed")
     val verOtraCuenta: String get() = t("verOtraCuenta")
     val subPlanNoDisponible: String get() = t("subPlanNoDisponible")
     val subErrorIniciar: String get() = t("subErrorIniciar")
@@ -677,6 +677,8 @@ class AppCadenas internal constructor(
     val canalSilencioDesc: String get() = t("canalSilencioDesc")
     val canalGeneral: String get() = t("canalGeneral")
     val canalGeneralDesc: String get() = t("canalGeneralDesc")
+    val sinConexion: String get() = t("sinConexion")
+    val verErrServicio: String get() = t("verErrServicio")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
