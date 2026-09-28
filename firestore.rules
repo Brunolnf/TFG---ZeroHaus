@@ -118,6 +118,10 @@ service cloud.firestore {
                     && request.resource.data.rating == 0
                     && request.resource.data.opiniones == 0
                     && request.resource.data.proyectosCompletados == 0
+                    // El plan solo lo concede la Cloud Function de suscripciones:
+                    // sin esto se podía crear el perfil ya con un plan "eterno"
+                    && request.resource.data.get('planActivo', '') == ''
+                    && request.resource.data.get('suscripcionHasta', 0) == 0
                     && request.resource.data.nombre is string
                     && request.resource.data.nombre.size() <= 100
                     && (!('descripcion' in request.resource.data.keys())
@@ -188,7 +192,12 @@ service cloud.firestore {
     }
 
     match /notificaciones/{docId} {
-      allow read, update, delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+      allow read, delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
+      // Solo marcarla como leída: cambiar el uid la colaría en la lista de otro
+      allow update: if (logueado() && resource.data.uid == uid()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
+                    && request.resource.data.leida is bool)
+                    || esAdmin();
       allow create: if logueado()
                     && tamanoDocMaximo()
                     && request.resource.data.uid == uid()
@@ -234,6 +243,8 @@ service cloud.firestore {
                         && resource.data.uid == uid()
                         && noMuta('uid')
                         && noMuta('tecnicoId')
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['puntuacion', 'comentario', 'fecha', 'nombreUsuario', 'chatId', 'id'])
                         && request.resource.data.puntuacion is number
                         && request.resource.data.puntuacion >= 1
                         && request.resource.data.puntuacion <= 5
@@ -269,14 +280,18 @@ service cloud.firestore {
                   && request.resource.data.texto.size() <= 2000))
           && request.resource.data.keys().size() <= 15)
           || esAdmin();
-        allow update, delete: if (logueado() && resource.data.emisorUid == uid()) || esAdmin();
+        // Sin edición: permitía cambiar emisorUid y atribuir el mensaje al otro
+        // participante. El emisor puede borrarlo.
+        allow update: if esAdmin();
+        allow delete: if (logueado() && resource.data.emisorUid == uid()) || esAdmin();
       }
     }
 
     // Ajustes propios (idioma, tema, token de notificaciones) también antes de
     // verificar: el token FCM se registra en cuanto hay sesión.
     match /ajustes/{userId} {
-      allow read, write: if esMioSinVerificar(userId) || esAdmin();
+      allow read, delete: if esMioSinVerificar(userId) || esAdmin();
+      allow create, update: if (esMioSinVerificar(userId) && tamanoDocMaximo()) || esAdmin();
     }
 
     // /verificaciones_email (huellas de los códigos) y /limites_ia: solo las

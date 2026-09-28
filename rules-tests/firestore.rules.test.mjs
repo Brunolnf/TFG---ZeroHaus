@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 let env;
 
@@ -220,5 +220,67 @@ describe("email sin verificar", () => {
       setDoc(doc(ctx.firestore(), "verificaciones_email/cliente"), { huella: "x" }));
     await assertFails(getDoc(doc(sinVerificar("cliente"), "verificaciones_email/cliente")));
     await assertFails(getDoc(doc(verificado("cliente"), "verificaciones_email/cliente")));
+  });
+});
+
+// Ataques encontrados con la auditoría de reglas (firebase-security-rules-auditor)
+describe("auditoría: suplantación y escalada", () => {
+  const perfilNuevo = (extra = {}) => ({
+    uid: "nuevo", id: "nuevo", nombre: "Nuevo", rating: 0, opiniones: 0, proyectosCompletados: 0,
+    tipoProfesional: "TECNICO", emailContacto: "nuevo@x.es", planActivo: "", suscripcionHasta: 0,
+    ...extra,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "usuarios/nuevo"), { uid: "nuevo", tipoUsuario: "Técnico" });
+      await setDoc(doc(db, "chats/con_mensajes/mensajes/m1"), { emisorUid: "cliente", texto: "hola" });
+      await setDoc(doc(db, "notificaciones/n1"), { uid: "cliente", titulo: "t", detalle: "d", leida: false });
+      await setDoc(doc(db, "resenas/cliente_pro"), resena({ chatId: "con_mensajes" }));
+    });
+  });
+
+  it("un profesional nuevo crea su perfil sin plan, como hace la app", async () => {
+    await assertSucceeds(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilNuevo()));
+  });
+
+  it("un profesional nuevo no puede crear su perfil con un plan de pago", async () => {
+    const db = sinVerificar("nuevo");
+    await assertFails(setDoc(doc(db, "tecnicos/nuevo"),
+      perfilNuevo({ planActivo: "DESTACADO", suscripcionHasta: 9e12 })));
+    await assertFails(setDoc(doc(db, "tecnicos/nuevo"), perfilNuevo({ suscripcionHasta: 9e12 })));
+  });
+
+  it("quien envía un mensaje no puede atribuírselo al otro participante", async () => {
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "chats/con_mensajes/mensajes/m1"), { emisorUid: "pro" }));
+    await assertFails(updateDoc(doc(db, "chats/con_mensajes/mensajes/m1"), { texto: "x".repeat(5000) }));
+  });
+
+  it("quien envía un mensaje puede borrarlo", async () => {
+    await assertSucceeds(deleteDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/m1")));
+  });
+
+  it("no se puede pasar una notificación propia a otro usuario", async () => {
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "notificaciones/n1"), { uid: "pro" }));
+    await assertFails(updateDoc(doc(db, "notificaciones/n1"), { titulo: "x".repeat(5000) }));
+  });
+
+  it("se puede marcar una notificación como leída", async () => {
+    await assertSucceeds(updateDoc(doc(verificado("cliente"), "notificaciones/n1"), { leida: true }));
+  });
+
+  it("una reseña se puede editar pero no añadirle campos arbitrarios", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(updateDoc(doc(db, "resenas/cliente_pro"), { puntuacion: 4, comentario: "Bien" }));
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { verificada: true }));
+  });
+
+  it("los ajustes tienen un tamaño máximo", async () => {
+    const enorme = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`k${i}`, i]));
+    await assertFails(setDoc(doc(verificado("cliente"), "ajustes/cliente"), enorme));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "ajustes/cliente"), { idioma: "Español" }));
   });
 });
