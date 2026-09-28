@@ -2,6 +2,7 @@ package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.Suscripcion
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -63,6 +64,7 @@ class RepositorioMonetizacion {
             .call(datos)
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
+                Diagnostico.errorDeFuncion("activar_suscripcion", e)
                 val msg = if (e is FirebaseFunctionsException) e.message
                 else "No se pudo activar la suscripción. Inténtalo de nuevo."
                 callback(Result.failure(Exception(msg ?: "Error activando la suscripción")))

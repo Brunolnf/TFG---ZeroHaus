@@ -6,6 +6,7 @@ import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.example.zerohaus.Util.SecurityUtil
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
@@ -35,6 +36,7 @@ class ZeroHausApp : Application() {
         }
 
         AppEstado.inicializar(AppPreferencias(this))
+        Diagnostico.inicializar()
 
         // 2. Canales de notificación.
         NotificacionesLocales.crearCanales(this)

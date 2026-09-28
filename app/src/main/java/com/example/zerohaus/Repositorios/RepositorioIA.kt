@@ -1,6 +1,7 @@
 package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Util.esFalloDeRed
+import com.example.zerohaus.Util.Diagnostico
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 
@@ -58,6 +59,8 @@ class RepositorioIA {
                         FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED -> ErrorIA.LIMITE_DIARIO
                     else -> ErrorIA.NO_DISPONIBLE
                 }
+                // El límite diario es uso normal; lo demás, un fallo a investigar
+                if (tipo == ErrorIA.NO_DISPONIBLE) Diagnostico.errorDeFuncion("generar_sugerencias_ia", e)
                 callback(Result.failure(ErrorIAException(tipo)))
             }
     }
