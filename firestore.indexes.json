@@ -23,23 +23,16 @@
         { "fieldPath": "tecnicoId", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "solicitudes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "uidCliente", "order": "ASCENDING" },
-        { "fieldPath": "fechaCreacion", "order": "DESCENDING" }
-      ]
-    },
-    {
-      "collectionGroup": "solicitudes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "tecnicoUid", "order": "ASCENDING" },
-        { "fieldPath": "fechaCreacion", "order": "DESCENDING" }
-      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "eventos",
+      "fieldPath": "dia",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }
