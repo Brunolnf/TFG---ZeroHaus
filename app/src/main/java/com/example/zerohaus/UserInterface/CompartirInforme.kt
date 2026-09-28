@@ -84,7 +84,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.textAlign = Paint.Align.RIGHT
     paint.textSize = 10f
     canvas.drawText(fechaStr, (pageWidth - 24).toFloat(), 34f, paint)
-    canvas.drawText(informe.nombreVivienda, (pageWidth - 24).toFloat(), 54f, paint)
+    canvas.drawText(recortar(informe.nombreVivienda, paint, pageWidth / 2f), (pageWidth - 24).toFloat(), 54f, paint)
     paint.textAlign = Paint.Align.LEFT
     y = 106f
 
@@ -105,7 +105,11 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.textSize = 11f
     paint.isFakeBoldText = false
     paint.color = gris
-    canvas.drawText(c.infCalificacion, 90f, y + 40f, paint)
+    // La etiqueta se decide por kWh/m²·año: se muestra el dato que la justifica
+    val subtitulo = if (informe.consumoPorM2 > 0)
+        "${c.infCalificacion} · ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}"
+    else c.infCalificacion
+    canvas.drawText(recortar(subtitulo, paint, pageWidth - 114f), 90f, y + 40f, paint)
     y += 72f
 
     paint.color = grisClaro
@@ -164,7 +168,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
             paint.color = negro
             paint.textSize = 11f
             paint.isFakeBoldText = true
-            canvas.drawText(TextosEnergia.recomendacion(rec.titulo, c), 80f, y + 20f, paint)
+            canvas.drawText(recortar(TextosEnergia.recomendacion(rec.titulo, c), paint, pageWidth - 114f), 80f, y + 20f, paint)
             paint.color = gris
             paint.textSize = 9f
             paint.isFakeBoldText = false
@@ -203,6 +207,13 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     return file
 }
 
+/** Corta [texto] con «…» para que no pase de [anchoMax] puntos con [paint]. */
+private fun recortar(texto: String, paint: Paint, anchoMax: Float): String {
+    if (paint.measureText(texto) <= anchoMax) return texto
+    val caben = paint.breakText(texto, true, anchoMax - paint.measureText("…"), null)
+    return texto.take(caben).trimEnd() + "…"
+}
+
 private fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
     "A" -> Color.parseColor("#15803D")
     "B" -> Color.parseColor("#16A34A")
@@ -224,6 +235,7 @@ private fun buildTextoInforme(informe: InformeEnergetico): String {
         appendLine("${c.infCalificacion.uppercase()}: ${informe.etiqueta} — ${TextosEnergia.estado(informe.etiqueta, c)}"); appendLine()
         appendLine("${c.infIndicadores.uppercase()}:")
         appendLine("  ${c.histConsumo}: ${Formato.formatEnergiaAnual(informe.consumoEstimado)}")
+        if (informe.consumoPorM2 > 0) appendLine("  ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}")
         appendLine("  ${c.histEmisiones}: ${Formato.formatEmisionesAnual(informe.emisiones)}")
         appendLine("  ${c.histCoste}: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
         if (informe.recomendaciones.isNotEmpty()) {
