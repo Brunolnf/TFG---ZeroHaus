@@ -2,6 +2,14 @@
 
 Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y el proyecto usa [versionado semántico](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Corregido
+- El directorio mostraba distancias calculadas desde Madrid cuando no había ubicación real del usuario.
+
+### Añadido
+- Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
+
 ## [2.2.0] — 2026-09-28 · versionCode 5
 
 Incluye también las versiones internas 2.0 y 2.1, que no llegaron a publicarse por separado.
@@ -52,5 +60,6 @@ Primera versión en pruebas internas de Google Play.
 - Panel de administración, Cloud Functions y App Check.
 - Modo oscuro, 9 idiomas y unidades configurables.
 
+[Sin publicar]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v2.2.0...HEAD
 [2.2.0]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v1.0.0...v2.2.0
 [1.0.0]: https://github.com/Brunolnf/TFG---ZeroHaus/releases/tag/v1.0.0
