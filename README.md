@@ -165,7 +165,7 @@ ZeroHaus/
 ├── rules-tests/                  Tests de las reglas de Firestore (emulador)
 ├── herramientas/i18n.py          Mantenimiento de los textos en los 14 idiomas
 ├── playstore-assets/             Ficha de Google Play: gráficos, logos y textos
-├── .github/workflows/ci.yml      Integración continua
+├── .github/                      CI (workflows/ci.yml) y Dependabot
 ├── public/                       Web (Firebase Hosting): privacidad, términos, datos
 ├── firestore.rules               Reglas de Firestore
 ├── firestore.indexes.json        Índices de Firestore

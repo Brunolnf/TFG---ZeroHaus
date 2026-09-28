@@ -1,0 +1,45 @@
+# Actualizaciones automáticas de dependencias. Cada PR pasa por la CI
+# (ci.yml) antes de fusionarse. Las versiones menores y parches se agrupan
+# en un solo PR por ecosistema para no llenar el repositorio de ruido.
+version: 2
+updates:
+  # App Android: plugins (gradle/libs.versions.toml) y librerías (app/build.gradle.kts)
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  # Cloud Functions (Python)
+  - package-ecosystem: pip
+    directory: /functions
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  # Tests de reglas de Firestore
+  - package-ecosystem: npm
+    directory: /rules-tests
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build(deps)
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  # Acciones de la CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci(deps)

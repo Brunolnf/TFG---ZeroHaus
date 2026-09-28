@@ -11,6 +11,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Icono temático de Android 13+ (capa monocroma del icono adaptativo).
 - El administrador puede marcar un email como verificado (para la cuenta de prueba de los revisores de Google Play).
 - Integración continua con GitHub Actions: tests de la app, compilación, tests de reglas y validación del backend y los textos.
+- Dependabot: actualizaciones mensuales de Gradle, Python, npm y GitHub Actions, agrupando las menores.
 - `herramientas/i18n.py` para añadir, cambiar, limpiar y comprobar textos en los 14 idiomas.
 - Tests de traducciones (14 idiomas completos, sin textos vacíos, todas las opciones traducidas), especialidades y estadísticas y ubicaciones: 42 tests en total.
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
