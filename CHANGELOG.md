@@ -15,6 +15,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Integración continua con GitHub Actions: tests de la app, compilación, tests de reglas y validación del backend y los textos.
 - Dependabot: como mucho un PR mensual por ecosistema (Gradle, Python, npm y GitHub Actions) con todas sus actualizaciones.
 - `herramientas/i18n.py` para añadir, cambiar, limpiar y comprobar textos en los 14 idiomas.
+- Tests de reglas: 36 con el emulador (8 nuevos de la auditoría).
 - Tests de traducciones (14 idiomas completos, sin textos vacíos, todas las opciones traducidas), especialidades, estadísticas, ubicaciones y formato de números: 46 tests en total.
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
@@ -32,6 +33,13 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Los nombres largos de vivienda o de mejora se salían de la página en el PDF.
 - La verificación del email decía «Sin conexión» ante cualquier error del servidor (por ejemplo, con la función aún sin desplegar); ahora distingue la falta de red de un servicio no disponible, igual que los consejos de IA.
 - `gradlew` no tenía permiso de ejecución en el repositorio (fallaba en Linux y macOS).
+
+### Seguridad
+- Auditoría de las reglas de Firestore con la skill oficial de Firebase (*security rules auditor*), con un test de emulador por cada ataque:
+  - un profesional podía crear su perfil ya con un plan de pago que no caducaba nunca;
+  - quien enviaba un mensaje podía editarlo para atribuírselo al otro participante;
+  - el dueño de una notificación podía cambiarle el destinatario y colarla en la lista de otro usuario;
+  - una reseña editada podía recibir campos arbitrarios y los ajustes no tenían tamaño máximo.
 
 ## [2.2.0] — 2026-09-28 · versionCode 5
 
