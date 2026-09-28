@@ -130,6 +130,7 @@ fun AdminScreen(
                                 esAdminProtegido = miUid != null && u.uid == miUid,
                                 onEditar = { usuarioEditar = u },
                                 onBloquear = { viewModel.toggleBloqueo(u) },
+                                onVerificarEmail = { viewModel.marcarEmailVerificado(u) },
                                 onEliminar = { usuarioConfirmarEliminar = u }
                             )
                         }
@@ -202,6 +203,7 @@ private fun UsuarioCard(
     esAdminProtegido: Boolean,
     onEditar: () -> Unit,
     onBloquear: () -> Unit,
+    onVerificarEmail: () -> Unit,
     onEliminar: () -> Unit
 ) {
     var menuExpandido by remember { mutableStateOf(false) }
@@ -287,6 +289,13 @@ private fun UsuarioCard(
                             )
                         },
                         onClick = { menuExpandido = false; onBloquear() }
+                    )
+                    // Para cuentas que no pueden recibir el código por email
+                    // (p. ej. la cuenta de prueba de los revisores de Google Play)
+                    DropdownMenuItem(
+                        text = { Text("Marcar email como verificado") },
+                        leadingIcon = { Icon(Icons.Default.MarkEmailRead, null, tint = VERDE) },
+                        onClick = { menuExpandido = false; onVerificarEmail() }
                     )
                     DropdownMenuItem(
                         text = { Text("Eliminar", color = ROJO) },

@@ -73,6 +73,14 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    fun marcarEmailVerificado(usuario: Usuario) {
+        repo.marcarEmailVerificado(usuario.uid) { result ->
+            result
+                .onSuccess { mensaje.value = "Email de ${usuario.email} marcado como verificado" }
+                .onFailure { error.value = it.message }
+        }
+    }
+
     fun eliminar(usuario: Usuario) {
         cargando.value = true
         repo.eliminarUsuario(usuario.uid) { result ->

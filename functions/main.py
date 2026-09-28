@@ -11,6 +11,7 @@ Callables (se invocan desde la app con Firebase Functions)
   generar_sugerencias_ia       Consejos personalizados del informe con Gemini.
   eliminar_mi_cuenta           Borrado completo de la propia cuenta (RGPD / Play).
   eliminar_usuario_completo    Borrado completo de un usuario (solo admin).
+  marcar_email_verificado      Marca un email como verificado (solo admin).
 
 Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
@@ -236,6 +237,27 @@ def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     db = firestore.client()
     stats = _purgar_usuario(db, uid)
     return {"ok": True, "uid": uid, "stats": stats}
+
+
+@https_fn.on_call(
+    region=REGION,
+    enforce_app_check=True,
+    cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+)
+def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
+    """Marca como verificado el email de un usuario. Reservado al administrador.
+    Sirve para cuentas que no pueden recibir el código por correo, como la
+    cuenta de prueba de los revisores de Google Play. Args: uid (str)."""
+    _verificar_admin(req)
+    uid = (req.data or {}).get("uid")
+    if not uid or not isinstance(uid, str):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Falta el parámetro 'uid'.")
+    try:
+        auth.update_user(uid, email_verified=True)
+    except auth.UserNotFoundError:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
+    print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
+    return {"ok": True}
 
 
 @https_fn.on_call(

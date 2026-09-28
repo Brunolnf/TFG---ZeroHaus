@@ -184,6 +184,20 @@ class RepositorioAdmin {
      * hacer completo (las reglas no dejan borrar suscripciones, estadísticas,
      * códigos de verificación…, ni se puede borrar la cuenta de Auth de otro).
      */
+    /**
+     * Marca como verificado el email de un usuario (Cloud Function
+     * `marcar_email_verificado`, solo admin). Para cuentas que no pueden recibir
+     * el código, como la de prueba de los revisores de Google Play.
+     */
+    fun marcarEmailVerificado(uid: String, callback: (Result<Unit>) -> Unit) {
+        functions.getHttpsCallable("marcar_email_verificado")
+            .call(hashMapOf("uid" to uid))
+            .addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnFailureListener { e ->
+                callback(Result.failure(Exception(e.message ?: "No se pudo verificar el email")))
+            }
+    }
+
     fun eliminarUsuario(uid: String, callback: (Result<Unit>) -> Unit) {
         functions.getHttpsCallable("eliminar_usuario_completo")
             .call(hashMapOf("uid" to uid))
