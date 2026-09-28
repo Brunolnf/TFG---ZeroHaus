@@ -134,7 +134,7 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
 
     // Security — EncryptedSharedPreferences (AES-256)
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // Google Play In-App Review (pedir valoración sin salir de la app)
     implementation("com.google.android.play:review-ktx:2.0.2")
