@@ -15,11 +15,18 @@ service firebase.storage {
                   && request.auth.uid in firestore.get(
                        /databases/(default)/documents/chats/$(chatId)
                      ).data.participantes;
-      allow write: if verificado()
-                   && request.auth.uid in firestore.get(
-                        /databases/(default)/documents/chats/$(chatId)
-                      ).data.participantes
-                   && request.resource.size < 15 * 1024 * 1024;
+      // Solo archivos nuevos: cada envío usa un nombre nuevo (el id del
+      // mensaje). Sobrescribir o borrar permitía a un participante cambiar o
+      // quitar lo que había enviado el otro. El borrado de cuentas y chats lo
+      // hace el servidor con el Admin SDK.
+      // (subir encima de un archivo existente también cuenta como create)
+      allow create: if verificado()
+                    && resource == null
+                    && request.auth.uid in firestore.get(
+                         /databases/(default)/documents/chats/$(chatId)
+                       ).data.participantes
+                    && request.resource.size < 15 * 1024 * 1024;
+      allow update, delete: if false;
     }
 
     // Fotos de perfil — lectura por usuarios verificados, escritura solo del

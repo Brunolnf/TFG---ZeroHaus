@@ -1,9 +1,9 @@
 {
   "name": "zerohaus-rules-tests",
   "private": true,
-  "description": "Tests de firestore.rules contra el emulador de Firestore",
+  "description": "Tests de firestore.rules y storage.rules contra los emuladores de Firebase",
   "scripts": {
-    "test": "firebase emulators:exec --only firestore --project demo-zerohaus \"node --test\""
+    "test": "firebase emulators:exec --only firestore,storage --project demo-zerohaus \"node --test --test-concurrency=1\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",

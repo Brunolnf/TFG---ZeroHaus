@@ -15,7 +15,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Integración continua con GitHub Actions: tests de la app, compilación, tests de reglas y validación del backend y los textos.
 - Dependabot: como mucho un PR mensual por ecosistema (Gradle, Python, npm y GitHub Actions) con todas sus actualizaciones.
 - `herramientas/i18n.py` para añadir, cambiar, limpiar y comprobar textos en los 14 idiomas.
-- Tests de reglas: 36 con el emulador (8 nuevos de la auditoría).
+- Tests de reglas: 45 con los emuladores de Firestore y Storage (17 nuevos de la auditoría).
 - Tests de traducciones (14 idiomas completos, sin textos vacíos, todas las opciones traducidas), especialidades, estadísticas, ubicaciones y formato de números: 46 tests en total.
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
@@ -39,7 +39,8 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
   - un profesional podía crear su perfil ya con un plan de pago que no caducaba nunca;
   - quien enviaba un mensaje podía editarlo para atribuírselo al otro participante;
   - el dueño de una notificación podía cambiarle el destinatario y colarla en la lista de otro usuario;
-  - una reseña editada podía recibir campos arbitrarios y los ajustes no tenían tamaño máximo.
+  - una reseña editada podía recibir campos arbitrarios y los ajustes no tenían tamaño máximo;
+  - en Storage, un participante del chat podía sobrescribir o borrar los archivos que había enviado el otro.
 
 ## [2.2.0] — 2026-09-28 · versionCode 5
 

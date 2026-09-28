@@ -162,7 +162,7 @@ ZeroHaus/
 │   ├── main.py
 │   ├── requirements.txt
 │   └── set_admin_claim.py        Concede o retira el rol de administrador
-├── rules-tests/                  Tests de las reglas de Firestore (emulador)
+├── rules-tests/                  Tests de las reglas de Firestore y Storage (emuladores)
 ├── herramientas/i18n.py          Mantenimiento de los textos en los 14 idiomas
 ├── playstore-assets/             Ficha de Google Play: gráficos, logos y textos
 ├── .github/                      CI (workflows/ci.yml) y Dependabot
@@ -212,7 +212,7 @@ venv/Scripts/pip install -r requirements.txt   # en Linux/macOS: venv/bin/pip
 # App (JUnit): algoritmo, traducciones, especialidades, estadísticas, ubicaciones y formato
 ./gradlew :app:testDebugUnitTest
 
-# Reglas de seguridad de Firestore (emulador)
+# Reglas de seguridad de Firestore y Storage (emuladores)
 cd rules-tests && npm install && npm test
 ```
 
