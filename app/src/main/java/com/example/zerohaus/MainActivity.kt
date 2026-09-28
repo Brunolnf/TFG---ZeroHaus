@@ -27,9 +27,9 @@ import com.google.firebase.auth.FirebaseAuth
 
 /**
  * Única Activity de la app (arquitectura single-activity con Navigation Compose).
- * Instala la splash, pide el permiso de notificaciones, bloquea capturas de
- * pantalla (FLAG_SECURE), cierra la sesión tras 5 minutos en segundo plano y,
- * en release, termina la app si detecta un depurador o un tracer.
+ * Instala la splash, pide el permiso de notificaciones, cierra la sesión tras
+ * 5 minutos en segundo plano y, en release, bloquea las capturas de pantalla
+ * (FLAG_SECURE) y termina la app si detecta un depurador o un tracer.
  */
 class MainActivity : ComponentActivity() {
 
@@ -67,10 +67,13 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE
-        )
+        // En depuración se permiten capturas (pruebas, memoria, ficha de Play)
+        if (!BuildConfig.DEBUG) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        }
 
         window.decorView.filterTouchesWhenObscured = true
 
