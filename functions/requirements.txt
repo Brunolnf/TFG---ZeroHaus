@@ -3,6 +3,6 @@ firebase-admin>=6.5.0
 # tzdata: necesario en Windows para que scheduler_fn.Timezone resuelva
 # zonas IANA (Linux/Cloud Functions ya las trae). Sin esto, el deploy
 # falla localmente al hacer el análisis del codebase.
-tzdata>=2024.1
+tzdata>=2026.4
 # Gemini en Vertex AI (sugerencias personalizadas del informe)
 google-genai>=1.0.0
