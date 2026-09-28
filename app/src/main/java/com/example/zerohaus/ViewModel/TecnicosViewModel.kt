@@ -23,8 +23,10 @@ data class TecnicosEstado(
     // null = todos; Tecnico.TIPO_TECNICO / Tecnico.TIPO_EMPRESA
     val filtroTipo: String? = null,
     val orden: OrdenTecnicos = OrdenTecnicos.VALORACION,
-    val latUsuario: Double = 40.4168,   // Madrid por defecto (app solo España)
-    val lngUsuario: Double = -3.7038,
+    // Ubicación real del usuario; 0.0 = desconocida (sin permiso o sin GPS).
+    // Mientras sea desconocida no se calculan ni se muestran distancias.
+    val latUsuario: Double = 0.0,
+    val lngUsuario: Double = 0.0,
     val cargando: Boolean = false,
     val mensajeExito: String? = null,
     val error: String? = null
