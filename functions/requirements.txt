@@ -4,3 +4,5 @@ firebase-admin>=6.5.0
 # zonas IANA (Linux/Cloud Functions ya las trae). Sin esto, el deploy
 # falla localmente al hacer el análisis del codebase.
 tzdata>=2024.1
+# Gemini en Vertex AI (sugerencias personalizadas del informe)
+google-genai>=1.0.0
