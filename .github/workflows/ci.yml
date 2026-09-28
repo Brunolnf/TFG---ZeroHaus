@@ -29,7 +29,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Tests unitarios (algoritmo, traducciones, especialidades, estadísticas)
         run: ./gradlew :app:testDebugUnitTest --stacktrace
