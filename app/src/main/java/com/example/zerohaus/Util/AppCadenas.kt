@@ -21,14 +21,12 @@ data class AppCadenas(
     val contrasena: String,
     val contrasenaPlaceholder: String,
     val contrasenaError: String,
-
     // Auth - Login
     val loginTitulo: String,
     val loginSlogan: String,
     val loginOlvidaste: String,
     val loginBoton: String,
     val loginCrearCuenta: String,
-
     // Auth - Registro
     val registroTitulo: String,
     val registroSubtitulo: String,
@@ -46,7 +44,6 @@ data class AppCadenas(
     val tipoPropietario: String,
     val tipoTecnico: String,
     val tipoEmpresa: String,
-
     // Auth - Recuperar
     val recuperarTitulo: String,
     val recuperarSubtitulo: String,
@@ -57,16 +54,13 @@ data class AppCadenas(
     val recuperarSpam: String,
     val recuperarReenviar: String,
     val recuperarEnviando: String,
-
     // Splash
     val splashSlogan: String,
-
     // Tabs
     val tabInicio: String,
     val tabMensajes: String,
     val tabExplorar: String,
     val tabMas: String,
-
     // Explorar
     val explorarTitulo: String,
     val explorarSubtitulo: String,
@@ -78,7 +72,6 @@ data class AppCadenas(
     val explorarRankingsSub: String,
     val explorarGraficas: String,
     val explorarHistorial: String,
-
     // Más
     val masTitulo: String,
     val masSubtitulo: String,
@@ -89,7 +82,6 @@ data class AppCadenas(
     val masAjustesSub: String,
     val masSobreApp: String,
     val masSobreAppSub: String,
-
     // Panel
     val panelSaludo: String,
     val panelSubtitulo: String,
@@ -111,7 +103,6 @@ data class AppCadenas(
     val panelNotificaciones: String,
     val panelSinNotificaciones: String,
     val panelMarcarLeidas: String,
-
     // Ajustes
     val ajustesTitulo: String,
     val ajustesSubtitulo: String,
@@ -131,7 +122,6 @@ data class AppCadenas(
     val ajustesUnidadEnergia: String,
     val ajustesMoneda: String,
     val ajustesGuardar: String,
-
     // Sobre App
     val sobreTitulo: String,
     val sobreVersion: String,
@@ -146,7 +136,6 @@ data class AppCadenas(
     val sobreFuncContacto: String,
     val sobreFuncGraficas: String,
     val sobreFuncValoraciones: String,
-
     // Perfil
     val perfilTitulo: String,
     val perfilSubtitulo: String,
@@ -159,21 +148,18 @@ data class AppCadenas(
     val perfilGuardado: String,
     val perfilTecnicoTitulo: String,
     val perfilEspecialidades: String,
-    val perfilEspecialidadesPlaceholder: String,
     val perfilDescripcionProf: String,
     val perfilDescripcionPlaceholder: String,
     val perfilTelefonoPlaceholder: String,
     val perfilEmailContacto: String,
     val perfilEmailContactoPlaceholder: String,
     val perfilCuenta: String,
-
     // Ajustes - Notificaciones avanzadas
     val ajustesEmail: String,
     val ajustesNotifMensajes: String,
     val ajustesNotifMensajesSub: String,
     val ajustesNotifValoraciones: String,
     val ajustesNotifValoracionesSub: String,
-
     // Ajustes - Seguridad de la cuenta
     val ajustesSeguridadCuenta: String,
     val ajustesCambiarPassword: String,
@@ -181,19 +167,16 @@ data class AppCadenas(
     val ajustesCerrarSesionSub: String,
     val ajustesEliminarCuenta: String,
     val ajustesEliminarCuentaSub: String,
-
     // Ajustes - Diálogo cambiar contraseña
     val ajustesPasswordActual: String,
     val ajustesPasswordNueva: String,
     val ajustesPasswordConfirmar: String,
     val ajustesPasswordCambiada: String,
-
     // Ajustes - Diálogo eliminar cuenta
     val ajustesEliminarTitulo: String,
     val ajustesEliminarMensaje: String,
     val ajustesEliminarConfirmarBoton: String,
     val ajustesEliminarError: String,
-
     // Ajustes - Privacidad y legal
     val ajustesPrivacidadLegal: String,
     val ajustesPoliticaPrivacidad: String,
@@ -202,7 +185,6 @@ data class AppCadenas(
     val ajustesTerminosSub: String,
     val ajustesGestionDatos: String,
     val ajustesGestionDatosSub: String,
-
     // Ajustes - Ayuda y soporte
     val ajustesAyudaSoporte: String,
     val ajustesValorar: String,
@@ -213,11 +195,9 @@ data class AppCadenas(
     val ajustesContactar: String,
     val ajustesContactarSub: String,
     val ajustesContactarAsunto: String,
-
     // Ajustes - Información
     val ajustesInformacion: String,
     val ajustesVersionLabel: String,
-
     // Suscripción / pago (profesionales)
     val subTitulo: String,
     val subPlanDestacado: String,
@@ -248,11 +228,9 @@ data class AppCadenas(
     val subActivada: String,
     val subNadaRestaurar: String,
     val subPlayNoDisponible: String,
-
     // Común profesional
     val comReintentar: String,
     val comOpiniones: String,
-
     // Menú "Más" del profesional (MainScaffoldTecnico)
     val tecTabClientes: String,
     val tecCuenta: String,
@@ -265,12 +243,10 @@ data class AppCadenas(
     val tecAjustesSub: String,
     val tecSobreApp: String,
     val tecSobreAppSub: String,
-
     // Rankings
     val rankTitulo: String,
     val rankSubtitulo: String,
     val rankVacio: String,
-
     // Estadísticas del profesional
     val estTitulo: String,
     val estTuPlan: String,
@@ -284,19 +260,16 @@ data class AppCadenas(
     val estReputacion: String,
     val estValoracionMedia: String,
     val estOpinionesCap: String,
-
     // Común profesional (2)
     val comAbrirChat: String,
     val comFiltros: String,
     val comVerPerfilCompleto: String,
     val comValoraciones: String,
-
     // Mis clientes (profesional)
     val cliTitulo: String,
     val cliConversaciones: String,
     val cliVacioTitulo: String,
     val cliVacioSub: String,
-
     // Directorio de profesionales (TecnicosScreen)
     val tecDirTitulo: String,
     val tecDirSubtitulo: String,
@@ -315,12 +288,10 @@ data class AppCadenas(
     val tecTecnicoCertificador: String,
     val tecNuevo: String,
     val tecProfesionalFallback: String,
-
     // Mapa de técnicos
     val mapaTitulo: String,
     val mapaSubtitulo: String,
     val mapaAproximadas: String,
-
     // Perfil de un profesional (PerfilTecnicoScreen)
     val perfTituloEmpresa: String,
     val perfTituloTecnico: String,
@@ -347,18 +318,15 @@ data class AppCadenas(
     val perfSinContacto: String,
     val perfChatear: String,
     val perfLlamar: String,
-
     // Común profesional (3)
     val comClienteFallback: String,
     val comHoy: String,
     val comAyer: String,
     val ptecDeMedia: String,
-
     // Mis reseñas recibidas
     val resTitulo: String,
     val resVacioTitulo: String,
     val resVacioSub: String,
-
     // Panel del profesional (PanelTecnicoScreen)
     val ptecSinPerfilTitulo: String,
     val ptecSinPerfilSub: String,
@@ -369,18 +337,15 @@ data class AppCadenas(
     val ptecSinPlan: String,
     val ptecMejora: String,
     val ptecEstadisticasSub: String,
-
     // Común cliente
     val comCompartir: String,
     val comEliminar: String,
     val comUsuarioFallback: String,
-
     // Lista de chats (cliente)
     val chatlNoConversaciones: String,
     val chatlVacioSub: String,
     val chatNombreFallback: String,
     val chatSinMensajes: String,
-
     // Historial de informes
     val histTitulo: String,
     val histSubtitulo: String,
@@ -646,6 +611,18 @@ data class AppCadenas(
     val subErrorCompra: String,
     val perfTelefonoPublico: String,
     val perfTelefonoAyuda: String,
+    val espAislamiento: String,
+    val espVentanas: String,
+    val espCalefaccion: String,
+    val espFotovoltaica: String,
+    val espAerotermia: String,
+    val espAuditorias: String,
+    val espRehabilitacion: String,
+    val espBiomasa: String,
+    val espCertificacion: String,
+    val espConsultoria: String,
+    val infBuscarProfesionales: String,
+    val perfEspecialidadesAyuda: String,
 )
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

@@ -31,6 +31,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.zerohaus.ViewModel.PerfilViewModel
 import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.TextosEnergia
+import com.example.zerohaus.Modelos.Especialidades
 
 /**
  * Perfil propio: nombre y foto y, en profesionales, los datos públicos
@@ -180,13 +182,11 @@ fun PerfilScreen(
                             Text(c.perfilTecnicoTitulo, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
 
                             Text(c.perfilEspecialidades, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
-                            OutlinedTextField(
-                                value = estado.especialidades,
-                                onValueChange = { viewModel.cambiarEspecialidades(it) },
-                                placeholder = { Text(c.perfilEspecialidadesPlaceholder) },
-                                singleLine = true, shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
-                                modifier = Modifier.fillMaxWidth()
+                            Text(c.perfEspecialidadesAyuda, fontSize = 11.sp, color = gris)
+                            SelectorEspecialidades(
+                                seleccionadas = estado.especialidades,
+                                onAlternar = viewModel::alternarEspecialidad,
+                                verde = verde
                             )
 
                             Text(c.perfilDescripcionProf, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -244,7 +244,7 @@ fun PerfilScreen(
 
                 val esTecnico = estado.esProfesional
                 val perfilCompleto = estado.nombre.isNotBlank() && (!esTecnico || (
-                    estado.especialidades.isNotBlank()
+                    estado.especialidades.isNotEmpty()
                         && estado.descripcion.isNotBlank()
                         && estado.telefono.isNotBlank()
                         && estado.emailContacto.isNotBlank()
@@ -325,5 +325,38 @@ fun PerfilScreen(
                 }
             }
         )
+    }
+}
+
+/** Selección múltiple de especialidades del catálogo (chips que pasan de línea). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelectorEspecialidades(
+    seleccionadas: Set<String>,
+    onAlternar: (String) -> Unit,
+    verde: androidx.compose.ui.graphics.Color
+) {
+    val c = LocalCadenas.current
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Especialidades.TODAS.forEach { esp ->
+            val marcada = esp in seleccionadas
+            FilterChip(
+                selected = marcada,
+                onClick = { onAlternar(esp) },
+                label = { Text(TextosEnergia.especialidad(esp, c), fontSize = 13.sp) },
+                leadingIcon = if (marcada) {
+                    { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                } else null,
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = verde.copy(alpha = 0.15f),
+                    selectedLabelColor = verde,
+                    selectedLeadingIconColor = verde
+                )
+            )
+        }
     }
 }

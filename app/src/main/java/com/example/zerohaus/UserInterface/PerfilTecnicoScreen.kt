@@ -35,6 +35,7 @@ import com.example.zerohaus.Repositorios.RepositorioEstadisticas
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.ViewModel.PerfilTecnicoViewModel
+import com.example.zerohaus.Util.TextosEnergia
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -296,7 +297,7 @@ fun PerfilTecnicoScreen(
                                     t.especialidades.forEach { esp ->
                                         Surface(shape = RoundedCornerShape(20.dp), color = verde.copy(alpha = 0.08f)) {
                                             Text(
-                                                esp,
+                                                TextosEnergia.especialidad(esp, c),
                                                 color = verde,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Medium,

@@ -1,5 +1,7 @@
 package com.example.zerohaus.Util
 
+import com.example.zerohaus.Modelos.Especialidades
+
 /**
  * Traducción, SOLO para mostrar, de los valores del dominio energético que se
  * guardan en Firestore en español (opciones de la vivienda, estado de
@@ -62,6 +64,25 @@ object TextosEnergia {
         "E" -> c.efiE
         "F" -> c.efiF
         else -> c.efiG
+    }
+
+    /**
+     * Especialidad de un profesional en el idioma de la app. Acepta también
+     * las escritas a mano en perfiles antiguos (se interpretan con
+     * [Especialidades.normalizar]); si no se reconoce, se muestra tal cual.
+     */
+    fun especialidad(valor: String, c: AppCadenas): String = when (Especialidades.normalizar(valor)) {
+        Especialidades.AISLAMIENTO    -> c.espAislamiento
+        Especialidades.VENTANAS       -> c.espVentanas
+        Especialidades.CALEFACCION    -> c.espCalefaccion
+        Especialidades.FOTOVOLTAICA   -> c.espFotovoltaica
+        Especialidades.AEROTERMIA     -> c.espAerotermia
+        Especialidades.AUDITORIAS     -> c.espAuditorias
+        Especialidades.REHABILITACION -> c.espRehabilitacion
+        Especialidades.BIOMASA        -> c.espBiomasa
+        Especialidades.CERTIFICACION  -> c.espCertificacion
+        Especialidades.CONSULTORIA    -> c.espConsultoria
+        else                          -> valor
     }
 
     /** Incluye los títulos de versiones anteriores del algoritmo. */

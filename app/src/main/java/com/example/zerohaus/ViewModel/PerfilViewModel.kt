@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.example.zerohaus.Modelos.Especialidades
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
@@ -24,7 +25,7 @@ data class PerfilEstado(
     val tipoUsuario: String = "",
     val fotoPerfil: String = "",
     // Campos exclusivos de técnico
-    val especialidades: String = "",
+    val especialidades: Set<String> = emptySet(),   // valores de Especialidades.TODAS
     val descripcion: String = "",
     val telefono: String = "",
     val emailContacto: String = "",
@@ -72,7 +73,8 @@ class PerfilViewModel : ViewModel() {
                     // Buscamos por campo uid (no por ID de documento, que es diferente al Auth UID)
                     repoTecnicos.obtenerMiPerfilTecnico { tecnico ->
                         estado = estado.copy(
-                            especialidades = tecnico?.especialidades?.joinToString(", ") ?: "",
+                            // Los perfiles antiguos (texto libre) se convierten al catálogo
+                            especialidades = Especialidades.canonicas(tecnico?.especialidades.orEmpty()).toSet(),
                             descripcion = tecnico?.descripcion ?: "",
                             tecnicoDocId = tecnico?.id ?: "",
                             ciudad = tecnico?.ciudad ?: "",
@@ -93,7 +95,10 @@ class PerfilViewModel : ViewModel() {
     }
 
     fun cambiarNombre(v: String) { estado = estado.copy(nombre = v, exito = false) }
-    fun cambiarEspecialidades(v: String) { estado = estado.copy(especialidades = v, exito = false) }
+    fun alternarEspecialidad(e: String) {
+        val actuales = estado.especialidades
+        estado = estado.copy(especialidades = if (e in actuales) actuales - e else actuales + e, exito = false)
+    }
     fun cambiarDescripcion(v: String) { estado = estado.copy(descripcion = v, exito = false) }
     fun cambiarTelefono(v: String) {
         // Todos los números se asumen españoles: guardamos 9 dígitos y mostramos "+34"
@@ -112,10 +117,8 @@ class PerfilViewModel : ViewModel() {
                 .onSuccess {
                     estado = estado.copy(usuario = actualizado)
                     if (estado.esProfesional) {
-                        val especialidadesLista = estado.especialidades
-                            .split(",")
-                            .map { it.trim() }
-                            .filter { it.isNotEmpty() }
+                        // Siempre en el orden del catálogo
+                        val especialidadesLista = Especialidades.TODAS.filter { it in estado.especialidades }
 
                         // Si ya existe documento, hacemos UPDATE parcial (preserva rating, opiniones, etc.)
                         // Si no, hacemos SET completo.

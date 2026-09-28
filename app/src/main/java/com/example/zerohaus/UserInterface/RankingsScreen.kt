@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.RankingsViewModel
+import com.example.zerohaus.Util.TextosEnergia
 
 /**
  * Ranking de profesionales ordenado por valoración media.
@@ -158,7 +159,7 @@ fun RankingsScreen(
                                                 color = verde.copy(alpha = 0.08f)
                                             ) {
                                                 Text(
-                                                    esp,
+                                                    TextosEnergia.especialidad(esp, c),
                                                     color = verde,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Medium,

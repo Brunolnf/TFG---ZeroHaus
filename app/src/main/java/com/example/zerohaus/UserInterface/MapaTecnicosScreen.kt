@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.TecnicosViewModel
+import com.example.zerohaus.Util.TextosEnergia
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -116,7 +117,7 @@ fun MapaTecnicosScreen(
                             keys = arrayOf<Any>(tecnico.id, esSeleccionado),
                             state = MarkerState(position = posicion),
                             title = tecnico.nombre,
-                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull() ?: ""}",
+                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull()?.let { TextosEnergia.especialidad(it, c) } ?: ""}",
                             onClick = {
                                 tecnicoSeleccionado = if (esSeleccionado) null else tecnico
                                 true // consume el click para no mostrar InfoWindow nativo
@@ -257,7 +258,7 @@ fun MapaTecnicosScreen(
                                 Text("%.1f (${t.opiniones})".format(t.rating), color = gris, fontSize = 12.sp)
                             }
                             Spacer(Modifier.height(6.dp))
-                            Text(t.especialidades.joinToString(" · "), color = gris, fontSize = 13.sp)
+                            Text(t.especialidades.joinToString(" · ") { TextosEnergia.especialidad(it, c) }, color = gris, fontSize = 13.sp)
                             if (t.ciudad.isNotEmpty()) {
                                 Text(t.ciudad, color = gris, fontSize = 12.sp)
                             }

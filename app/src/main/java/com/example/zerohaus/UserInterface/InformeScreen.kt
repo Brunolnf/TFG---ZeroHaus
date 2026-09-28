@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Modelos.Especialidades
 import com.example.zerohaus.Repositorios.ErrorIA
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
@@ -40,7 +41,8 @@ import java.util.*
 fun InformeScreen(
     viewModel: InformeViewModel,
     onVolver: () -> Unit = {},
-    onContactarTecnicos: () -> Unit = {}
+    /** Abre el directorio; con una especialidad, ya filtrado por ella. */
+    onContactarTecnicos: (especialidad: String?) -> Unit = {}
 ) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
@@ -204,6 +206,21 @@ fun InformeScreen(
                                 else
                                     "${c.infAhorroEstimado}: ${r.ahorroEstimado}%"
                                 Text(detalle, color = gris, fontSize = 12.sp)
+                                // Mejoras que hace un profesional: acceso directo al
+                                // directorio filtrado por su especialidad
+                                Especialidades.paraRecomendacion(r.titulo)?.let { esp ->
+                                    TextButton(
+                                        onClick = { onContactarTecnicos(esp) },
+                                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Search, null, tint = verde, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            "${c.infBuscarProfesionales}: ${TextosEnergia.especialidad(esp, c)}",
+                                            color = verde, fontSize = 13.sp
+                                        )
+                                    }
+                                }
                                 if (i < informe.recomendaciones.lastIndex) Spacer(Modifier.height(10.dp))
                             }
                         }
@@ -234,7 +251,7 @@ fun InformeScreen(
                         Text(c.comCompartir, color = verde, fontWeight = FontWeight.SemiBold)
                     }
                     Button(
-                        onClick = onContactarTecnicos,
+                        onClick = { onContactarTecnicos(null) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = verde),

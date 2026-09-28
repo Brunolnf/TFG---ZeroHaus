@@ -302,7 +302,11 @@ fun AppNavegacion() {
             InformeScreen(
                 viewModel = informeVM,
                 onVolver = { nav.popBackStack() },
-                onContactarTecnicos = { nav.navigate("tecnicos") }
+                onContactarTecnicos = { especialidad ->
+                    // El directorio comparte ViewModel: se abre ya filtrado (o sin filtro)
+                    tecnicosVM.cambiarFiltro(especialidad)
+                    nav.navigate("tecnicos")
+                }
             )
         }
 

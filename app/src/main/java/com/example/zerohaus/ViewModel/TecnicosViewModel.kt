@@ -8,6 +8,10 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.nivelPlan
 import com.example.zerohaus.Repositorios.*
+import com.example.zerohaus.Modelos.Especialidades
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.TextosEnergia
+import com.example.zerohaus.Util.getCadenas
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 
@@ -148,13 +152,20 @@ class TecnicosViewModel : ViewModel() {
 
     fun tecnicosFiltrados(): List<Tecnico> {
         val q = estado.busqueda.trim().lowercase()
+        val c = getCadenas(AppEstado.idioma)
         val filtrados = estado.tecnicos
             .filter {
+                // La especialidad se busca por su texto guardado y por su nombre
+                // en el idioma de la app ("insulation" encuentra "Aislamiento")
                 q.isBlank() || it.nombre.lowercase().contains(q)
                     || it.ciudad.lowercase().contains(q)
-                    || it.especialidades.any { e -> e.lowercase().contains(q) }
+                    || it.especialidades.any { e ->
+                        e.lowercase().contains(q) || TextosEnergia.especialidad(e, c).lowercase().contains(q)
+                    }
             }
-            .filter { t -> estado.filtro == null || t.especialidades.contains(estado.filtro) }
+            // Especialidades canónicas: también reconoce las escritas a mano en
+            // perfiles antiguos ("placas solares" cuenta como Fotovoltaica)
+            .filter { t -> estado.filtro == null || estado.filtro in Especialidades.canonicas(t.especialidades) }
             .filter { t -> estado.filtroTipo == null || t.tipoProfesional == estado.filtroTipo }
         // Verificados/destacados siempre primero, luego por criterio seleccionado
         return when (estado.orden) {

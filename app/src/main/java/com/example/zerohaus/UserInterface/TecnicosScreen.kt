@@ -38,6 +38,8 @@ import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.TecnicosViewModel
+import com.example.zerohaus.Util.TextosEnergia
+import com.example.zerohaus.Modelos.Especialidades
 
 /**
  * Directorio de profesionales: búsqueda, filtros por especialidad y orden por
@@ -63,10 +65,7 @@ fun TecnicosScreen(
     var mostrarFiltros by remember { mutableStateOf(false) }
     val dorado = Color(0xFFF59E0B)
 
-    val especialidades = listOf(
-        "Aislamiento", "Ventanas", "Calefacción", "Fotovoltaica", "Aerotermia",
-        "Auditorías", "Rehabilitación", "Biomasa", "Certificación", "Consultoría"
-    )
+    val especialidades = Especialidades.TODAS
 
     // Pedir ubicación y actualizar distancias
     val locationPermLauncher = rememberLauncherForActivityResult(
@@ -165,7 +164,7 @@ fun TecnicosScreen(
                                 )
                                 especialidades.forEach { esp ->
                                     DropdownMenuItem(
-                                        text = { Text(esp) },
+                                        text = { Text(TextosEnergia.especialidad(esp, c)) },
                                         onClick = { viewModel.cambiarFiltro(esp); mostrarFiltros = false }
                                     )
                                 }
@@ -222,7 +221,7 @@ fun TecnicosScreen(
                         Spacer(Modifier.height(6.dp))
                         AssistChip(
                             onClick = { viewModel.cambiarFiltro(null) },
-                            label = { Text("${c.tecFiltroPrefijo} $it  ✕") },
+                            label = { Text("${c.tecFiltroPrefijo} ${TextosEnergia.especialidad(it, c)}  ✕") },
                             colors = AssistChipDefaults.assistChipColors(
                                 containerColor = verde.copy(0.12f),
                                 labelColor = verde
@@ -439,7 +438,7 @@ fun TecnicosScreen(
                                             color = verde.copy(alpha = 0.08f)
                                         ) {
                                             Text(
-                                                esp,
+                                                TextosEnergia.especialidad(esp, c),
                                                 color = verde,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Medium,
