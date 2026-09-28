@@ -35,6 +35,7 @@ import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esEmpresa
 import com.example.zerohaus.Modelos.esVerificado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.OrigenUbicacion
@@ -428,7 +429,7 @@ fun TecnicosScreen(
                                                 modifier = Modifier.size(14.dp)
                                             )
                                             Text(
-                                                "%.1f".format(t.rating),
+                                                Formato.numero(t.rating),
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 13.sp,
                                                 color = Color(0xFF92400E)

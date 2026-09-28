@@ -307,7 +307,7 @@ fun GraficasConsumoScreen(
                             drawCircle(Color.White, radius = 5f, center = p)
                             val valor = datos[i].emisiones
                             drawContext.canvas.nativeCanvas.drawText(
-                                "${String.format("%.1f", valor)}",
+                                Formato.numero(valor),
                                 p.x,
                                 p.y - 18f,
                                 valuePaint

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
@@ -798,5 +799,5 @@ private fun formatBytes(bytes: Long): String = when {
     bytes <= 0L -> ""
     bytes < 1_024L -> "$bytes B"
     bytes < 1_048_576L -> "${bytes / 1024} KB"
-    else -> "${"%.1f".format(bytes / 1_048_576.0)} MB"
+    else -> "${Formato.numero(bytes / 1_048_576.0)} MB"
 }

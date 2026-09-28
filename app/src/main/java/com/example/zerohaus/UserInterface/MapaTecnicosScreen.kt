@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.TecnicosViewModel
@@ -179,7 +180,7 @@ fun MapaTecnicosScreen(
                                                                else Color(0xFFF59E0B)
                                                     )
                                                     Text(
-                                                        "%.1f".format(tecnico.rating),
+                                                        Formato.numero(tecnico.rating),
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Medium,
                                                         color = if (esSeleccionado) Color.White
@@ -255,7 +256,7 @@ fun MapaTecnicosScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 FilaEstrellas(t.rating, tamano = 16.dp)
                                 Spacer(Modifier.width(6.dp))
-                                Text("%.1f (${t.opiniones})".format(t.rating), color = gris, fontSize = 12.sp)
+                                Text("${Formato.numero(t.rating)} (${t.opiniones})", color = gris, fontSize = 12.sp)
                             }
                             Spacer(Modifier.height(6.dp))
                             Text(t.especialidades.joinToString(" · ") { TextosEnergia.especialidad(it, c) }, color = gris, fontSize = 13.sp)

@@ -671,6 +671,12 @@ class AppCadenas internal constructor(
     val tecDistanciasVivienda: String get() = t("tecDistanciasVivienda")
     val tecSinUbicacion: String get() = t("tecSinUbicacion")
     val tecUsarUbicacion: String get() = t("tecUsarUbicacion")
+    val canalMensajes: String get() = t("canalMensajes")
+    val canalMensajesDesc: String get() = t("canalMensajesDesc")
+    val canalSilencio: String get() = t("canalSilencio")
+    val canalSilencioDesc: String get() = t("canalSilencioDesc")
+    val canalGeneral: String get() = t("canalGeneral")
+    val canalGeneralDesc: String get() = t("canalGeneralDesc")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

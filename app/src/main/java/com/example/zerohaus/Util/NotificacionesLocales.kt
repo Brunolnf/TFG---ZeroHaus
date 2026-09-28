@@ -48,43 +48,47 @@ object NotificacionesLocales {
         return esRepe
     }
 
+    /**
+     * Crea (o actualiza) los canales con los nombres en el idioma de la app.
+     * Se vuelve a llamar al cambiar de idioma: recrear un canal con el mismo
+     * id solo cambia su nombre y descripción, no los ajustes del usuario.
+     */
     fun crearCanales(context: Context) {
         appContext = context.applicationContext
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val sonidoUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            val audioAttr = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
-            val vibracion = longArrayOf(0, 250, 100, 250)
+        val c = getCadenas(AppEstado.idioma)
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val sonidoUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val audioAttr = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val vibracion = longArrayOf(0, 250, 100, 250)
 
-            listOf(
-                NotificationChannel(CANAL_CHAT, "Mensajes", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Nuevos mensajes de técnicos y clientes"
-                    enableVibration(true)
-                    vibrationPattern = vibracion
-                    setSound(sonidoUri, audioAttr)
-                    enableLights(true)
-                },
-                NotificationChannel(CANAL_SILENCIO, "Silenciosas", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Notificaciones sin sonido (sonido desactivado en Ajustes)"
-                    setSound(null, null)
-                    enableVibration(false)
-                },
-                NotificationChannel(CANAL_GENERAL, "General", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Notificaciones generales de ZeroHaus"
-                    setSound(sonidoUri, audioAttr)
-                }
-            ).forEach { manager.createNotificationChannel(it) }
+        listOf(
+            NotificationChannel(CANAL_CHAT, c.canalMensajes, NotificationManager.IMPORTANCE_HIGH).apply {
+                description = c.canalMensajesDesc
+                enableVibration(true)
+                vibrationPattern = vibracion
+                setSound(sonidoUri, audioAttr)
+                enableLights(true)
+            },
+            NotificationChannel(CANAL_SILENCIO, c.canalSilencio, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = c.canalSilencioDesc
+                setSound(null, null)
+                enableVibration(false)
+            },
+            NotificationChannel(CANAL_GENERAL, c.canalGeneral, NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = c.canalGeneralDesc
+                setSound(sonidoUri, audioAttr)
+            }
+        ).forEach { manager.createNotificationChannel(it) }
 
-            // Eliminar canales de versiones anteriores (presupuestos, proyectos y
-            // contactos, de modelos de negocio ya retirados)
-            listOf(
-                "zerohaus_chat", "zerohaus_presupuesto", "zerohaus_proyecto", "zerohaus_general",
-                "zerohaus_presupuesto_v2", "zerohaus_proyecto_v2", "zerohaus_contactos_v1"
-            ).forEach { manager.deleteNotificationChannel(it) }
-        }
+        // Eliminar canales de versiones anteriores (presupuestos, proyectos y
+        // contactos, de modelos de negocio ya retirados)
+        listOf(
+            "zerohaus_chat", "zerohaus_presupuesto", "zerohaus_proyecto", "zerohaus_general",
+            "zerohaus_presupuesto_v2", "zerohaus_proyecto_v2", "zerohaus_contactos_v1"
+        ).forEach { manager.deleteNotificationChannel(it) }
     }
 
     fun mostrar(titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
@@ -140,12 +144,7 @@ object NotificacionesLocales {
             } else {
                 @Suppress("DEPRECATION")
                 val v = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 250, 100, 250), -1))
-                } else {
-                    @Suppress("DEPRECATION")
-                    v.vibrate(longArrayOf(0, 250, 100, 250), -1)
-                }
+                v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 250, 100, 250), -1))
             }
         } catch (_: Exception) {}
     }

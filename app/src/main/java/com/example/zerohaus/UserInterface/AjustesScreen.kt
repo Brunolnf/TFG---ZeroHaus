@@ -31,6 +31,7 @@ import com.example.zerohaus.ViewModel.AjustesViewModel
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.NotificacionesLocales
 
 // URLs y contacto de la app. Servidas por Firebase Hosting (carpeta /public).
 // Si algún día conectas el dominio propio zerohaus.es en Firebase Hosting,
@@ -267,6 +268,7 @@ fun AjustesScreen(
                             idiomasDisponibles.forEach { idioma ->
                                 DropdownMenuItem(text = { Text(idioma) }, onClick = {
                                     viewModel.cambiarIdioma(idioma); AppEstado.idioma = idioma; prefs.setIdioma(idioma); expI = false
+                                    NotificacionesLocales.crearCanales(context)
                                 })
                             }
                         }

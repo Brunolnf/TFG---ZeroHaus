@@ -355,7 +355,7 @@ private fun SimuladorMejorasCard(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     DatoSimulacion(
                         c.simAmortizacion,
-                        sim.amortizacionAnios?.let { "%.1f %s".format(it, c.simAnios) } ?: "—",
+                        sim.amortizacionAnios?.let { "${Formato.numero(it)} ${c.simAnios}" } ?: "—",
                         gris, null
                     )
                     DatoSimulacion(c.simCo2Evitado, Formato.formatEmisionesAnual(sim.ahorroCo2, 0), gris, null, Alignment.End)

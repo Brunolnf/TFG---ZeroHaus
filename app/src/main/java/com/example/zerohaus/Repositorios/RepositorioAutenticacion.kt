@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
+import com.example.zerohaus.Util.codigoIdioma
 import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -269,7 +270,7 @@ class RepositorioAutenticacion {
      * configurado en la app (vía Firebase Auth setLanguageCode).
      */
     fun recuperarPassword(email: String, idiomaApp: String, callback: (Result<Unit>) -> Unit) {
-        auth.setLanguageCode(codigoIdiomaFirebase(idiomaApp))
+        auth.setLanguageCode(codigoIdioma(idiomaApp))
         // ActionCodeSettings sin handleCodeInApp fuerza el uso del handler estándar
         // de Firebase (firebaseapp.com/__/auth/action), evitando Dynamic Links
         // que fueron discontinuados en 2025 y pueden causar que el link no funcione.
@@ -291,22 +292,6 @@ class RepositorioAutenticacion {
             }
     }
 
-    private fun codigoIdiomaFirebase(idioma: String): String = when (idioma) {
-        "English"    -> "en"
-        "Català"     -> "ca"
-        "Euskara"    -> "eu"
-        "Galego"     -> "gl"
-        "Português"  -> "pt"
-        "Français"   -> "fr"
-        "Deutsch"    -> "de"
-        "Italiano"   -> "it"
-        "العربية"    -> "ar"
-        "中文"        -> "zh"
-        "Română"     -> "ro"
-        "Nederlands" -> "nl"
-        "Polski"     -> "pl"
-        else         -> "es"
-    }
 
     private fun traducirError(msg: String?): String {
         val m = msg?.lowercase() ?: return "Error desconocido"

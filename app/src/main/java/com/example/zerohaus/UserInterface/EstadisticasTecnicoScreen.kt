@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Util.LocalCadenas
@@ -125,7 +126,7 @@ fun EstadisticasTecnicoScreen(
             estado.tecnico?.let { tec ->
                 Text(c.estReputacion, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricaMini("%.1f".format(tec.rating), c.estValoracionMedia, Icons.Default.Star, Color(0xFFEAB308), Modifier.weight(1f))
+                    MetricaMini(Formato.numero(tec.rating), c.estValoracionMedia, Icons.Default.Star, Color(0xFFEAB308), Modifier.weight(1f))
                     MetricaMini("${tec.opiniones}", c.estOpinionesCap, Icons.Default.Reviews, verde, Modifier.weight(1f))
                 }
 

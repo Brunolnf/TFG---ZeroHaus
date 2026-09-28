@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esEmpresa
 import com.example.zerohaus.Modelos.esVerificado
@@ -241,7 +242,7 @@ fun PerfilTecnicoScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 FilaEstrellas(t.rating, tamano = 22.dp)
-                                Text("%.1f".format(t.rating), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text(Formato.numero(t.rating), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                             Spacer(Modifier.height(2.dp))
                             Text("${t.opiniones} ${c.comValoraciones}", color = gris, fontSize = 13.sp)

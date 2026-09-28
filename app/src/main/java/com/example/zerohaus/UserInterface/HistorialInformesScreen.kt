@@ -210,8 +210,8 @@ fun HistorialInformesScreen(
                                 )
                                 FilaComparacion(
                                     c.histEmisiones,
-                                    "${String.format("%.1f", a.emisiones)} kg",
-                                    "${String.format("%.1f", b.emisiones)} kg",
+                                    Formato.formatEmisiones(a.emisiones),
+                                    Formato.formatEmisiones(b.emisiones),
                                     b.emisiones - a.emisiones,
                                     verde, gris
                                 )
@@ -286,7 +286,7 @@ fun HistorialInformesScreen(
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(Formato.formatEnergiaAnual(informe.consumoEstimado), color = gris, fontSize = 13.sp)
-                                Text("${String.format("%.1f", informe.emisiones)} kg CO₂", color = gris, fontSize = 13.sp)
+                                Text(Formato.formatEmisiones(informe.emisiones), color = gris, fontSize = 13.sp)
                                 Text(Formato.formatMonedaAnual(informe.costeAnual, 1), color = gris, fontSize = 13.sp)
                             }
                         }
@@ -485,8 +485,8 @@ private fun FilaComparacion(
                 else -> gris
             }
             val deltaTexto = when {
-                delta < 0 -> "↓ ${String.format("%.1f", -delta)}"
-                delta > 0 -> "↑ ${String.format("%.1f", delta)}"
+                delta < 0 -> "↓ ${Formato.numero(-delta)}"
+                delta > 0 -> "↑ ${Formato.numero(delta)}"
                 else -> "="
             }
             Text(deltaTexto, color = deltaColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(0.8f))

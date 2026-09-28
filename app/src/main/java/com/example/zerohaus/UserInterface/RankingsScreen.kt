@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.RankingsViewModel
 import com.example.zerohaus.Util.TextosEnergia
@@ -192,7 +193,7 @@ fun RankingsScreen(
                                     FilaEstrellas(t.rating)
                                     Spacer(Modifier.width(6.dp))
                                     Text(
-                                        "%.1f".format(t.rating),
+                                        Formato.numero(t.rating),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )

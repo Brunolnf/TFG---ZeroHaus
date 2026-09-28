@@ -20,6 +20,27 @@ fun getCadenas(idioma: String): AppCadenas = when (idioma) {
     else         -> espanol
 }
 
+/**
+ * Código ISO 639-1 del idioma (nombre tal como aparece en Ajustes): lo usan
+ * Firebase Auth para sus emails y el formato de los números. Por defecto, "es".
+ */
+fun codigoIdioma(idioma: String): String = when (idioma) {
+    "English"    -> "en"
+    "Català"     -> "ca"
+    "Euskara"    -> "eu"
+    "Galego"     -> "gl"
+    "Português"  -> "pt"
+    "Français"   -> "fr"
+    "Deutsch"    -> "de"
+    "Italiano"   -> "it"
+    "العربية"    -> "ar"
+    "中文"        -> "zh"
+    "Română"     -> "ro"
+    "Nederlands" -> "nl"
+    "Polski"     -> "pl"
+    else         -> "es"
+}
+
 private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "volver" to "Volver",
     "guardar" to "Guardar",
@@ -604,6 +625,12 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distancias aproximadas desde la provincia de tu vivienda",
     "tecSinUbicacion" to "Activa la ubicación o añade una vivienda para ordenar por cercanía",
     "tecUsarUbicacion" to "Usar mi ubicación",
+    "canalMensajes" to "Mensajes",
+    "canalMensajesDesc" to "Nuevos mensajes de técnicos y clientes",
+    "canalSilencio" to "Silenciosas",
+    "canalSilencioDesc" to "Notificaciones sin sonido (sonido desactivado en Ajustes)",
+    "canalGeneral" to "General",
+    "canalGeneralDesc" to "Notificaciones generales de ZeroHaus",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1190,6 +1217,12 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Approximate distances from your home's province",
     "tecSinUbicacion" to "Turn on location or add a home to sort by distance",
     "tecUsarUbicacion" to "Use my location",
+    "canalMensajes" to "Messages",
+    "canalMensajesDesc" to "New messages from professionals and clients",
+    "canalSilencio" to "Silent",
+    "canalSilencioDesc" to "Notifications without sound (sound turned off in Settings)",
+    "canalGeneral" to "General",
+    "canalGeneralDesc" to "General ZeroHaus notifications",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1776,6 +1809,12 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distàncies aproximades des de la província del teu habitatge",
     "tecSinUbicacion" to "Activa la ubicació o afegeix un habitatge per ordenar per proximitat",
     "tecUsarUbicacion" to "Fes servir la meva ubicació",
+    "canalMensajes" to "Missatges",
+    "canalMensajesDesc" to "Missatges nous de tècnics i clients",
+    "canalSilencio" to "Silencioses",
+    "canalSilencioDesc" to "Notificacions sense so (so desactivat a Configuració)",
+    "canalGeneral" to "General",
+    "canalGeneralDesc" to "Notificacions generals de ZeroHaus",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2362,6 +2401,12 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Zure etxebizitzaren probintziatik gutxi gorabeherako distantziak",
     "tecSinUbicacion" to "Aktibatu kokapena edo gehitu etxebizitza bat hurbiltasunaren arabera ordenatzeko",
     "tecUsarUbicacion" to "Erabili nire kokapena",
+    "canalMensajes" to "Mezuak",
+    "canalMensajesDesc" to "Teknikari eta bezeroen mezu berriak",
+    "canalSilencio" to "Isilak",
+    "canalSilencioDesc" to "Soinurik gabeko jakinarazpenak (soinua desaktibatuta Ezarpenetan)",
+    "canalGeneral" to "Orokorra",
+    "canalGeneralDesc" to "ZeroHaus-en jakinarazpen orokorrak",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2948,6 +2993,12 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distancias aproximadas desde a provincia da túa vivenda",
     "tecSinUbicacion" to "Activa a localización ou engade unha vivenda para ordenar por proximidade",
     "tecUsarUbicacion" to "Usar a miña localización",
+    "canalMensajes" to "Mensaxes",
+    "canalMensajesDesc" to "Novas mensaxes de técnicos e clientes",
+    "canalSilencio" to "Silenciosas",
+    "canalSilencioDesc" to "Notificacións sen son (son desactivado en Axustes)",
+    "canalGeneral" to "Xeral",
+    "canalGeneralDesc" to "Notificacións xerais de ZeroHaus",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3534,6 +3585,12 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distâncias aproximadas a partir da província da sua casa",
     "tecSinUbicacion" to "Ative a localização ou adicione uma casa para ordenar por proximidade",
     "tecUsarUbicacion" to "Usar a minha localização",
+    "canalMensajes" to "Mensagens",
+    "canalMensajesDesc" to "Novas mensagens de técnicos e clientes",
+    "canalSilencio" to "Silenciosas",
+    "canalSilencioDesc" to "Notificações sem som (som desativado nas Definições)",
+    "canalGeneral" to "Geral",
+    "canalGeneralDesc" to "Notificações gerais do ZeroHaus",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4120,6 +4177,12 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distances approximatives depuis la province de votre logement",
     "tecSinUbicacion" to "Activez la localisation ou ajoutez un logement pour trier par proximité",
     "tecUsarUbicacion" to "Utiliser ma position",
+    "canalMensajes" to "Messages",
+    "canalMensajesDesc" to "Nouveaux messages des professionnels et des clients",
+    "canalSilencio" to "Silencieuses",
+    "canalSilencioDesc" to "Notifications sans son (son désactivé dans les Paramètres)",
+    "canalGeneral" to "Général",
+    "canalGeneralDesc" to "Notifications générales de ZeroHaus",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4706,6 +4769,12 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Ungefähre Entfernungen ab der Provinz deiner Wohnung",
     "tecSinUbicacion" to "Aktiviere den Standort oder füge eine Wohnung hinzu, um nach Nähe zu sortieren",
     "tecUsarUbicacion" to "Meinen Standort verwenden",
+    "canalMensajes" to "Nachrichten",
+    "canalMensajesDesc" to "Neue Nachrichten von Fachleuten und Kunden",
+    "canalSilencio" to "Lautlos",
+    "canalSilencioDesc" to "Benachrichtigungen ohne Ton (Ton in den Einstellungen deaktiviert)",
+    "canalGeneral" to "Allgemein",
+    "canalGeneralDesc" to "Allgemeine Benachrichtigungen von ZeroHaus",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5292,6 +5361,12 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distanze approssimative dalla provincia della tua abitazione",
     "tecSinUbicacion" to "Attiva la posizione o aggiungi un'abitazione per ordinare per vicinanza",
     "tecUsarUbicacion" to "Usa la mia posizione",
+    "canalMensajes" to "Messaggi",
+    "canalMensajesDesc" to "Nuovi messaggi da tecnici e clienti",
+    "canalSilencio" to "Silenziose",
+    "canalSilencioDesc" to "Notifiche senza suono (suono disattivato nelle Impostazioni)",
+    "canalGeneral" to "Generali",
+    "canalGeneralDesc" to "Notifiche generali di ZeroHaus",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5878,6 +5953,12 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "مسافات تقريبية من مقاطعة منزلك",
     "tecSinUbicacion" to "فعّل الموقع أو أضف منزلًا للترتيب حسب القرب",
     "tecUsarUbicacion" to "استخدام موقعي",
+    "canalMensajes" to "الرسائل",
+    "canalMensajesDesc" to "رسائل جديدة من المهنيين والعملاء",
+    "canalSilencio" to "صامتة",
+    "canalSilencioDesc" to "إشعارات بدون صوت (الصوت متوقف في الإعدادات)",
+    "canalGeneral" to "عام",
+    "canalGeneralDesc" to "إشعارات ZeroHaus العامة",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6464,6 +6545,12 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "距离为从您住宅所在省份起算的近似值",
     "tecSinUbicacion" to "开启定位或添加住宅以按距离排序",
     "tecUsarUbicacion" to "使用我的位置",
+    "canalMensajes" to "消息",
+    "canalMensajesDesc" to "来自专业人员和客户的新消息",
+    "canalSilencio" to "静音",
+    "canalSilencioDesc" to "无声通知（已在设置中关闭声音）",
+    "canalGeneral" to "常规",
+    "canalGeneralDesc" to "ZeroHaus 常规通知",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7050,6 +7137,12 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Distanțe aproximative de la provincia locuinței tale",
     "tecSinUbicacion" to "Activează locația sau adaugă o locuință pentru a sorta după apropiere",
     "tecUsarUbicacion" to "Folosește locația mea",
+    "canalMensajes" to "Mesaje",
+    "canalMensajesDesc" to "Mesaje noi de la tehnicieni și clienți",
+    "canalSilencio" to "Silențioase",
+    "canalSilencioDesc" to "Notificări fără sunet (sunet dezactivat în Setări)",
+    "canalGeneral" to "Generale",
+    "canalGeneralDesc" to "Notificări generale ZeroHaus",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7636,6 +7729,12 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Geschatte afstanden vanaf de provincie van je woning",
     "tecSinUbicacion" to "Zet je locatie aan of voeg een woning toe om op afstand te sorteren",
     "tecUsarUbicacion" to "Mijn locatie gebruiken",
+    "canalMensajes" to "Berichten",
+    "canalMensajesDesc" to "Nieuwe berichten van vakmensen en klanten",
+    "canalSilencio" to "Stil",
+    "canalSilencioDesc" to "Meldingen zonder geluid (geluid uitgeschakeld in Instellingen)",
+    "canalGeneral" to "Algemeen",
+    "canalGeneralDesc" to "Algemene meldingen van ZeroHaus",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8222,4 +8321,10 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "tecDistanciasVivienda" to "Przybliżone odległości od prowincji twojego mieszkania",
     "tecSinUbicacion" to "Włącz lokalizację lub dodaj mieszkanie, aby sortować według odległości",
     "tecUsarUbicacion" to "Użyj mojej lokalizacji",
+    "canalMensajes" to "Wiadomości",
+    "canalMensajesDesc" to "Nowe wiadomości od fachowców i klientów",
+    "canalSilencio" to "Ciche",
+    "canalSilencioDesc" to "Powiadomienia bez dźwięku (dźwięk wyłączony w Ustawieniach)",
+    "canalGeneral" to "Ogólne",
+    "canalGeneralDesc" to "Ogólne powiadomienia ZeroHaus",
 ), respaldo = espanol) }
