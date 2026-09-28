@@ -6,623 +6,668 @@ import androidx.compose.runtime.compositionLocalOf
  * Todos los textos de la interfaz. Hay una instancia por idioma (14) en
  * Traducciones.kt y la actual se obtiene con `LocalCadenas.current` en
  * Compose o con [getCadenas] fuera de Compose.
+ *
+ * Cada idioma es un mapa clave → texto y cada propiedad lee su clave. No se
+ * usa un constructor con un parámetro por texto porque la JVM no admite más
+ * de 255 parámetros por método: con cientos de textos la clase no se podía
+ * cargar en los tests ni en las vistas previas de Compose. Si a un idioma le
+ * falta un texto, se muestra el de [respaldo] (español).
  */
-data class AppCadenas(
+class AppCadenas internal constructor(
+    internal val textos: Map<String, String>,
+    private val respaldo: AppCadenas? = null
+) {
+    private fun t(clave: String): String = textos[clave] ?: respaldo?.t(clave) ?: clave
+
     // Common
-    val volver: String,
-    val guardar: String,
-    val cancelar: String,
-    val cerrar: String,
-    val cerrarSesion: String,
-    val mostrar: String,
-    val ocultar: String,
-    val emailPlaceholder: String,
-    val emailError: String,
-    val contrasena: String,
-    val contrasenaPlaceholder: String,
-    val contrasenaError: String,
+    val volver: String get() = t("volver")
+    val guardar: String get() = t("guardar")
+    val cancelar: String get() = t("cancelar")
+    val cerrar: String get() = t("cerrar")
+    val cerrarSesion: String get() = t("cerrarSesion")
+    val mostrar: String get() = t("mostrar")
+    val ocultar: String get() = t("ocultar")
+    val emailPlaceholder: String get() = t("emailPlaceholder")
+    val emailError: String get() = t("emailError")
+    val contrasena: String get() = t("contrasena")
+    val contrasenaPlaceholder: String get() = t("contrasenaPlaceholder")
+    val contrasenaError: String get() = t("contrasenaError")
+
     // Auth - Login
-    val loginTitulo: String,
-    val loginSlogan: String,
-    val loginOlvidaste: String,
-    val loginBoton: String,
-    val loginCrearCuenta: String,
+    val loginTitulo: String get() = t("loginTitulo")
+    val loginSlogan: String get() = t("loginSlogan")
+    val loginOlvidaste: String get() = t("loginOlvidaste")
+    val loginBoton: String get() = t("loginBoton")
+    val loginCrearCuenta: String get() = t("loginCrearCuenta")
+
     // Auth - Registro
-    val registroTitulo: String,
-    val registroSubtitulo: String,
-    val registroNombre: String,
-    val registroNombrePlaceholder: String,
-    val registroNombreError: String,
-    val registroTipoUsuario: String,
-    val registroContrasenaNumeroLetra: String,
-    val registroConfirmar: String,
-    val registroConfirmarPlaceholder: String,
-    val registroContrasenasNoCoinciden: String,
-    val registroBoton: String,
-    val registroYaTieneCuenta: String,
-    val registroIniciarSesion: String,
-    val tipoPropietario: String,
-    val tipoTecnico: String,
-    val tipoEmpresa: String,
+    val registroTitulo: String get() = t("registroTitulo")
+    val registroSubtitulo: String get() = t("registroSubtitulo")
+    val registroNombre: String get() = t("registroNombre")
+    val registroNombrePlaceholder: String get() = t("registroNombrePlaceholder")
+    val registroNombreError: String get() = t("registroNombreError")
+    val registroTipoUsuario: String get() = t("registroTipoUsuario")
+    val registroContrasenaNumeroLetra: String get() = t("registroContrasenaNumeroLetra")
+    val registroConfirmar: String get() = t("registroConfirmar")
+    val registroConfirmarPlaceholder: String get() = t("registroConfirmarPlaceholder")
+    val registroContrasenasNoCoinciden: String get() = t("registroContrasenasNoCoinciden")
+    val registroBoton: String get() = t("registroBoton")
+    val registroYaTieneCuenta: String get() = t("registroYaTieneCuenta")
+    val registroIniciarSesion: String get() = t("registroIniciarSesion")
+    val tipoPropietario: String get() = t("tipoPropietario")
+    val tipoTecnico: String get() = t("tipoTecnico")
+    val tipoEmpresa: String get() = t("tipoEmpresa")
+
     // Auth - Recuperar
-    val recuperarTitulo: String,
-    val recuperarSubtitulo: String,
-    val recuperarBoton: String,
-    val recuperarVolver: String,
-    val recuperarExitoTitulo: String,
-    val recuperarExitoMensaje: String,
-    val recuperarSpam: String,
-    val recuperarReenviar: String,
-    val recuperarEnviando: String,
+    val recuperarTitulo: String get() = t("recuperarTitulo")
+    val recuperarSubtitulo: String get() = t("recuperarSubtitulo")
+    val recuperarBoton: String get() = t("recuperarBoton")
+    val recuperarVolver: String get() = t("recuperarVolver")
+    val recuperarExitoTitulo: String get() = t("recuperarExitoTitulo")
+    val recuperarExitoMensaje: String get() = t("recuperarExitoMensaje")
+    val recuperarSpam: String get() = t("recuperarSpam")
+    val recuperarReenviar: String get() = t("recuperarReenviar")
+    val recuperarEnviando: String get() = t("recuperarEnviando")
+
     // Splash
-    val splashSlogan: String,
+    val splashSlogan: String get() = t("splashSlogan")
+
     // Tabs
-    val tabInicio: String,
-    val tabMensajes: String,
-    val tabExplorar: String,
-    val tabMas: String,
+    val tabInicio: String get() = t("tabInicio")
+    val tabMensajes: String get() = t("tabMensajes")
+    val tabExplorar: String get() = t("tabExplorar")
+    val tabMas: String get() = t("tabMas")
+
     // Explorar
-    val explorarTitulo: String,
-    val explorarSubtitulo: String,
-    val explorarBuscarTecnicos: String,
-    val explorarBuscarTecnicosSub: String,
-    val explorarMapaTecnicos: String,
-    val explorarMapaTecnicosSub: String,
-    val explorarRankings: String,
-    val explorarRankingsSub: String,
-    val explorarGraficas: String,
-    val explorarHistorial: String,
+    val explorarTitulo: String get() = t("explorarTitulo")
+    val explorarSubtitulo: String get() = t("explorarSubtitulo")
+    val explorarBuscarTecnicos: String get() = t("explorarBuscarTecnicos")
+    val explorarBuscarTecnicosSub: String get() = t("explorarBuscarTecnicosSub")
+    val explorarMapaTecnicos: String get() = t("explorarMapaTecnicos")
+    val explorarMapaTecnicosSub: String get() = t("explorarMapaTecnicosSub")
+    val explorarRankings: String get() = t("explorarRankings")
+    val explorarRankingsSub: String get() = t("explorarRankingsSub")
+    val explorarGraficas: String get() = t("explorarGraficas")
+    val explorarHistorial: String get() = t("explorarHistorial")
+
     // Más
-    val masTitulo: String,
-    val masSubtitulo: String,
-    val masPerfil: String,
-    val masPerfilSub: String,
-    val masViviendas: String,
-    val masAjustes: String,
-    val masAjustesSub: String,
-    val masSobreApp: String,
-    val masSobreAppSub: String,
+    val masTitulo: String get() = t("masTitulo")
+    val masSubtitulo: String get() = t("masSubtitulo")
+    val masPerfil: String get() = t("masPerfil")
+    val masPerfilSub: String get() = t("masPerfilSub")
+    val masViviendas: String get() = t("masViviendas")
+    val masAjustes: String get() = t("masAjustes")
+    val masAjustesSub: String get() = t("masAjustesSub")
+    val masSobreApp: String get() = t("masSobreApp")
+    val masSobreAppSub: String get() = t("masSobreAppSub")
+
     // Panel
-    val panelSaludo: String,
-    val panelSubtitulo: String,
-    val panelVivienda: String,
-    val panelSinVivienda: String,
-    val panelConsumo: String,
-    val panelEmisiones: String,
-    val panelCoste: String,
-    val panelSinDatos: String,
-    val panelVerInforme: String,
-    val panelCrearPreestudio: String,
-    val panelAccionesRapidas: String,
-    val panelNuevoPreestudio: String,
-    val panelNuevoPreestudioSub: String,
-    val panelMisViviendasSub: String,
-    val panelBuscarTecnicosSub: String,
-    val panelHistorialInformesSub: String,
-    val panelGraficasSub: String,
-    val panelNotificaciones: String,
-    val panelSinNotificaciones: String,
-    val panelMarcarLeidas: String,
+    val panelSaludo: String get() = t("panelSaludo")
+    val panelSubtitulo: String get() = t("panelSubtitulo")
+    val panelVivienda: String get() = t("panelVivienda")
+    val panelSinVivienda: String get() = t("panelSinVivienda")
+    val panelConsumo: String get() = t("panelConsumo")
+    val panelEmisiones: String get() = t("panelEmisiones")
+    val panelCoste: String get() = t("panelCoste")
+    val panelSinDatos: String get() = t("panelSinDatos")
+    val panelVerInforme: String get() = t("panelVerInforme")
+    val panelCrearPreestudio: String get() = t("panelCrearPreestudio")
+    val panelAccionesRapidas: String get() = t("panelAccionesRapidas")
+    val panelNuevoPreestudio: String get() = t("panelNuevoPreestudio")
+    val panelNuevoPreestudioSub: String get() = t("panelNuevoPreestudioSub")
+    val panelMisViviendasSub: String get() = t("panelMisViviendasSub")
+    val panelBuscarTecnicosSub: String get() = t("panelBuscarTecnicosSub")
+    val panelHistorialInformesSub: String get() = t("panelHistorialInformesSub")
+    val panelGraficasSub: String get() = t("panelGraficasSub")
+    val panelNotificaciones: String get() = t("panelNotificaciones")
+    val panelSinNotificaciones: String get() = t("panelSinNotificaciones")
+    val panelMarcarLeidas: String get() = t("panelMarcarLeidas")
+
     // Ajustes
-    val ajustesTitulo: String,
-    val ajustesSubtitulo: String,
-    val ajustesNotificaciones: String,
-    val ajustesPush: String,
-    val ajustesPushSub: String,
-    val ajustesEmailSub: String,
-    val ajustesSonido: String,
-    val ajustesSonidoSub: String,
-    val ajustesApariencia: String,
-    val ajustesTema: String,
-    val ajustesTemaClaro: String,
-    val ajustesTemaDark: String,
-    val ajustesTemaSystem: String,
-    val ajustesPreferencias: String,
-    val ajustesIdioma: String,
-    val ajustesUnidadEnergia: String,
-    val ajustesMoneda: String,
-    val ajustesGuardar: String,
+    val ajustesTitulo: String get() = t("ajustesTitulo")
+    val ajustesSubtitulo: String get() = t("ajustesSubtitulo")
+    val ajustesNotificaciones: String get() = t("ajustesNotificaciones")
+    val ajustesPush: String get() = t("ajustesPush")
+    val ajustesPushSub: String get() = t("ajustesPushSub")
+    val ajustesEmailSub: String get() = t("ajustesEmailSub")
+    val ajustesSonido: String get() = t("ajustesSonido")
+    val ajustesSonidoSub: String get() = t("ajustesSonidoSub")
+    val ajustesApariencia: String get() = t("ajustesApariencia")
+    val ajustesTema: String get() = t("ajustesTema")
+    val ajustesTemaClaro: String get() = t("ajustesTemaClaro")
+    val ajustesTemaDark: String get() = t("ajustesTemaDark")
+    val ajustesTemaSystem: String get() = t("ajustesTemaSystem")
+    val ajustesPreferencias: String get() = t("ajustesPreferencias")
+    val ajustesIdioma: String get() = t("ajustesIdioma")
+    val ajustesUnidadEnergia: String get() = t("ajustesUnidadEnergia")
+    val ajustesMoneda: String get() = t("ajustesMoneda")
+    val ajustesGuardar: String get() = t("ajustesGuardar")
+
     // Sobre App
-    val sobreTitulo: String,
-    val sobreVersion: String,
-    val sobreQueEs: String,
-    val sobreDescripcion: String,
-    val sobreFuncionalidades: String,
-    val sobreCopyright: String,
-    val sobreFuncPreestudios: String,
-    val sobreFuncViviendas: String,
-    val sobreFuncBusqueda: String,
-    val sobreFuncChat: String,
-    val sobreFuncContacto: String,
-    val sobreFuncGraficas: String,
-    val sobreFuncValoraciones: String,
+    val sobreTitulo: String get() = t("sobreTitulo")
+    val sobreVersion: String get() = t("sobreVersion")
+    val sobreQueEs: String get() = t("sobreQueEs")
+    val sobreDescripcion: String get() = t("sobreDescripcion")
+    val sobreFuncionalidades: String get() = t("sobreFuncionalidades")
+    val sobreCopyright: String get() = t("sobreCopyright")
+    val sobreFuncPreestudios: String get() = t("sobreFuncPreestudios")
+    val sobreFuncViviendas: String get() = t("sobreFuncViviendas")
+    val sobreFuncBusqueda: String get() = t("sobreFuncBusqueda")
+    val sobreFuncChat: String get() = t("sobreFuncChat")
+    val sobreFuncContacto: String get() = t("sobreFuncContacto")
+    val sobreFuncGraficas: String get() = t("sobreFuncGraficas")
+    val sobreFuncValoraciones: String get() = t("sobreFuncValoraciones")
+
     // Perfil
-    val perfilTitulo: String,
-    val perfilSubtitulo: String,
-    val perfilDatosPersonales: String,
-    val perfilNombrePlaceholder: String,
-    val perfilEmailLabel: String,
-    val perfilTipoUsuarioLabel: String,
-    val perfilFotoTexto: String,
-    val perfilGuardar: String,
-    val perfilGuardado: String,
-    val perfilTecnicoTitulo: String,
-    val perfilEspecialidades: String,
-    val perfilDescripcionProf: String,
-    val perfilDescripcionPlaceholder: String,
-    val perfilTelefonoPlaceholder: String,
-    val perfilEmailContacto: String,
-    val perfilEmailContactoPlaceholder: String,
-    val perfilCuenta: String,
+    val perfilTitulo: String get() = t("perfilTitulo")
+    val perfilSubtitulo: String get() = t("perfilSubtitulo")
+    val perfilDatosPersonales: String get() = t("perfilDatosPersonales")
+    val perfilNombrePlaceholder: String get() = t("perfilNombrePlaceholder")
+    val perfilEmailLabel: String get() = t("perfilEmailLabel")
+    val perfilTipoUsuarioLabel: String get() = t("perfilTipoUsuarioLabel")
+    val perfilFotoTexto: String get() = t("perfilFotoTexto")
+    val perfilGuardar: String get() = t("perfilGuardar")
+    val perfilGuardado: String get() = t("perfilGuardado")
+    val perfilTecnicoTitulo: String get() = t("perfilTecnicoTitulo")
+    val perfilEspecialidades: String get() = t("perfilEspecialidades")
+    val perfilDescripcionProf: String get() = t("perfilDescripcionProf")
+    val perfilDescripcionPlaceholder: String get() = t("perfilDescripcionPlaceholder")
+    val perfilTelefonoPlaceholder: String get() = t("perfilTelefonoPlaceholder")
+    val perfilEmailContacto: String get() = t("perfilEmailContacto")
+    val perfilEmailContactoPlaceholder: String get() = t("perfilEmailContactoPlaceholder")
+    val perfilCuenta: String get() = t("perfilCuenta")
+
     // Ajustes - Notificaciones avanzadas
-    val ajustesEmail: String,
-    val ajustesNotifMensajes: String,
-    val ajustesNotifMensajesSub: String,
-    val ajustesNotifValoraciones: String,
-    val ajustesNotifValoracionesSub: String,
+    val ajustesEmail: String get() = t("ajustesEmail")
+    val ajustesNotifMensajes: String get() = t("ajustesNotifMensajes")
+    val ajustesNotifMensajesSub: String get() = t("ajustesNotifMensajesSub")
+    val ajustesNotifValoraciones: String get() = t("ajustesNotifValoraciones")
+    val ajustesNotifValoracionesSub: String get() = t("ajustesNotifValoracionesSub")
+
     // Ajustes - Seguridad de la cuenta
-    val ajustesSeguridadCuenta: String,
-    val ajustesCambiarPassword: String,
-    val ajustesCambiarPasswordSub: String,
-    val ajustesCerrarSesionSub: String,
-    val ajustesEliminarCuenta: String,
-    val ajustesEliminarCuentaSub: String,
+    val ajustesSeguridadCuenta: String get() = t("ajustesSeguridadCuenta")
+    val ajustesCambiarPassword: String get() = t("ajustesCambiarPassword")
+    val ajustesCambiarPasswordSub: String get() = t("ajustesCambiarPasswordSub")
+    val ajustesCerrarSesionSub: String get() = t("ajustesCerrarSesionSub")
+    val ajustesEliminarCuenta: String get() = t("ajustesEliminarCuenta")
+    val ajustesEliminarCuentaSub: String get() = t("ajustesEliminarCuentaSub")
+
     // Ajustes - Diálogo cambiar contraseña
-    val ajustesPasswordActual: String,
-    val ajustesPasswordNueva: String,
-    val ajustesPasswordConfirmar: String,
-    val ajustesPasswordCambiada: String,
+    val ajustesPasswordActual: String get() = t("ajustesPasswordActual")
+    val ajustesPasswordNueva: String get() = t("ajustesPasswordNueva")
+    val ajustesPasswordConfirmar: String get() = t("ajustesPasswordConfirmar")
+    val ajustesPasswordCambiada: String get() = t("ajustesPasswordCambiada")
+
     // Ajustes - Diálogo eliminar cuenta
-    val ajustesEliminarTitulo: String,
-    val ajustesEliminarMensaje: String,
-    val ajustesEliminarConfirmarBoton: String,
-    val ajustesEliminarError: String,
+    val ajustesEliminarTitulo: String get() = t("ajustesEliminarTitulo")
+    val ajustesEliminarMensaje: String get() = t("ajustesEliminarMensaje")
+    val ajustesEliminarConfirmarBoton: String get() = t("ajustesEliminarConfirmarBoton")
+    val ajustesEliminarError: String get() = t("ajustesEliminarError")
+
     // Ajustes - Privacidad y legal
-    val ajustesPrivacidadLegal: String,
-    val ajustesPoliticaPrivacidad: String,
-    val ajustesPoliticaPrivacidadSub: String,
-    val ajustesTerminos: String,
-    val ajustesTerminosSub: String,
-    val ajustesGestionDatos: String,
-    val ajustesGestionDatosSub: String,
+    val ajustesPrivacidadLegal: String get() = t("ajustesPrivacidadLegal")
+    val ajustesPoliticaPrivacidad: String get() = t("ajustesPoliticaPrivacidad")
+    val ajustesPoliticaPrivacidadSub: String get() = t("ajustesPoliticaPrivacidadSub")
+    val ajustesTerminos: String get() = t("ajustesTerminos")
+    val ajustesTerminosSub: String get() = t("ajustesTerminosSub")
+    val ajustesGestionDatos: String get() = t("ajustesGestionDatos")
+    val ajustesGestionDatosSub: String get() = t("ajustesGestionDatosSub")
+
     // Ajustes - Ayuda y soporte
-    val ajustesAyudaSoporte: String,
-    val ajustesValorar: String,
-    val ajustesValorarSub: String,
-    val ajustesCompartir: String,
-    val ajustesCompartirSub: String,
-    val ajustesCompartirTexto: String,
-    val ajustesContactar: String,
-    val ajustesContactarSub: String,
-    val ajustesContactarAsunto: String,
+    val ajustesAyudaSoporte: String get() = t("ajustesAyudaSoporte")
+    val ajustesValorar: String get() = t("ajustesValorar")
+    val ajustesValorarSub: String get() = t("ajustesValorarSub")
+    val ajustesCompartir: String get() = t("ajustesCompartir")
+    val ajustesCompartirSub: String get() = t("ajustesCompartirSub")
+    val ajustesCompartirTexto: String get() = t("ajustesCompartirTexto")
+    val ajustesContactar: String get() = t("ajustesContactar")
+    val ajustesContactarSub: String get() = t("ajustesContactarSub")
+    val ajustesContactarAsunto: String get() = t("ajustesContactarAsunto")
+
     // Ajustes - Información
-    val ajustesInformacion: String,
-    val ajustesVersionLabel: String,
+    val ajustesInformacion: String get() = t("ajustesInformacion")
+    val ajustesVersionLabel: String get() = t("ajustesVersionLabel")
+
     // Suscripción / pago (profesionales)
-    val subTitulo: String,
-    val subPlanDestacado: String,
-    val subPlanVerificado: String,
-    val subSinPlan: String,
-    val subDestacadoEstadoDesc: String,
-    val subVerificadoEstadoDesc: String,
-    val subSinPlanDesc: String,
-    val subEligePlan: String,
-    val subVerificadoTrimestral: String,
-    val subVerificadoTrimestralDet: String,
-    val subVerificadoAnual: String,
-    val subVerificadoAnualDet: String,
-    val subDestacado: String,
-    val subDestacadoDet: String,
-    val subDestacadoAnuncios: String,
-    val subDestacadoAnunciosDet: String,
-    val subMejorValor: String,
-    val subPlanActual: String,
-    val subSuscribirme: String,
-    val subVentajasTitulo: String,
-    val subVentaja1: String,
-    val subVentaja2: String,
-    val subVentaja3: String,
-    val subVentaja4: String,
-    val subGestionar: String,
-    val subRestaurar: String,
-    val subActivada: String,
-    val subNadaRestaurar: String,
-    val subPlayNoDisponible: String,
+    val subTitulo: String get() = t("subTitulo")
+    val subPlanDestacado: String get() = t("subPlanDestacado")
+    val subPlanVerificado: String get() = t("subPlanVerificado")
+    val subSinPlan: String get() = t("subSinPlan")
+    val subDestacadoEstadoDesc: String get() = t("subDestacadoEstadoDesc")
+    val subVerificadoEstadoDesc: String get() = t("subVerificadoEstadoDesc")
+    val subSinPlanDesc: String get() = t("subSinPlanDesc")
+    val subEligePlan: String get() = t("subEligePlan")
+    val subVerificadoTrimestral: String get() = t("subVerificadoTrimestral")
+    val subVerificadoTrimestralDet: String get() = t("subVerificadoTrimestralDet")
+    val subVerificadoAnual: String get() = t("subVerificadoAnual")
+    val subVerificadoAnualDet: String get() = t("subVerificadoAnualDet")
+    val subDestacado: String get() = t("subDestacado")
+    val subDestacadoDet: String get() = t("subDestacadoDet")
+    val subDestacadoAnuncios: String get() = t("subDestacadoAnuncios")
+    val subDestacadoAnunciosDet: String get() = t("subDestacadoAnunciosDet")
+    val subMejorValor: String get() = t("subMejorValor")
+    val subPlanActual: String get() = t("subPlanActual")
+    val subSuscribirme: String get() = t("subSuscribirme")
+    val subVentajasTitulo: String get() = t("subVentajasTitulo")
+    val subVentaja1: String get() = t("subVentaja1")
+    val subVentaja2: String get() = t("subVentaja2")
+    val subVentaja3: String get() = t("subVentaja3")
+    val subVentaja4: String get() = t("subVentaja4")
+    val subGestionar: String get() = t("subGestionar")
+    val subRestaurar: String get() = t("subRestaurar")
+    val subActivada: String get() = t("subActivada")
+    val subNadaRestaurar: String get() = t("subNadaRestaurar")
+    val subPlayNoDisponible: String get() = t("subPlayNoDisponible")
+
     // Común profesional
-    val comReintentar: String,
-    val comOpiniones: String,
+    val comReintentar: String get() = t("comReintentar")
+    val comOpiniones: String get() = t("comOpiniones")
+
     // Menú "Más" del profesional (MainScaffoldTecnico)
-    val tecTabClientes: String,
-    val tecCuenta: String,
-    val tecPerfil: String,
-    val tecPerfilSub: String,
-    val tecPerfilPublico: String,
-    val tecPerfilPublicoSub: String,
-    val tecMiSuscripcion: String,
-    val tecMiSuscripcionSub: String,
-    val tecAjustesSub: String,
-    val tecSobreApp: String,
-    val tecSobreAppSub: String,
+    val tecTabClientes: String get() = t("tecTabClientes")
+    val tecCuenta: String get() = t("tecCuenta")
+    val tecPerfil: String get() = t("tecPerfil")
+    val tecPerfilSub: String get() = t("tecPerfilSub")
+    val tecPerfilPublico: String get() = t("tecPerfilPublico")
+    val tecPerfilPublicoSub: String get() = t("tecPerfilPublicoSub")
+    val tecMiSuscripcion: String get() = t("tecMiSuscripcion")
+    val tecMiSuscripcionSub: String get() = t("tecMiSuscripcionSub")
+    val tecAjustesSub: String get() = t("tecAjustesSub")
+    val tecSobreApp: String get() = t("tecSobreApp")
+    val tecSobreAppSub: String get() = t("tecSobreAppSub")
+
     // Rankings
-    val rankTitulo: String,
-    val rankSubtitulo: String,
-    val rankVacio: String,
+    val rankTitulo: String get() = t("rankTitulo")
+    val rankSubtitulo: String get() = t("rankSubtitulo")
+    val rankVacio: String get() = t("rankVacio")
+
     // Estadísticas del profesional
-    val estTitulo: String,
-    val estTuPlan: String,
-    val estDestacado: String,
-    val estVerificado: String,
-    val estGratuito: String,
-    val estDestacadoDesc: String,
-    val estVerificadoDesc: String,
-    val estGratuitoDesc: String,
-    val estSuscribeteCta: String,
-    val estReputacion: String,
-    val estValoracionMedia: String,
-    val estOpinionesCap: String,
+    val estTitulo: String get() = t("estTitulo")
+    val estTuPlan: String get() = t("estTuPlan")
+    val estDestacado: String get() = t("estDestacado")
+    val estVerificado: String get() = t("estVerificado")
+    val estGratuito: String get() = t("estGratuito")
+    val estDestacadoDesc: String get() = t("estDestacadoDesc")
+    val estVerificadoDesc: String get() = t("estVerificadoDesc")
+    val estGratuitoDesc: String get() = t("estGratuitoDesc")
+    val estSuscribeteCta: String get() = t("estSuscribeteCta")
+    val estReputacion: String get() = t("estReputacion")
+    val estValoracionMedia: String get() = t("estValoracionMedia")
+    val estOpinionesCap: String get() = t("estOpinionesCap")
+
     // Común profesional (2)
-    val comAbrirChat: String,
-    val comFiltros: String,
-    val comVerPerfilCompleto: String,
-    val comValoraciones: String,
+    val comAbrirChat: String get() = t("comAbrirChat")
+    val comFiltros: String get() = t("comFiltros")
+    val comVerPerfilCompleto: String get() = t("comVerPerfilCompleto")
+    val comValoraciones: String get() = t("comValoraciones")
+
     // Mis clientes (profesional)
-    val cliTitulo: String,
-    val cliConversaciones: String,
-    val cliVacioTitulo: String,
-    val cliVacioSub: String,
+    val cliTitulo: String get() = t("cliTitulo")
+    val cliConversaciones: String get() = t("cliConversaciones")
+    val cliVacioTitulo: String get() = t("cliVacioTitulo")
+    val cliVacioSub: String get() = t("cliVacioSub")
+
     // Directorio de profesionales (TecnicosScreen)
-    val tecDirTitulo: String,
-    val tecDirSubtitulo: String,
-    val tecBuscarPlaceholder: String,
-    val tecSinFiltro: String,
-    val tecTodos: String,
-    val tecChipTecnicos: String,
-    val tecChipEmpresas: String,
-    val tecOrdenValoracion: String,
-    val tecOrdenProximidad: String,
-    val tecFiltroPrefijo: String,
-    val tecNoCargar: String,
-    val tecNoEncontrados: String,
-    val tecPruebaOtro: String,
-    val tecEmpresaReformas: String,
-    val tecTecnicoCertificador: String,
-    val tecNuevo: String,
-    val tecProfesionalFallback: String,
+    val tecDirTitulo: String get() = t("tecDirTitulo")
+    val tecDirSubtitulo: String get() = t("tecDirSubtitulo")
+    val tecBuscarPlaceholder: String get() = t("tecBuscarPlaceholder")
+    val tecSinFiltro: String get() = t("tecSinFiltro")
+    val tecTodos: String get() = t("tecTodos")
+    val tecChipTecnicos: String get() = t("tecChipTecnicos")
+    val tecChipEmpresas: String get() = t("tecChipEmpresas")
+    val tecOrdenValoracion: String get() = t("tecOrdenValoracion")
+    val tecOrdenProximidad: String get() = t("tecOrdenProximidad")
+    val tecFiltroPrefijo: String get() = t("tecFiltroPrefijo")
+    val tecNoCargar: String get() = t("tecNoCargar")
+    val tecNoEncontrados: String get() = t("tecNoEncontrados")
+    val tecPruebaOtro: String get() = t("tecPruebaOtro")
+    val tecEmpresaReformas: String get() = t("tecEmpresaReformas")
+    val tecTecnicoCertificador: String get() = t("tecTecnicoCertificador")
+    val tecNuevo: String get() = t("tecNuevo")
+    val tecProfesionalFallback: String get() = t("tecProfesionalFallback")
+
     // Mapa de técnicos
-    val mapaTitulo: String,
-    val mapaSubtitulo: String,
-    val mapaAproximadas: String,
+    val mapaTitulo: String get() = t("mapaTitulo")
+    val mapaSubtitulo: String get() = t("mapaSubtitulo")
+    val mapaAproximadas: String get() = t("mapaAproximadas")
+
     // Perfil de un profesional (PerfilTecnicoScreen)
-    val perfTituloEmpresa: String,
-    val perfTituloTecnico: String,
-    val perfNoEncontrado: String,
-    val perfVistaPrevia: String,
-    val perfEspecialidades: String,
-    val perfEditarValoracion: String,
-    val perfEscribirValoracion: String,
-    val perfValoracionPublicada: String,
-    val perfValoraciones: String,
-    val perfSinValoraciones: String,
-    val perfExcelente: String,
-    val perfBueno: String,
-    val perfRegular: String,
-    val perfMalo: String,
-    val perfMuyMalo: String,
-    val perfValorarProfesional: String,
-    val perfPuntuacion: String,
-    val perfComentarioLabel: String,
-    val perfComentarioPlaceholder: String,
-    val perfSustituida: String,
-    val perfPublicar: String,
-    val perfContacto: String,
-    val perfSinContacto: String,
-    val perfChatear: String,
-    val perfLlamar: String,
+    val perfTituloEmpresa: String get() = t("perfTituloEmpresa")
+    val perfTituloTecnico: String get() = t("perfTituloTecnico")
+    val perfNoEncontrado: String get() = t("perfNoEncontrado")
+    val perfVistaPrevia: String get() = t("perfVistaPrevia")
+    val perfEspecialidades: String get() = t("perfEspecialidades")
+    val perfEditarValoracion: String get() = t("perfEditarValoracion")
+    val perfEscribirValoracion: String get() = t("perfEscribirValoracion")
+    val perfValoracionPublicada: String get() = t("perfValoracionPublicada")
+    val perfValoraciones: String get() = t("perfValoraciones")
+    val perfSinValoraciones: String get() = t("perfSinValoraciones")
+    val perfExcelente: String get() = t("perfExcelente")
+    val perfBueno: String get() = t("perfBueno")
+    val perfRegular: String get() = t("perfRegular")
+    val perfMalo: String get() = t("perfMalo")
+    val perfMuyMalo: String get() = t("perfMuyMalo")
+    val perfValorarProfesional: String get() = t("perfValorarProfesional")
+    val perfPuntuacion: String get() = t("perfPuntuacion")
+    val perfComentarioLabel: String get() = t("perfComentarioLabel")
+    val perfComentarioPlaceholder: String get() = t("perfComentarioPlaceholder")
+    val perfSustituida: String get() = t("perfSustituida")
+    val perfPublicar: String get() = t("perfPublicar")
+    val perfContacto: String get() = t("perfContacto")
+    val perfSinContacto: String get() = t("perfSinContacto")
+    val perfChatear: String get() = t("perfChatear")
+    val perfLlamar: String get() = t("perfLlamar")
+
     // Común profesional (3)
-    val comClienteFallback: String,
-    val comHoy: String,
-    val comAyer: String,
-    val ptecDeMedia: String,
+    val comClienteFallback: String get() = t("comClienteFallback")
+    val comHoy: String get() = t("comHoy")
+    val comAyer: String get() = t("comAyer")
+    val ptecDeMedia: String get() = t("ptecDeMedia")
+
     // Mis reseñas recibidas
-    val resTitulo: String,
-    val resVacioTitulo: String,
-    val resVacioSub: String,
+    val resTitulo: String get() = t("resTitulo")
+    val resVacioTitulo: String get() = t("resVacioTitulo")
+    val resVacioSub: String get() = t("resVacioSub")
+
     // Panel del profesional (PanelTecnicoScreen)
-    val ptecSinPerfilTitulo: String,
-    val ptecSinPerfilSub: String,
-    val ptecHola: String,
-    val ptecCtaSuscripcion: String,
-    val ptecPlanDestacadoActivo: String,
-    val ptecPlanVerificadoActivo: String,
-    val ptecSinPlan: String,
-    val ptecMejora: String,
-    val ptecEstadisticasSub: String,
+    val ptecSinPerfilTitulo: String get() = t("ptecSinPerfilTitulo")
+    val ptecSinPerfilSub: String get() = t("ptecSinPerfilSub")
+    val ptecHola: String get() = t("ptecHola")
+    val ptecCtaSuscripcion: String get() = t("ptecCtaSuscripcion")
+    val ptecPlanDestacadoActivo: String get() = t("ptecPlanDestacadoActivo")
+    val ptecPlanVerificadoActivo: String get() = t("ptecPlanVerificadoActivo")
+    val ptecSinPlan: String get() = t("ptecSinPlan")
+    val ptecMejora: String get() = t("ptecMejora")
+    val ptecEstadisticasSub: String get() = t("ptecEstadisticasSub")
+
     // Común cliente
-    val comCompartir: String,
-    val comEliminar: String,
-    val comUsuarioFallback: String,
+    val comCompartir: String get() = t("comCompartir")
+    val comEliminar: String get() = t("comEliminar")
+    val comUsuarioFallback: String get() = t("comUsuarioFallback")
+
     // Lista de chats (cliente)
-    val chatlNoConversaciones: String,
-    val chatlVacioSub: String,
-    val chatNombreFallback: String,
-    val chatSinMensajes: String,
+    val chatlNoConversaciones: String get() = t("chatlNoConversaciones")
+    val chatlVacioSub: String get() = t("chatlVacioSub")
+    val chatNombreFallback: String get() = t("chatNombreFallback")
+    val chatSinMensajes: String get() = t("chatSinMensajes")
+
     // Historial de informes
-    val histTitulo: String,
-    val histSubtitulo: String,
-    val histError: String,
-    val histVacioTitulo: String,
-    val histVacioSub: String,
-    val histCompararDos: String,
-    val histTocaPrimero: String,
-    val histTocaSegundo: String,
-    val histComparacionLista: String,
-    val histComparacion: String,
-    val histDelta: String,
-    val histEtiqueta: String,
-    val histConsumo: String,
-    val histEmisiones: String,
-    val histCoste: String,
-    val histMejoraDe: String,
-    val histAumentoDe: String,
-    val histEntreInformes: String,
-    val histSinCambio: String,
-    val histEliminarTitulo: String,
-    val histEliminarMsgA: String,
-    val histEliminarMsgB: String,
-    val histCompartirTitulo: String,
-    val histCompartirExterno: String,
-    val histEnviarTecnico: String,
-    val histInformeEnviado: String,
-    val histErrorEnviar: String,
-    val histSinChats: String,
-    val histEnviando: String,
-    val perfValorarRequiereChat: String,
-    val uAnio: String,
-    val efiA: String,
-    val efiB: String,
-    val efiC: String,
-    val efiD: String,
-    val efiE: String,
-    val efiF: String,
-    val efiG: String,
-    val recVentanas: String,
-    val recAislamiento: String,
-    val recAerotermia: String,
-    val recSolarTermica: String,
-    val recLedHalogenas: String,
-    val recLedResto: String,
-    val recFotovoltaica: String,
-    val recInverter: String,
-    val recElectrodomesticos: String,
-    val optVidrioSimple: String,
-    val optDobleAcristalamiento: String,
-    val optTriple: String,
-    val optSinAislamiento: String,
-    val optAislParcial: String,
-    val optAislCompleto: String,
-    val optCalderaGas: String,
-    val optElectrica: String,
-    val optAerotermia: String,
-    val optBiomasa: String,
-    val optSinCalefaccion: String,
-    val optGas: String,
-    val optElectrico: String,
-    val optSolarTermica: String,
-    val optSinAcs: String,
-    val optNorte: String,
-    val optSur: String,
-    val optEste: String,
-    val optOeste: String,
-    val optNoreste: String,
-    val optNoroeste: String,
-    val optSureste: String,
-    val optSuroeste: String,
-    val optMayoriaLed: String,
-    val optIlumMixta: String,
-    val optHalogenas: String,
-    val optPisoInterior: String,
-    val optPisoEsquina: String,
-    val optAdosado: String,
-    val optUnifamiliar: String,
-    val optSinRefrig: String,
-    val optInverter: String,
-    val optAAConvencional: String,
-    val optSinFv: String,
-    val optFvPequena: String,
-    val optFvMediana: String,
-    val optFvGrande: String,
-    val optElectroA: String,
-    val optElectroBC: String,
-    val optElectroD: String,
-    val infTitulo: String,
-    val infSubtitulo: String,
-    val infVacio: String,
-    val infVacioSub: String,
-    val infVivienda: String,
-    val infGenerado: String,
-    val infCalificacion: String,
-    val infEstado: String,
-    val infIndicadores: String,
-    val infCosteAnual: String,
-    val infPorM2: String,
-    val infRecomendaciones: String,
-    val infAhorroEstimado: String,
-    val infProfesionales: String,
-    val preTitulo: String,
-    val preSubtitulo: String,
-    val preViviendaEstudio: String,
-    val preCargandoViviendas: String,
-    val preDatosCargados: String,
-    val preDatosBasicos: String,
-    val preNombre: String,
-    val preNombreEj: String,
-    val preSuperficie: String,
-    val preAnio: String,
-    val preOcupantes: String,
-    val preTipoVivienda: String,
-    val preEnvolvente: String,
-    val preVentanas: String,
-    val preAislamiento: String,
-    val preSistemas: String,
-    val preCalefaccion: String,
-    val preAcs: String,
-    val preIluminacion: String,
-    val preRefrigeracion: String,
-    val preFotovoltaica: String,
-    val preElectrodomesticos: String,
-    val preUbicacion: String,
-    val preDireccion: String,
-    val preDireccionEj: String,
-    val preProvincia: String,
-    val preBuscaProvincia: String,
-    val preOrientacion: String,
-    val preGenerar: String,
-    val preUsarGuardada: String,
-    val preNuevaVivienda: String,
-    val errNombreVivienda: String,
-    val errSuperficie: String,
-    val errAnio: String,
-    val errOcupantes: String,
-    val errSeleccionaCampo: String,
-    val vivTitulo: String,
-    val vivRegistradas: String,
-    val vivAnadir: String,
-    val vivVacio: String,
-    val vivVacioSub: String,
-    val vivActiva: String,
-    val vivEditar: String,
-    val vivAnio: String,
-    val vivEliminarTitulo: String,
-    val vivEliminarMsg: String,
-    val vivEditarTitulo: String,
-    val vivNombre: String,
-    val grafTitulo: String,
-    val grafUltimos5De: String,
-    val grafInformes: String,
-    val grafSinDatos: String,
-    val grafSinDatosSub: String,
-    val grafResumen: String,
-    val grafInformesLbl: String,
-    val grafConsumoActual: String,
-    val grafReduccion: String,
-    val grafAumento: String,
-    val grafRespectoPrimero: String,
-    val grafEvolucionEtiqueta: String,
-    val grafConsumo: String,
-    val grafEmisiones: String,
-    val grafCoste: String,
-    val chatArchivoLimite: String,
-    val chatVerPerfil: String,
-    val chatConversacion: String,
-    val chatVacio: String,
-    val chatVacioSub: String,
-    val chatFoto: String,
-    val chatArchivo: String,
-    val chatEscribe: String,
-    val chatEnviar: String,
-    val chatEliminarTitulo: String,
-    val chatEliminarMsg: String,
-    val chatImagen: String,
-    val chatAbrirArchivo: String,
-    val chatAnadirDescripcion: String,
-    val pdfEnergiaFinal: String,
-    val pdfCo2Equiv: String,
-    val pdfEstimacionAnual: String,
-    val pdfMejoras: String,
-    val pdfGenerado: String,
-    val pdfAviso: String,
-    val pdfFecha: String,
-    val onbT1: String,
-    val onbD1: String,
-    val onbT2: String,
-    val onbD2: String,
-    val onbT3: String,
-    val onbD3: String,
-    val onbComenzar: String,
-    val onbSiguiente: String,
-    val vivEliminada: String,
-    val vivActualizada: String,
-    val perfCiudad: String,
-    val perfCiudadEj: String,
-    val perfCerrarSesionConfirma: String,
-    val perfFotoPerfil: String,
-    val simTitulo: String,
-    val simSub: String,
-    val simInversion: String,
-    val simAhorroAnual: String,
-    val simAmortizacion: String,
-    val simAnios: String,
-    val simCo2Evitado: String,
-    val simNuevaEtiqueta: String,
-    val simAviso: String,
-    val simSinMejoras: String,
-    val estActividad: String,
-    val estVisitas: String,
-    val estChats: String,
-    val estLlamadas: String,
-    val estConversion: String,
-    val estConversionDesc: String,
-    val estUltimos14: String,
-    val estSinActividad: String,
-    val estPosicion: String,
-    val estDe: String,
-    val estConDestacado: String,
-    val estVerPlanes: String,
-    val estPerfilCompleto: String,
-    val estPerfilOk: String,
-    val estFaltaDescripcion: String,
-    val estFaltaEspecialidades: String,
-    val estFaltaTelefono: String,
-    val estFaltaCiudad: String,
-    val estFaltaUbicacion: String,
-    val estEditarPerfil: String,
-    val iaTitulo: String,
-    val iaDescripcion: String,
-    val iaGenerar: String,
-    val iaGenerando: String,
-    val iaRegenerar: String,
-    val iaErrorNoDisponible: String,
-    val iaErrorLimite: String,
-    val iaHabitos: String,
-    val iaPrioridadAlta: String,
-    val iaPrioridadMedia: String,
-    val iaPrioridadBaja: String,
-    val iaCosteBajo: String,
-    val iaCosteMedio: String,
-    val iaCosteAlto: String,
-    val iaAviso: String,
-    val chatAnteriores: String,
-    val verTitulo: String,
-    val verSub: String,
-    val verRevisaSpam: String,
-    val verBoton: String,
-    val verReenviar: String,
-    val verReenviarEn: String,
-    val verCodigoEnviado: String,
-    val verErrIncorrecto: String,
-    val verErrCaducado: String,
-    val verErrIntentos: String,
-    val verErrLimite: String,
-    val verErrEnvio: String,
-    val verErrRed: String,
-    val verOtraCuenta: String,
-    val subPlanNoDisponible: String,
-    val subErrorIniciar: String,
-    val subErrorCompra: String,
-    val perfTelefonoPublico: String,
-    val perfTelefonoAyuda: String,
-    val espAislamiento: String,
-    val espVentanas: String,
-    val espCalefaccion: String,
-    val espFotovoltaica: String,
-    val espAerotermia: String,
-    val espAuditorias: String,
-    val espRehabilitacion: String,
-    val espBiomasa: String,
-    val espCertificacion: String,
-    val espConsultoria: String,
-    val infBuscarProfesionales: String,
-    val perfEspecialidadesAyuda: String,
-)
+    val histTitulo: String get() = t("histTitulo")
+    val histSubtitulo: String get() = t("histSubtitulo")
+    val histError: String get() = t("histError")
+    val histVacioTitulo: String get() = t("histVacioTitulo")
+    val histVacioSub: String get() = t("histVacioSub")
+    val histCompararDos: String get() = t("histCompararDos")
+    val histTocaPrimero: String get() = t("histTocaPrimero")
+    val histTocaSegundo: String get() = t("histTocaSegundo")
+    val histComparacionLista: String get() = t("histComparacionLista")
+    val histComparacion: String get() = t("histComparacion")
+    val histDelta: String get() = t("histDelta")
+    val histEtiqueta: String get() = t("histEtiqueta")
+    val histConsumo: String get() = t("histConsumo")
+    val histEmisiones: String get() = t("histEmisiones")
+    val histCoste: String get() = t("histCoste")
+    val histMejoraDe: String get() = t("histMejoraDe")
+    val histAumentoDe: String get() = t("histAumentoDe")
+    val histEntreInformes: String get() = t("histEntreInformes")
+    val histSinCambio: String get() = t("histSinCambio")
+    val histEliminarTitulo: String get() = t("histEliminarTitulo")
+    val histEliminarMsgA: String get() = t("histEliminarMsgA")
+    val histEliminarMsgB: String get() = t("histEliminarMsgB")
+    val histCompartirTitulo: String get() = t("histCompartirTitulo")
+    val histCompartirExterno: String get() = t("histCompartirExterno")
+    val histEnviarTecnico: String get() = t("histEnviarTecnico")
+    val histInformeEnviado: String get() = t("histInformeEnviado")
+    val histErrorEnviar: String get() = t("histErrorEnviar")
+    val histSinChats: String get() = t("histSinChats")
+    val histEnviando: String get() = t("histEnviando")
+    val perfValorarRequiereChat: String get() = t("perfValorarRequiereChat")
+    val uAnio: String get() = t("uAnio")
+    val efiA: String get() = t("efiA")
+    val efiB: String get() = t("efiB")
+    val efiC: String get() = t("efiC")
+    val efiD: String get() = t("efiD")
+    val efiE: String get() = t("efiE")
+    val efiF: String get() = t("efiF")
+    val efiG: String get() = t("efiG")
+    val recVentanas: String get() = t("recVentanas")
+    val recAislamiento: String get() = t("recAislamiento")
+    val recAerotermia: String get() = t("recAerotermia")
+    val recSolarTermica: String get() = t("recSolarTermica")
+    val recLedHalogenas: String get() = t("recLedHalogenas")
+    val recLedResto: String get() = t("recLedResto")
+    val recFotovoltaica: String get() = t("recFotovoltaica")
+    val recInverter: String get() = t("recInverter")
+    val recElectrodomesticos: String get() = t("recElectrodomesticos")
+    val optVidrioSimple: String get() = t("optVidrioSimple")
+    val optDobleAcristalamiento: String get() = t("optDobleAcristalamiento")
+    val optTriple: String get() = t("optTriple")
+    val optSinAislamiento: String get() = t("optSinAislamiento")
+    val optAislParcial: String get() = t("optAislParcial")
+    val optAislCompleto: String get() = t("optAislCompleto")
+    val optCalderaGas: String get() = t("optCalderaGas")
+    val optElectrica: String get() = t("optElectrica")
+    val optAerotermia: String get() = t("optAerotermia")
+    val optBiomasa: String get() = t("optBiomasa")
+    val optSinCalefaccion: String get() = t("optSinCalefaccion")
+    val optGas: String get() = t("optGas")
+    val optElectrico: String get() = t("optElectrico")
+    val optSolarTermica: String get() = t("optSolarTermica")
+    val optSinAcs: String get() = t("optSinAcs")
+    val optNorte: String get() = t("optNorte")
+    val optSur: String get() = t("optSur")
+    val optEste: String get() = t("optEste")
+    val optOeste: String get() = t("optOeste")
+    val optNoreste: String get() = t("optNoreste")
+    val optNoroeste: String get() = t("optNoroeste")
+    val optSureste: String get() = t("optSureste")
+    val optSuroeste: String get() = t("optSuroeste")
+    val optMayoriaLed: String get() = t("optMayoriaLed")
+    val optIlumMixta: String get() = t("optIlumMixta")
+    val optHalogenas: String get() = t("optHalogenas")
+    val optPisoInterior: String get() = t("optPisoInterior")
+    val optPisoEsquina: String get() = t("optPisoEsquina")
+    val optAdosado: String get() = t("optAdosado")
+    val optUnifamiliar: String get() = t("optUnifamiliar")
+    val optSinRefrig: String get() = t("optSinRefrig")
+    val optInverter: String get() = t("optInverter")
+    val optAAConvencional: String get() = t("optAAConvencional")
+    val optSinFv: String get() = t("optSinFv")
+    val optFvPequena: String get() = t("optFvPequena")
+    val optFvMediana: String get() = t("optFvMediana")
+    val optFvGrande: String get() = t("optFvGrande")
+    val optElectroA: String get() = t("optElectroA")
+    val optElectroBC: String get() = t("optElectroBC")
+    val optElectroD: String get() = t("optElectroD")
+    val infTitulo: String get() = t("infTitulo")
+    val infSubtitulo: String get() = t("infSubtitulo")
+    val infVacio: String get() = t("infVacio")
+    val infVacioSub: String get() = t("infVacioSub")
+    val infVivienda: String get() = t("infVivienda")
+    val infGenerado: String get() = t("infGenerado")
+    val infCalificacion: String get() = t("infCalificacion")
+    val infEstado: String get() = t("infEstado")
+    val infIndicadores: String get() = t("infIndicadores")
+    val infCosteAnual: String get() = t("infCosteAnual")
+    val infPorM2: String get() = t("infPorM2")
+    val infRecomendaciones: String get() = t("infRecomendaciones")
+    val infAhorroEstimado: String get() = t("infAhorroEstimado")
+    val infProfesionales: String get() = t("infProfesionales")
+    val preTitulo: String get() = t("preTitulo")
+    val preSubtitulo: String get() = t("preSubtitulo")
+    val preViviendaEstudio: String get() = t("preViviendaEstudio")
+    val preCargandoViviendas: String get() = t("preCargandoViviendas")
+    val preDatosCargados: String get() = t("preDatosCargados")
+    val preDatosBasicos: String get() = t("preDatosBasicos")
+    val preNombre: String get() = t("preNombre")
+    val preNombreEj: String get() = t("preNombreEj")
+    val preSuperficie: String get() = t("preSuperficie")
+    val preAnio: String get() = t("preAnio")
+    val preOcupantes: String get() = t("preOcupantes")
+    val preTipoVivienda: String get() = t("preTipoVivienda")
+    val preEnvolvente: String get() = t("preEnvolvente")
+    val preVentanas: String get() = t("preVentanas")
+    val preAislamiento: String get() = t("preAislamiento")
+    val preSistemas: String get() = t("preSistemas")
+    val preCalefaccion: String get() = t("preCalefaccion")
+    val preAcs: String get() = t("preAcs")
+    val preIluminacion: String get() = t("preIluminacion")
+    val preRefrigeracion: String get() = t("preRefrigeracion")
+    val preFotovoltaica: String get() = t("preFotovoltaica")
+    val preElectrodomesticos: String get() = t("preElectrodomesticos")
+    val preUbicacion: String get() = t("preUbicacion")
+    val preDireccion: String get() = t("preDireccion")
+    val preDireccionEj: String get() = t("preDireccionEj")
+    val preProvincia: String get() = t("preProvincia")
+    val preBuscaProvincia: String get() = t("preBuscaProvincia")
+    val preOrientacion: String get() = t("preOrientacion")
+    val preGenerar: String get() = t("preGenerar")
+    val preUsarGuardada: String get() = t("preUsarGuardada")
+    val preNuevaVivienda: String get() = t("preNuevaVivienda")
+    val errNombreVivienda: String get() = t("errNombreVivienda")
+    val errSuperficie: String get() = t("errSuperficie")
+    val errAnio: String get() = t("errAnio")
+    val errOcupantes: String get() = t("errOcupantes")
+    val errSeleccionaCampo: String get() = t("errSeleccionaCampo")
+    val vivTitulo: String get() = t("vivTitulo")
+    val vivRegistradas: String get() = t("vivRegistradas")
+    val vivAnadir: String get() = t("vivAnadir")
+    val vivVacio: String get() = t("vivVacio")
+    val vivVacioSub: String get() = t("vivVacioSub")
+    val vivActiva: String get() = t("vivActiva")
+    val vivEditar: String get() = t("vivEditar")
+    val vivAnio: String get() = t("vivAnio")
+    val vivEliminarTitulo: String get() = t("vivEliminarTitulo")
+    val vivEliminarMsg: String get() = t("vivEliminarMsg")
+    val vivEditarTitulo: String get() = t("vivEditarTitulo")
+    val vivNombre: String get() = t("vivNombre")
+    val grafTitulo: String get() = t("grafTitulo")
+    val grafUltimos5De: String get() = t("grafUltimos5De")
+    val grafInformes: String get() = t("grafInformes")
+    val grafSinDatos: String get() = t("grafSinDatos")
+    val grafSinDatosSub: String get() = t("grafSinDatosSub")
+    val grafResumen: String get() = t("grafResumen")
+    val grafInformesLbl: String get() = t("grafInformesLbl")
+    val grafConsumoActual: String get() = t("grafConsumoActual")
+    val grafReduccion: String get() = t("grafReduccion")
+    val grafAumento: String get() = t("grafAumento")
+    val grafRespectoPrimero: String get() = t("grafRespectoPrimero")
+    val grafEvolucionEtiqueta: String get() = t("grafEvolucionEtiqueta")
+    val grafConsumo: String get() = t("grafConsumo")
+    val grafEmisiones: String get() = t("grafEmisiones")
+    val grafCoste: String get() = t("grafCoste")
+    val chatArchivoLimite: String get() = t("chatArchivoLimite")
+    val chatVerPerfil: String get() = t("chatVerPerfil")
+    val chatConversacion: String get() = t("chatConversacion")
+    val chatVacio: String get() = t("chatVacio")
+    val chatVacioSub: String get() = t("chatVacioSub")
+    val chatFoto: String get() = t("chatFoto")
+    val chatArchivo: String get() = t("chatArchivo")
+    val chatEscribe: String get() = t("chatEscribe")
+    val chatEnviar: String get() = t("chatEnviar")
+    val chatEliminarTitulo: String get() = t("chatEliminarTitulo")
+    val chatEliminarMsg: String get() = t("chatEliminarMsg")
+    val chatImagen: String get() = t("chatImagen")
+    val chatAbrirArchivo: String get() = t("chatAbrirArchivo")
+    val chatAnadirDescripcion: String get() = t("chatAnadirDescripcion")
+    val pdfEnergiaFinal: String get() = t("pdfEnergiaFinal")
+    val pdfCo2Equiv: String get() = t("pdfCo2Equiv")
+    val pdfEstimacionAnual: String get() = t("pdfEstimacionAnual")
+    val pdfMejoras: String get() = t("pdfMejoras")
+    val pdfGenerado: String get() = t("pdfGenerado")
+    val pdfAviso: String get() = t("pdfAviso")
+    val pdfFecha: String get() = t("pdfFecha")
+    val onbT1: String get() = t("onbT1")
+    val onbD1: String get() = t("onbD1")
+    val onbT2: String get() = t("onbT2")
+    val onbD2: String get() = t("onbD2")
+    val onbT3: String get() = t("onbT3")
+    val onbD3: String get() = t("onbD3")
+    val onbComenzar: String get() = t("onbComenzar")
+    val onbSiguiente: String get() = t("onbSiguiente")
+    val vivEliminada: String get() = t("vivEliminada")
+    val vivActualizada: String get() = t("vivActualizada")
+    val perfCiudad: String get() = t("perfCiudad")
+    val perfCiudadEj: String get() = t("perfCiudadEj")
+    val perfCerrarSesionConfirma: String get() = t("perfCerrarSesionConfirma")
+    val perfFotoPerfil: String get() = t("perfFotoPerfil")
+    val simTitulo: String get() = t("simTitulo")
+    val simSub: String get() = t("simSub")
+    val simInversion: String get() = t("simInversion")
+    val simAhorroAnual: String get() = t("simAhorroAnual")
+    val simAmortizacion: String get() = t("simAmortizacion")
+    val simAnios: String get() = t("simAnios")
+    val simCo2Evitado: String get() = t("simCo2Evitado")
+    val simNuevaEtiqueta: String get() = t("simNuevaEtiqueta")
+    val simAviso: String get() = t("simAviso")
+    val simSinMejoras: String get() = t("simSinMejoras")
+    val estActividad: String get() = t("estActividad")
+    val estVisitas: String get() = t("estVisitas")
+    val estChats: String get() = t("estChats")
+    val estLlamadas: String get() = t("estLlamadas")
+    val estConversion: String get() = t("estConversion")
+    val estConversionDesc: String get() = t("estConversionDesc")
+    val estUltimos14: String get() = t("estUltimos14")
+    val estSinActividad: String get() = t("estSinActividad")
+    val estPosicion: String get() = t("estPosicion")
+    val estDe: String get() = t("estDe")
+    val estConDestacado: String get() = t("estConDestacado")
+    val estVerPlanes: String get() = t("estVerPlanes")
+    val estPerfilCompleto: String get() = t("estPerfilCompleto")
+    val estPerfilOk: String get() = t("estPerfilOk")
+    val estFaltaDescripcion: String get() = t("estFaltaDescripcion")
+    val estFaltaEspecialidades: String get() = t("estFaltaEspecialidades")
+    val estFaltaTelefono: String get() = t("estFaltaTelefono")
+    val estFaltaCiudad: String get() = t("estFaltaCiudad")
+    val estFaltaUbicacion: String get() = t("estFaltaUbicacion")
+    val estEditarPerfil: String get() = t("estEditarPerfil")
+    val iaTitulo: String get() = t("iaTitulo")
+    val iaDescripcion: String get() = t("iaDescripcion")
+    val iaGenerar: String get() = t("iaGenerar")
+    val iaGenerando: String get() = t("iaGenerando")
+    val iaRegenerar: String get() = t("iaRegenerar")
+    val iaErrorNoDisponible: String get() = t("iaErrorNoDisponible")
+    val iaErrorLimite: String get() = t("iaErrorLimite")
+    val iaHabitos: String get() = t("iaHabitos")
+    val iaPrioridadAlta: String get() = t("iaPrioridadAlta")
+    val iaPrioridadMedia: String get() = t("iaPrioridadMedia")
+    val iaPrioridadBaja: String get() = t("iaPrioridadBaja")
+    val iaCosteBajo: String get() = t("iaCosteBajo")
+    val iaCosteMedio: String get() = t("iaCosteMedio")
+    val iaCosteAlto: String get() = t("iaCosteAlto")
+    val iaAviso: String get() = t("iaAviso")
+    val chatAnteriores: String get() = t("chatAnteriores")
+    val verTitulo: String get() = t("verTitulo")
+    val verSub: String get() = t("verSub")
+    val verRevisaSpam: String get() = t("verRevisaSpam")
+    val verBoton: String get() = t("verBoton")
+    val verReenviar: String get() = t("verReenviar")
+    val verReenviarEn: String get() = t("verReenviarEn")
+    val verCodigoEnviado: String get() = t("verCodigoEnviado")
+    val verErrIncorrecto: String get() = t("verErrIncorrecto")
+    val verErrCaducado: String get() = t("verErrCaducado")
+    val verErrIntentos: String get() = t("verErrIntentos")
+    val verErrLimite: String get() = t("verErrLimite")
+    val verErrEnvio: String get() = t("verErrEnvio")
+    val verErrRed: String get() = t("verErrRed")
+    val verOtraCuenta: String get() = t("verOtraCuenta")
+    val subPlanNoDisponible: String get() = t("subPlanNoDisponible")
+    val subErrorIniciar: String get() = t("subErrorIniciar")
+    val subErrorCompra: String get() = t("subErrorCompra")
+    val perfTelefonoPublico: String get() = t("perfTelefonoPublico")
+    val perfTelefonoAyuda: String get() = t("perfTelefonoAyuda")
+    val espAislamiento: String get() = t("espAislamiento")
+    val espVentanas: String get() = t("espVentanas")
+    val espCalefaccion: String get() = t("espCalefaccion")
+    val espFotovoltaica: String get() = t("espFotovoltaica")
+    val espAerotermia: String get() = t("espAerotermia")
+    val espAuditorias: String get() = t("espAuditorias")
+    val espRehabilitacion: String get() = t("espRehabilitacion")
+    val espBiomasa: String get() = t("espBiomasa")
+    val espCertificacion: String get() = t("espCertificacion")
+    val espConsultoria: String get() = t("espConsultoria")
+    val infBuscarProfesionales: String get() = t("infBuscarProfesionales")
+    val perfEspecialidadesAyuda: String get() = t("perfEspecialidadesAyuda")
+}
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
