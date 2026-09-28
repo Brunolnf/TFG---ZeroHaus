@@ -21,6 +21,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
 ### Cambiado
+- **Herramientas de compilación**: AGP 9 (con Kotlin integrado), Kotlin 2.4, Gradle 9.8 y compileSdk 37 (el targetSdk sigue en 36, sin cambios de comportamiento). Librerías al día: Firebase BOM 34.19, Compose BOM 2026.09, Navigation 2.10, Play Billing 9.1, Maps Compose 8.6, core 1.19, security-crypto 1.1.0 estable.
 - Las compilaciones de depuración permiten capturas de pantalla; la versión publicada las sigue bloqueando.
 - Los números siguen el idioma elegido en la app (no el del sistema) y llevan separador de miles: «12.345,6 kWh» en español, «12,345.6 kWh» en inglés.
 - `AppCadenas` pasa de una `data class` con ~580 parámetros a mapas por idioma: la JVM no admite más de 255 parámetros, por lo que la clase no se podía cargar en tests ni en las vistas previas de Compose. Si a un idioma le falta un texto, se muestra en español.

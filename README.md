@@ -111,11 +111,11 @@ App de una sola Activity con **Jetpack Compose** y **MVVM**; Firebase como backe
 
 | Capa | Tecnologías |
 |---|---|
-| App | Kotlin 2.2 · Jetpack Compose (Material 3, BOM 2026.03) · Navigation Compose · Lifecycle/ViewModel · Coil · Google Maps Compose · Play Billing 8 · Play In-App Review · EncryptedSharedPreferences |
+| App | Kotlin 2.4 · Jetpack Compose (Material 3, BOM 2026.09) · Navigation Compose · Lifecycle/ViewModel · Coil · Google Maps Compose · Play Billing 9 · Play In-App Review · EncryptedSharedPreferences |
 | Firebase | Authentication · Firestore · Storage · Cloud Messaging · Cloud Functions · App Check (Play Integrity) · Crashlytics · Performance · Analytics · Hosting |
 | Backend | Python 3.11 · `firebase-functions` · `firebase-admin` · `google-genai` (Vertex AI) · SMTP |
 | Tests | JUnit 4 (algoritmo) · `@firebase/rules-unit-testing` + emulador (reglas) |
-| Build | Gradle (Kotlin DSL) · AGP 8.13 · R8 · compileSdk / targetSdk 36 · minSdk 26 |
+| Build | Gradle 9 (Kotlin DSL) · AGP 9 (Kotlin integrado) · R8 · compileSdk 37 · targetSdk 36 · minSdk 26 |
 
 ## Backend: Cloud Functions
 
