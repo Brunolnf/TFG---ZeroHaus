@@ -103,7 +103,7 @@ dependencies {
 
     // Google Play Billing (suscripciones de profesionales). Play exige la v8
     // para publicar actualizaciones desde el 31/08/2026.
-    implementation("com.android.billingclient:billing-ktx:8.0.0")
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
 
     // Google Maps
     implementation("com.google.maps.android:maps-compose:8.2.2")
