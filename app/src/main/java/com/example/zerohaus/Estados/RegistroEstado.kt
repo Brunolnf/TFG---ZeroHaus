@@ -1,5 +1,8 @@
 package com.example.zerohaus.Estados
 
+/**
+ * Estado del formulario de registro ([RegistroViewModel]).
+ */
 data class RegistroEstado(
     val nombre: String = "",
     val email: String = "",

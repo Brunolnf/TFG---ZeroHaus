@@ -5,6 +5,10 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Historial de notificaciones dentro de la app (`/notificaciones`): escucha
+ * en tiempo real, marca como leídas y elimina duplicados.
+ */
 class RepositorioNotificaciones {
 
     private val db = FirebaseFirestore.getInstance()

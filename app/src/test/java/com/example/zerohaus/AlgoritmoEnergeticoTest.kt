@@ -81,15 +81,80 @@ class AlgoritmoEnergeticoTest {
     }
 
     @Test
-    fun `emisiones son 22 por ciento del consumo`() {
-        val r = AlgoritmoEnergetico.calcular(viviendaBase())
-        assertEquals(r.consumoEstimado * 0.22, r.emisiones, 1.0)
+    fun `la etiqueta no depende del tamano de la vivienda`() {
+        val pequenya = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 40))
+        val grande   = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 300))
+        assertEquals(pequenya.etiqueta, grande.etiqueta)
+        assertEquals(pequenya.consumoPorM2, grande.consumoPorM2, 0.2)
     }
 
     @Test
-    fun `coste anual es 15 por ciento del consumo`() {
+    fun `vivienda media de 100 m2 tiene cifras realistas`() {
+        // Un hogar español medio consume del orden de 8.000–15.000 kWh/año
+        // y gasta entre ~800 y ~2.500 €/año en energía.
         val r = AlgoritmoEnergetico.calcular(viviendaBase())
-        assertEquals(r.consumoEstimado * 0.15, r.costeAnual, 1.0)
+        assertTrue("consumo ${r.consumoEstimado}", r.consumoEstimado in 8_000.0..20_000.0)
+        assertTrue("coste ${r.costeAnual}", r.costeAnual in 800.0..2_500.0)
+        assertTrue("emisiones ${r.emisiones}", r.emisiones in 1_500.0..6_000.0)
+    }
+
+    @Test
+    fun `calefaccion de gas emite y cuesta distinto que electrica`() {
+        val gas = AlgoritmoEnergetico.calcular(viviendaBase().copy(calefaccion = "Caldera de gas", acs = "Gas"))
+        val bio = AlgoritmoEnergetico.calcular(viviendaBase().copy(calefaccion = "Biomasa", acs = "Gas"))
+        assertTrue(bio.emisiones < gas.emisiones)
+        assertTrue(bio.costeAnual < gas.costeAnual)
+    }
+
+    @Test
+    fun `fotovoltaica reduce consumo de red y coste`() {
+        val sin = AlgoritmoEnergetico.calcular(viviendaBase().copy(fotovoltaica = "Sin fotovoltaica"))
+        val con = AlgoritmoEnergetico.calcular(viviendaBase().copy(fotovoltaica = "Mediana (3-5 kWp)"))
+        assertTrue(con.consumoEstimado < sin.consumoEstimado)
+        assertTrue(con.costeAnual < sin.costeAnual)
+    }
+
+    @Test
+    fun `ahorro de cada recomendacion es coherente con el recalculo`() {
+        val v = viviendaBase().copy(tipoVentanas = "Vidrio simple")
+        val r = AlgoritmoEnergetico.calcular(v)
+        val ventanas = r.recomendaciones.first { "ventanas" in it.titulo.lowercase() }
+        val mejorada = AlgoritmoEnergetico.calcular(v.copy(tipoVentanas = "Doble acristalamiento"))
+        assertEquals(r.costeAnual - mejorada.costeAnual, ventanas.ahorroEuros, 0.5)
+        assertTrue(ventanas.ahorroEstimado in 1..99)
+    }
+
+    @Test
+    fun `simular sin mejoras no cambia nada`() {
+        val s = AlgoritmoEnergetico.simular(viviendaBase(), emptyList())
+        assertEquals(s.etiquetaActual, s.etiquetaNueva)
+        assertEquals(0.0, s.ahorroEuros, 0.01)
+        assertEquals(null, s.amortizacionAnios)
+    }
+
+    @Test
+    fun `combinar mejoras ahorra mas que la mejor por separado`() {
+        val v = viviendaBase().copy(tipoVentanas = "Vidrio simple")
+        val mejoras = AlgoritmoEnergetico.mejorasAplicables(v)
+        val todas = AlgoritmoEnergetico.simular(v, mejoras)
+        val mejorSola = mejoras.maxOf { AlgoritmoEnergetico.simular(v, listOf(it)).ahorroEuros }
+        assertTrue(todas.ahorroEuros > mejorSola)
+        assertTrue(todas.etiquetaNueva < todas.etiquetaActual) // "A" < "D" alfabéticamente
+    }
+
+    @Test
+    fun `amortizacion es inversion entre ahorro anual`() {
+        val v = viviendaBase()
+        val led = AlgoritmoEnergetico.mejorasAplicables(v).first { "LED" in it.titulo }
+        val s = AlgoritmoEnergetico.simular(v, listOf(led))
+        assertEquals(s.inversion / s.ahorroEuros, s.amortizacionAnios!!, 0.2)
+    }
+
+    @Test
+    fun `recomendaciones ordenadas de mayor a menor ahorro`() {
+        val r = AlgoritmoEnergetico.calcular(viviendaBase().copy(tipoVentanas = "Vidrio simple"))
+        val ahorros = r.recomendaciones.map { it.ahorroEuros }
+        assertEquals(ahorros.sortedDescending(), ahorros)
     }
 
     @Test

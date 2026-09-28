@@ -12,11 +12,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
+/**
+ * Estado de la pantalla de gráficas.
+ */
 data class GraficasEstado(
     val informes: List<InformeEnergetico> = emptyList(),
     val cargando: Boolean = false
 )
 
+/**
+ * Carga los informes del usuario para las gráficas de evolución.
+ */
 class GraficasViewModel : ViewModel() {
 
     var estado by mutableStateOf(GraficasEstado())

@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.R
 
+/**
+ * Color oficial de cada letra de la etiqueta energética (A verde oscuro … G rojo oscuro).
+ */
 fun colorEtiqueta(etiqueta: String): Color = when (etiqueta) {
     "A" -> Color(0xFF15803D)
     "B" -> Color(0xFF22C55E)

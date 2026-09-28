@@ -15,13 +15,19 @@ import androidx.core.app.NotificationCompat
 import com.example.zerohaus.MainActivity
 import com.example.zerohaus.R
 
+/**
+ * Canales de notificación de Android y notificaciones locales (las que se
+ * muestran con la app abierta), con deduplicación y modo silencioso.
+ */
 object NotificacionesLocales {
 
     // v2: nuevos IDs para forzar recreación con sonido configurado
-    private const val CANAL_CHAT        = "zerohaus_chat_v2"
-    private const val CANAL_PRESUPUESTO = "zerohaus_presupuesto_v2"
-    private const val CANAL_PROYECTO    = "zerohaus_proyecto_v2"
-    private const val CANAL_GENERAL     = "zerohaus_general_v2"
+    private const val CANAL_CHAT      = "zerohaus_chat_v2"
+    private const val CANAL_GENERAL   = "zerohaus_general_v2"
+    // Sin sonido: lo usa el servidor (y la app) cuando en Ajustes se desactiva
+    // el sonido. En Android 8+ el sonido va por canal, no por notificación.
+    // Mismo id que CANAL_SILENCIO en functions/main.py.
+    private const val CANAL_SILENCIO  = "zerohaus_silencio_v1"
 
     private var appContext: Context? = null
 
@@ -61,16 +67,10 @@ object NotificacionesLocales {
                     setSound(sonidoUri, audioAttr)
                     enableLights(true)
                 },
-                NotificationChannel(CANAL_PRESUPUESTO, "Presupuestos", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Actualizaciones de presupuestos y solicitudes"
-                    enableVibration(true)
-                    vibrationPattern = vibracion
-                    setSound(sonidoUri, audioAttr)
-                    enableLights(true)
-                },
-                NotificationChannel(CANAL_PROYECTO, "Proyectos", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                    description = "Actualizaciones de tus proyectos de reforma"
-                    setSound(sonidoUri, audioAttr)
+                NotificationChannel(CANAL_SILENCIO, "Silenciosas", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "Notificaciones sin sonido (sonido desactivado en Ajustes)"
+                    setSound(null, null)
+                    enableVibration(false)
                 },
                 NotificationChannel(CANAL_GENERAL, "General", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Notificaciones generales de ZeroHaus"
@@ -78,9 +78,12 @@ object NotificacionesLocales {
                 }
             ).forEach { manager.createNotificationChannel(it) }
 
-            // Eliminar canales antiguos para limpiar
-            listOf("zerohaus_chat", "zerohaus_presupuesto", "zerohaus_proyecto", "zerohaus_general")
-                .forEach { manager.deleteNotificationChannel(it) }
+            // Eliminar canales de versiones anteriores (presupuestos, proyectos y
+            // contactos, de modelos de negocio ya retirados)
+            listOf(
+                "zerohaus_chat", "zerohaus_presupuesto", "zerohaus_proyecto", "zerohaus_general",
+                "zerohaus_presupuesto_v2", "zerohaus_proyecto_v2", "zerohaus_contactos_v1"
+            ).forEach { manager.deleteNotificationChannel(it) }
         }
     }
 
@@ -91,12 +94,10 @@ object NotificacionesLocales {
 
     fun mostrar(context: Context, titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
         if (esDuplicado(titulo, cuerpo, tipo)) return
-        val canalId = when (tipo) {
-            "chat", "mensaje" -> CANAL_CHAT
-            "presupuesto"     -> CANAL_PRESUPUESTO
-            "proyecto",
-            "reforma"         -> CANAL_PROYECTO
-            else              -> CANAL_GENERAL
+        val canalId = when {
+            !conSonido                          -> CANAL_SILENCIO
+            tipo == "chat" || tipo == "mensaje" -> CANAL_CHAT
+            else                                -> CANAL_GENERAL
         }
 
         val intent = Intent(context, MainActivity::class.java).apply {

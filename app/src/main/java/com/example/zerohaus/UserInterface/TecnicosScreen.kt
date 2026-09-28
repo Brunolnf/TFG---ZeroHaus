@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,9 +31,18 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Modelos.esDestacado
+import com.example.zerohaus.Modelos.esEmpresa
+import com.example.zerohaus.Modelos.esVerificado
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.TecnicosViewModel
 
+/**
+ * Directorio de profesionales: búsqueda, filtros por especialidad y orden por
+ * valoración o cercanía (solo con la ubicación real del usuario).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TecnicosScreen(
@@ -40,6 +50,7 @@ fun TecnicosScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
@@ -50,8 +61,7 @@ fun TecnicosScreen(
     val ctx = LocalContext.current
 
     var mostrarFiltros by remember { mutableStateOf(false) }
-    var tecnicoParaPresupuesto by remember { mutableStateOf<com.example.zerohaus.Modelos.Tecnico?>(null) }
-    var descripcionPresupuesto by remember { mutableStateOf("") }
+    val dorado = Color(0xFFF59E0B)
 
     val especialidades = listOf(
         "Aislamiento", "Ventanas", "Calefacción", "Fotovoltaica", "Aerotermia",
@@ -72,11 +82,8 @@ fun TecnicosScreen(
         } else {
             locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        // Fallback: si tras 3s no hay ubicación, usar Madrid
-        kotlinx.coroutines.delay(3000)
-        if (viewModel.estado.latUsuario == 0.0) {
-            viewModel.actualizarUbicacion(40.4168, -3.7038)
-        }
+        // Sin ubicación real no se inventa una: la lista se ordena por
+        // valoración y no se muestran distancias.
     }
 
     Scaffold(
@@ -92,12 +99,12 @@ fun TecnicosScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Técnicos certificados", fontWeight = FontWeight.SemiBold)
-                        Text("${filtrados.size} profesionales disponibles", color = gris, fontSize = 12.sp)
+                        Text(c.tecDirTitulo, fontWeight = FontWeight.SemiBold)
+                        Text("${filtrados.size} ${c.tecDirSubtitulo}", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
         }
@@ -123,7 +130,7 @@ fun TecnicosScreen(
                         OutlinedTextField(
                             value = estado.busqueda,
                             onValueChange = { viewModel.cambiarBusqueda(it) },
-                            placeholder = { Text("Buscar por nombre o especialidad…") },
+                            placeholder = { Text(c.tecBuscarPlaceholder) },
                             leadingIcon = { Icon(Icons.Default.Search, null) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -146,14 +153,14 @@ fun TecnicosScreen(
                             ) {
                                 Icon(Icons.Default.Tune, null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Filtros")
+                                Text(c.comFiltros)
                             }
                             DropdownMenu(
                                 expanded = mostrarFiltros,
                                 onDismissRequest = { mostrarFiltros = false }
                             ) {
                                 DropdownMenuItem(
-                                    text = { Text("Sin filtro") },
+                                    text = { Text(c.tecSinFiltro) },
                                     onClick = { viewModel.cambiarFiltro(null); mostrarFiltros = false }
                                 )
                                 especialidades.forEach { esp ->
@@ -166,16 +173,38 @@ fun TecnicosScreen(
                         }
                     }
 
-                    // Chips de ordenamiento
+                    // Chips de tipo de profesional
                     Spacer(Modifier.height(10.dp))
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.horizontalScroll(rememberScrollState())
                     ) {
                         listOf(
-                            OrdenTecnicos.VALORACION to "⭐ Valoración",
-                            OrdenTecnicos.PROXIMIDAD to "📍 Proximidad",
-                            OrdenTecnicos.PROYECTOS  to "🔨 Proyectos"
+                            null to c.tecTodos,
+                            Tecnico.TIPO_TECNICO to c.tecChipTecnicos,
+                            Tecnico.TIPO_EMPRESA to c.tecChipEmpresas
+                        ).forEach { (tipo, label) ->
+                            FilterChip(
+                                selected = estado.filtroTipo == tipo,
+                                onClick = { viewModel.cambiarFiltroTipo(tipo) },
+                                label = { Text(label, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = verde.copy(0.15f),
+                                    selectedLabelColor = verde
+                                )
+                            )
+                        }
+                    }
+
+                    // Chips de ordenamiento
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        listOf(
+                            OrdenTecnicos.VALORACION to c.tecOrdenValoracion,
+                            OrdenTecnicos.PROXIMIDAD to c.tecOrdenProximidad
                         ).forEach { (orden, label) ->
                             FilterChip(
                                 selected = estado.orden == orden,
@@ -193,7 +222,7 @@ fun TecnicosScreen(
                         Spacer(Modifier.height(6.dp))
                         AssistChip(
                             onClick = { viewModel.cambiarFiltro(null) },
-                            label = { Text("Filtro: $it  ✕") },
+                            label = { Text("${c.tecFiltroPrefijo} $it  ✕") },
                             colors = AssistChipDefaults.assistChipColors(
                                 containerColor = verde.copy(0.12f),
                                 labelColor = verde
@@ -220,7 +249,7 @@ fun TecnicosScreen(
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 if (estado.busqueda.isBlank() && estado.filtro == null) {
-                                    Text("No se pudieron cargar los técnicos", color = gris, fontWeight = FontWeight.Medium)
+                                    Text(c.tecNoCargar, color = gris, fontWeight = FontWeight.Medium)
                                     Spacer(Modifier.height(10.dp))
                                     OutlinedButton(
                                         onClick = { viewModel.cargarTecnicos(forzar = true) },
@@ -228,11 +257,11 @@ fun TecnicosScreen(
                                     ) {
                                         Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(6.dp))
-                                        Text("Reintentar")
+                                        Text(c.comReintentar)
                                     }
                                 } else {
-                                    Text("No se encontraron técnicos", color = gris, fontWeight = FontWeight.Medium)
-                                    Text("Prueba con otro término o filtro", color = gris.copy(0.7f), fontSize = 13.sp)
+                                    Text(c.tecNoEncontrados, color = gris, fontWeight = FontWeight.Medium)
+                                    Text(c.tecPruebaOtro, color = gris.copy(0.7f), fontSize = 13.sp)
                                 }
                             }
                         }
@@ -280,14 +309,59 @@ fun TecnicosScreen(
                                     }
                                 }
 
-                                // Nombre, ciudad, especialidades
+                                // Nombre, tipo, ciudad, especialidades
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        t.nombre.ifBlank { "Técnico" },
+                                        t.nombre.ifBlank { c.tecProfesionalFallback },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp
                                     )
-                                    val ubicConocida = viewModel.tieneUbicacionConocida(t)
+                                    Spacer(Modifier.height(2.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (t.esEmpresa) Color(0xFF7C3AED).copy(0.12f) else verde.copy(0.1f)
+                                        ) {
+                                            Text(
+                                                if (t.esEmpresa) c.tecEmpresaReformas else c.tecTecnicoCertificador,
+                                                color = if (t.esEmpresa) Color(0xFF7C3AED) else verde,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        if (t.esDestacado) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = dorado.copy(0.13f)
+                                            ) {
+                                                Row(
+                                                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Star, null, tint = dorado, modifier = Modifier.size(11.dp))
+                                                    Text(c.estDestacado, color = Color(0xFF92400E), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        } else if (t.esVerificado) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFF065F46).copy(0.13f)
+                                            ) {
+                                                Row(
+                                                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF065F46), modifier = Modifier.size(11.dp))
+                                                    Text(c.estVerificado, color = Color(0xFF065F46), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    // Distancia solo si conocemos ambas posiciones reales
+                                    val ubicConocida = estado.latUsuario != 0.0 && viewModel.tieneUbicacionConocida(t)
                                     if (t.ciudad.isNotEmpty() || ubicConocida) {
                                         Spacer(Modifier.height(2.dp))
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -341,7 +415,7 @@ fun TecnicosScreen(
                                         color = gris.copy(alpha = 0.12f)
                                     ) {
                                         Text(
-                                            "Nuevo",
+                                            c.tecNuevo,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                             fontWeight = FontWeight.Medium,
                                             fontSize = 12.sp,
@@ -390,18 +464,7 @@ fun TecnicosScreen(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(Modifier.width(3.dp))
-                                    Text("${t.opiniones} opiniones", color = gris, fontSize = 12.sp)
-                                }
-                                Text("·", color = gris, fontSize = 12.sp)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.CheckCircle,
-                                        null,
-                                        tint = gris,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(Modifier.width(3.dp))
-                                    Text("${t.proyectosCompletados} proyectos", color = gris, fontSize = 12.sp)
+                                    Text("${t.opiniones} ${c.comOpiniones}", color = gris, fontSize = 12.sp)
                                 }
                             }
 
@@ -409,76 +472,19 @@ fun TecnicosScreen(
                             HorizontalDivider(color = borde, thickness = 1.dp)
                             Spacer(Modifier.height(12.dp))
 
-                            // Botones
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
+                            Button(
+                                onClick = { onVerPerfil(t.id) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = verde)
                             ) {
-                                OutlinedButton(
-                                    onClick = { onVerPerfil(t.id) },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, verde),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = verde)
-                                ) {
-                                    Text("Ver perfil", fontWeight = FontWeight.SemiBold)
-                                }
-                                Button(
-                                    onClick = { tecnicoParaPresupuesto = t; descripcionPresupuesto = "" },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = verde)
-                                ) {
-                                    Text("Presupuesto", color = Color.White, fontWeight = FontWeight.SemiBold)
-                                }
+                                Text(c.comVerPerfilCompleto, color = Color.White, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    // Diálogo solicitar presupuesto
-    if (tecnicoParaPresupuesto != null) {
-        val t = tecnicoParaPresupuesto!!
-        AlertDialog(
-            onDismissRequest = { tecnicoParaPresupuesto = null },
-            title = { Text("Solicitar presupuesto", fontWeight = FontWeight.SemiBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Técnico: ${t.nombre}", fontWeight = FontWeight.Medium)
-                    OutlinedTextField(
-                        value = descripcionPresupuesto,
-                        onValueChange = { if (it.length <= 500) descripcionPresupuesto = it },
-                        label = { Text("Describe lo que necesitas") },
-                        placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        supportingText = {
-                            Text("${descripcionPresupuesto.length} / 500", fontSize = 11.sp)
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.solicitarPresupuestoConDescripcion(
-                            t,
-                            descripcionPresupuesto.ifBlank { "Solicitud de presupuesto" }
-                        )
-                        tecnicoParaPresupuesto = null
-                    },
-                    enabled = !viewModel.estado.enviandoSolicitud && descripcionPresupuesto.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
-                ) { Text("Enviar solicitud", color = Color.White) }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { tecnicoParaPresupuesto = null }) { Text("Cancelar") }
-            }
-        )
     }
 }
 

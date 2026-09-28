@@ -5,22 +5,35 @@ import android.util.Log
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
+import com.example.zerohaus.Util.SecurityUtil
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 
 /**
- * Inicialización centralizada de la app. Se ejecuta una sola vez al arrancar el
- * proceso, ANTES de cualquier Activity, ViewModel o servicio (FCM incluido).
+ * Clase Application: inicialización global antes de cualquier pantalla,
+ * servicio o ViewModel. Carga las preferencias en [AppEstado], crea los
+ * canales de notificación, instala App Check (Play Integrity, solo en
+ * release) y activa la caché persistente de Firestore.
  */
 class ZeroHausApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
 
-        // 1. Preferencias locales (tema, idioma, tipoUsuario cacheado…).
+        if (!BuildConfig.DEBUG) {
+            val amenazas = SecurityUtil.evaluarAmenazas(this)
+            val criticas = amenazas.filter { it.nivel == 3 }
+            if (criticas.isNotEmpty()) {
+                FirebaseAuth.getInstance().signOut()
+                android.os.Process.killProcess(android.os.Process.myPid())
+                return
+            }
+        }
+
         AppEstado.inicializar(AppPreferencias(this))
 
         // 2. Canales de notificación.

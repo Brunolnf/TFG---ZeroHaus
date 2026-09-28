@@ -10,6 +10,11 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
+/**
+ * Servicio de Firebase Cloud Messaging. Guarda el token del dispositivo en
+ * `/ajustes/{uid}` y muestra los push que llegan con la app en primer plano
+ * (en segundo plano los muestra Android con el canal que elige el servidor).
+ */
 class ServicioNotificaciones : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {

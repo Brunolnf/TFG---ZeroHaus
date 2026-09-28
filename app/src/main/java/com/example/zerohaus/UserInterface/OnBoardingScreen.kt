@@ -2,6 +2,7 @@
 package com.example.zerohaus.UserInterface
 
 import androidx.compose.animation.core.animateFloatAsState
+import com.example.zerohaus.Util.LocalCadenas
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,14 +27,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
+/**
+ * Presentación de la app en 3 pasos que se muestra tras el registro.
+ */
 @Composable
 fun OnboardingScreen(onCompletar: () -> Unit) {
     val verde = MaterialTheme.colorScheme.primary; val scope = rememberCoroutineScope()
+    val c = LocalCadenas.current
     data class P(val ic: ImageVector, val cI: Color, val cF: Color, val t: String, val d: String)
     val pags = listOf(
-        P(Icons.Default.Home, Color(0xFF065F46), Color(0xFFD1FAE5), "Analiza tu vivienda", "Rellena los datos de tu hogar y obtén un informe energético con tu etiqueta, consumo estimado y recomendaciones personalizadas."),
-        P(Icons.Default.Place, Color(0xFF2563EB), Color(0xFFDBEAFE), "Encuentra técnicos", "Busca profesionales certificados cerca de ti, consulta valoraciones reales y solicita presupuestos directamente desde la app."),
-        P(Icons.Default.ShowChart, Color(0xFFDB2777), Color(0xFFFCE7F3), "Mejora y ahorra", "Compara informes, visualiza tu evolución con gráficas y gestiona proyectos de reforma para reducir tu consumo y emisiones.")
+        P(Icons.Default.Home, Color(0xFF065F46), Color(0xFFD1FAE5), c.onbT1, c.onbD1),
+        P(Icons.Default.Place, Color(0xFF2563EB), Color(0xFFDBEAFE), c.onbT2, c.onbD2),
+        P(Icons.AutoMirrored.Filled.ShowChart, Color(0xFFDB2777), Color(0xFFFCE7F3), c.onbT3, c.onbD3)
     )
     val pagerState = rememberPagerState(pageCount = { pags.size })
 
@@ -51,7 +57,7 @@ fun OnboardingScreen(onCompletar: () -> Unit) {
             repeat(pags.size) { i -> Box(Modifier.size(if (pagerState.currentPage == i) 28.dp else 8.dp, 8.dp).clip(CircleShape).background(if (pagerState.currentPage == i) verde else Color(0xFFD1D5DB))) }
         }
         Button(onClick = { if (pagerState.currentPage == pags.size - 1) onCompletar() else scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } }, colors = ButtonDefaults.buttonColors(containerColor = verde), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(vertical = 16.dp)) {
-            Text(if (pagerState.currentPage == pags.size - 1) "Comenzar" else "Siguiente", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(if (pagerState.currentPage == pags.size - 1) c.onbComenzar else c.onbSiguiente, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
         }
         Spacer(Modifier.height(16.dp))
     }

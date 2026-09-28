@@ -25,8 +25,11 @@ object Formato {
         return "${"%.${decimales}f".format(valor)} $unidad"
     }
 
+    /** "año" en el idioma de la app (AppEstado.idioma es estado Compose: recompone al cambiar). */
+    private fun anio(): String = getCadenas(AppEstado.idioma).uAnio
+
     fun formatEnergiaAnual(kwh: Double, decimales: Int = 1): String =
-        "${formatEnergia(kwh, decimales)}/año"
+        "${formatEnergia(kwh, decimales)}/${anio()}"
 
     fun formatMoneda(eur: Double, decimales: Int = 2): String {
         val unidad = AppEstado.unidadMoneda
@@ -39,7 +42,7 @@ object Formato {
     }
 
     fun formatMonedaAnual(eur: Double, decimales: Int = 2): String =
-        "${formatMoneda(eur, decimales)}/año"
+        "${formatMoneda(eur, decimales)}/${anio()}"
 
     fun simboloMoneda(): String = when (AppEstado.unidadMoneda) {
         "USD" -> "$"
@@ -47,9 +50,11 @@ object Formato {
         else  -> "€"
     }
 
-    /** Diferencia de energía (sin "/año"). */
-    fun formatEnergiaDelta(kwh: Double, decimales: Int = 1): String =
-        formatEnergia(kwh, decimales)
+    fun formatEmisionesAnual(kg: Double, decimales: Int = 1): String =
+        "${"%.${decimales}f".format(kg)} kg CO₂/${anio()}"
+
+    fun formatIntensidad(kwhM2: Double): String =
+        "${formatEnergia(kwhM2, 0)}/m²·${anio()}"
 
     fun convertirEnergia(kwh: Double): Double = when (AppEstado.unidadEnergia) {
         "MJ"   -> kwh * KWH_A_MJ

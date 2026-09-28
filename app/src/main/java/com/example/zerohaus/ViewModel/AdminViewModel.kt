@@ -3,16 +3,15 @@ package com.example.zerohaus.ViewModel
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import com.example.zerohaus.Modelos.Certificado
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAdmin
-import com.example.zerohaus.Repositorios.RepositorioCertificados
-import com.google.firebase.auth.FirebaseAuth
 
+/**
+ * Lógica del panel de administración (ver [com.example.zerohaus.Repositorios.RepositorioAdmin]).
+ */
 class AdminViewModel : ViewModel() {
 
     private val repo = RepositorioAdmin()
-    private val repoCerts = RepositorioCertificados()
 
     val usuarios = mutableStateListOf<Usuario>()
     val cargando = mutableStateOf(false)
@@ -20,71 +19,20 @@ class AdminViewModel : ViewModel() {
     val mensaje = mutableStateOf<String?>(null)
     val filtro = mutableStateOf("")
 
-    val todosCertificados = mutableStateListOf<Certificado>()
-    val cargandoCerts = mutableStateOf(false)
-    val filtroCerts = mutableStateOf("Todos")
-
-    val pendientesCount: Int get() = todosCertificados.count { !it.verificado && !it.rechazado }
-
-    fun certificadosFiltrados(): List<Certificado> = when (filtroCerts.value) {
-        "Pendientes" -> todosCertificados.filter { !it.verificado && !it.rechazado }
-        "Verificados" -> todosCertificados.filter { it.verificado }
-        "Rechazados" -> todosCertificados.filter { it.rechazado }
-        else -> todosCertificados.toList()
-    }
-
+    // Abrir el panel NUNCA borra nada automáticamente: con usuarios reales,
+    // borrar por patrones de nombre eliminaría cuentas legítimas. Los borrados
+    // son siempre una acción explícita y confirmada del admin.
     fun cargar() {
         cargando.value = true
-        val uidAdmin = FirebaseAuth.getInstance().currentUser?.uid
-        // 1) Limpieza de cuentas /usuarios cuyo nombre es genérico ("tecnico",
-        //    "Tecnico1", "técnico 2", vacío…). Cascade completo.
-        repo.limpiarUsuariosGenericos(uidAdmin) { borradosUsr ->
-            // 2) Limpieza de /tecnicos HUÉRFANOS con nombre genérico — son los
-            //    que aparecían en el buscador del cliente y no tenían entrada
-            //    en /usuarios, por eso el paso (1) no los veía.
-            repo.limpiarTecnicosHuerfanosGenericos { borradosTec ->
-                val totalBorrados = borradosUsr + borradosTec
-                if (totalBorrados > 0) {
-                    mensaje.value = "Eliminados $totalBorrados técnico(s) de prueba"
-                }
-                // 3) Auto-reparación de técnicos legítimos huérfanos.
-                repo.restaurarTecnicosDesdeUsuarios { restaurados ->
-                    if (restaurados > 0 && mensaje.value == null)
-                        mensaje.value = "Restaurados $restaurados técnico(s) que faltaban"
-                    // 4) Recarga lista ya limpia.
-                    repo.listarUsuarios { lista ->
-                        usuarios.clear()
-                        usuarios.addAll(lista)
-                        cargando.value = false
-                    }
-                }
+        // Reparación idempotente: recrea el perfil /tecnicos de profesionales
+        // cuya cuenta existe pero cuyo perfil falta (no borra nada).
+        repo.restaurarTecnicosDesdeUsuarios { restaurados ->
+            if (restaurados > 0) mensaje.value = "Restaurados $restaurados perfil(es) profesional(es) que faltaban"
+            repo.listarUsuarios { lista ->
+                usuarios.clear()
+                usuarios.addAll(lista)
+                cargando.value = false
             }
-        }
-        cargarCertificados()
-    }
-
-    fun cargarCertificados() {
-        cargandoCerts.value = true
-        repoCerts.obtenerTodosCertificados { lista ->
-            todosCertificados.clear()
-            todosCertificados.addAll(lista)
-            cargandoCerts.value = false
-        }
-    }
-
-    fun aprobarCertificado(cert: Certificado) {
-        repoCerts.aprobarCertificado(cert.id) { result ->
-            result
-                .onSuccess { mensaje.value = "Certificado '${cert.nombre}' verificado"; cargarCertificados() }
-                .onFailure { error.value = it.message }
-        }
-    }
-
-    fun rechazarCertificado(cert: Certificado, motivo: String) {
-        repoCerts.rechazarCertificado(cert.id, motivo) { result ->
-            result
-                .onSuccess { mensaje.value = "Certificado '${cert.nombre}' rechazado"; cargarCertificados() }
-                .onFailure { error.value = it.message }
         }
     }
 
@@ -137,25 +85,4 @@ class AdminViewModel : ViewModel() {
 
     fun limpiarError() { error.value = null }
     fun limpiarMensaje() { mensaje.value = null }
-
-    /**
-     * Acción destructiva del admin: borra los técnicos del directorio que no tienen
-     * cuenta Auth real (seed/demo). El usuario debe haber confirmado el diálogo antes.
-     */
-    fun limpiarTecnicosFake() {
-        cargando.value = true
-        repo.limpiarTecnicosFake { result ->
-            cargando.value = false
-            result
-                .onSuccess { n ->
-                    mensaje.value = when (n) {
-                        0 -> "No había técnicos sin cuenta para limpiar"
-                        1 -> "Eliminado 1 técnico sin cuenta y sus datos"
-                        else -> "Eliminados $n técnicos sin cuenta y sus datos"
-                    }
-                    cargar()
-                }
-                .onFailure { error.value = it.message }
-        }
-    }
 }

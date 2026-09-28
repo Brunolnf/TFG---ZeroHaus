@@ -3,6 +3,7 @@ package com.example.zerohaus.UserInterface
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,6 +18,10 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.LoginViewModel
 
+/**
+ * Recuperación de contraseña por email. El mensaje de confirmación es
+ * neutro para no revelar si un correo está registrado.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecuperarPasswordScreen(

@@ -4,19 +4,22 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
-import com.example.zerohaus.Modelos.SolicitudPresupuesto
-import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Repositorios.RepositorioChat
-import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Estado de la lista de conversaciones.
+ */
 data class ChatListEstado(
     val chats: List<Chat> = emptyList(),
     val cargando: Boolean = true
 )
 
+/**
+ * Estado de una conversación abierta.
+ */
 data class ChatEstado(
     val mensajes: List<MensajeChat> = emptyList(),
     val texto: String = "",
@@ -27,9 +30,16 @@ data class ChatEstado(
     val otroUid: String = "",
     val otroTecnicoDocId: String = "",
     val imagenPendiente: android.net.Uri? = null,
-    val captionImagen: String = ""
+    val captionImagen: String = "",
+    // Paginación: solo se escuchan los últimos N mensajes
+    val hayMasMensajes: Boolean = false,
+    val cargandoAnteriores: Boolean = false
 )
 
+/**
+ * Lista de conversaciones y conversación abierta: escucha en tiempo real,
+ * paginación de mensajes y envío de texto, imágenes y archivos.
+ */
 class ChatViewModel : ViewModel() {
 
     var listaEstado by mutableStateOf(ChatListEstado())
@@ -39,14 +49,14 @@ class ChatViewModel : ViewModel() {
         private set
 
     private val repo = RepositorioChat()
-    private val repoTecnicos = RepositorioTecnicos()
-    private val repoAuth = RepositorioAutenticacion()
     private val db = FirebaseFirestore.getInstance()
 
     val miUid get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     private var listenerChats: ListenerRegistration? = null
     private var listenerMensajes: ListenerRegistration? = null
+    private var chatAbierto: String? = null
+    private var limiteMensajes = PAGINA_MENSAJES
 
     private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
         if (auth.currentUser == null) {
@@ -70,7 +80,11 @@ class ChatViewModel : ViewModel() {
 
         listenerChats = repo.escucharChats { chats ->
             listaEstado = ChatListEstado(
-                chats = chats,
+                // Los chats recién creados (sin ningún mensaje) no se muestran:
+                // la conversación aparece en la lista cuando llega el primer
+                // mensaje real. Evita chats fantasma al pulsar "Chatear" en un
+                // perfil y salir sin escribir nada.
+                chats = chats.filter { it.fechaUltimoMensaje > 0 || it.ultimoMensaje.isNotBlank() },
                 cargando = false
             )
         }
@@ -83,6 +97,8 @@ class ChatViewModel : ViewModel() {
     fun abrirChat(chatId: String) {
         listenerMensajes?.remove()
         chatEstado = ChatEstado()
+        chatAbierto = chatId
+        limiteMensajes = PAGINA_MENSAJES
 
         // Nombre del otro participante
         val chatCacheado = listaEstado.chats.firstOrNull { it.id == chatId }
@@ -108,17 +124,31 @@ class ChatViewModel : ViewModel() {
         }
 
         // Carga inmediata desde caché local
-        repo.cargarMensajesDesdeCache(chatId) { mensajes ->
+        repo.cargarMensajesDesdeCache(chatId, limiteMensajes) { mensajes ->
             if (mensajes.isNotEmpty()) {
                 chatEstado = chatEstado.copy(mensajes = mensajes)
             }
         }
 
-        // Listener en tiempo real
-        listenerMensajes = repo.escucharMensajes(chatId) { mensajes ->
-            if (mensajes.isNotEmpty()) {
-                chatEstado = chatEstado.copy(mensajes = mensajes)
-            }
+        escucharMensajes(chatId)
+    }
+
+    /** Amplía la ventana de mensajes escuchados con la página anterior. */
+    fun cargarMensajesAnteriores() {
+        val chatId = chatAbierto ?: return
+        if (!chatEstado.hayMasMensajes || chatEstado.cargandoAnteriores) return
+        limiteMensajes += PAGINA_MENSAJES
+        chatEstado = chatEstado.copy(cargandoAnteriores = true)
+        escucharMensajes(chatId)
+    }
+
+    private fun escucharMensajes(chatId: String) {
+        listenerMensajes?.remove()
+        listenerMensajes = repo.escucharMensajes(chatId, limiteMensajes) { mensajes, hayMas ->
+            chatEstado = if (mensajes.isNotEmpty())
+                chatEstado.copy(mensajes = mensajes, hayMasMensajes = hayMas, cargandoAnteriores = false)
+            else
+                chatEstado.copy(hayMasMensajes = false, cargandoAnteriores = false)
             repo.marcarLeidos(chatId)
         }
     }
@@ -205,42 +235,14 @@ class ChatViewModel : ViewModel() {
         listenerMensajes?.remove()
     }
 
-    /**
-     * Envía una solicitud de presupuesto al técnico con el que estoy chateando.
-     * El chat debe ser con un técnico (`otroTecnicoDocId` no vacío).
-     */
-    fun solicitarPresupuestoAlTecnico(
-        descripcion: String,
-        callback: (Result<Unit>) -> Unit
-    ) {
-        val tecnicoDocId = chatEstado.otroTecnicoDocId
-        val tecnicoUid = chatEstado.otroUid
-        val tecnicoNombre = chatEstado.nombreOtroUsuario
-
-        if (tecnicoDocId.isEmpty()) {
-            callback(Result.failure(Exception("Este chat no es con un técnico")))
-            return
-        }
-
-        // obtenerUsuarioUnaVez (no obtenerUsuario): el callback debe ejecutarse una
-        // sola vez. El doble disparo caché+servidor crearía dos solicitudes idénticas.
-        repoAuth.obtenerUsuarioUnaVez { u ->
-            val solicitud = SolicitudPresupuesto(
-                uidCliente = repoAuth.getUid() ?: "",
-                nombreCliente = u?.nombre ?: "Usuario",
-                tecnicoId = tecnicoDocId,
-                tecnicoUid = tecnicoUid,
-                tecnicoNombre = tecnicoNombre,
-                descripcion = descripcion.ifBlank { "Solicitud de presupuesto" }
-            )
-            repoTecnicos.solicitarPresupuesto(solicitud, callback)
-        }
-    }
-
     override fun onCleared() {
         super.onCleared()
         FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
         listenerChats?.remove()
         listenerMensajes?.remove()
+    }
+
+    companion object {
+        private const val PAGINA_MENSAJES = 50L
     }
 }

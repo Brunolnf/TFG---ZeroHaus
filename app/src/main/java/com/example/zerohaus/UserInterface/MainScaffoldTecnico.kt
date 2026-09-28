@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,38 +19,42 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.*
 
+/**
+ * Estructura principal del profesional: barra inferior y sus pestañas (inicio, clientes, mensajes, más).
+ */
 @Composable
 fun MainScaffoldTecnico(
     panelTecnicoVM: PanelTecnicoViewModel,
     panelVM: PanelViewModel,
-    certificadoVM: CertificadoViewModel,
-    presupuestosVM: PresupuestosViewModel,
+    misClientesVM: MisClientesTecnicoViewModel,
     chatVM: ChatViewModel,
     onCerrarSesion: () -> Unit = {},
     onPerfil: () -> Unit = {},
     onAjustes: () -> Unit = {},
     onSobreApp: () -> Unit = {},
     onChats: (String) -> Unit = {},
-    onProyectos: () -> Unit = {},
+    onSuscripcion: () -> Unit = {},
     onResenas: () -> Unit = {},
     onEstadisticas: () -> Unit = {},
-    onMisClientes: () -> Unit = {}
+    onVerPerfilPublico: () -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val tabs = listOf(
         "inicio" to Icons.Default.Home,
         "mensajes" to Icons.Default.MailOutline,
-        "solicitudes" to Icons.Default.Description,
+        "clientes" to Icons.Default.People,
         "mas" to Icons.Default.Menu
     )
-    val tabLabels = listOf("Inicio", "Mensajes", "Solicitudes", "Más")
+    val tabLabels = listOf(c.tabInicio, c.tabMensajes, c.tecTabClientes, c.tabMas)
     var actual by remember { mutableStateOf("inicio") }
     LaunchedEffect(Unit) { chatVM.cargarChats() }
     val noLeidos = chatVM.contarNoLeidos()
     val notificaciones = panelVM.estado.notificaciones
-    val noLeidasSolicitudes = notificaciones.count { !it.leida && it.tipo == "presupuesto" }
+    val noLeidasClientes = notificaciones.count { !it.leida && it.tipo == "contacto" }
     val noLeidasInicio = notificaciones.count { !it.leida && it.tipo == "valoracion" }
 
     Scaffold(
@@ -59,7 +64,7 @@ fun MainScaffoldTecnico(
             tabs.forEachIndexed { idx, (ruta, icono) ->
                 val badge = when (ruta) {
                     "mensajes" -> noLeidos
-                    "solicitudes" -> noLeidasSolicitudes
+                    "clientes" -> noLeidasClientes
                     "inicio" -> noLeidasInicio
                     else -> 0
                 }
@@ -69,7 +74,7 @@ fun MainScaffoldTecnico(
                         actual = ruta
                         if (ruta == "mensajes") chatVM.cargarChats()
                         if (ruta == "inicio") panelTecnicoVM.cargar()
-                        if (ruta == "solicitudes") presupuestosVM.cargarMisSolicitudes()
+                        if (ruta == "clientes") misClientesVM.cargar()
                     },
                     icon = {
                         if (badge > 0) {
@@ -97,9 +102,8 @@ fun MainScaffoldTecnico(
                 "inicio" -> PanelTecnicoScreen(
                     viewModel = panelTecnicoVM,
                     panelViewModel = panelVM,
-                    certificadoViewModel = certificadoVM,
                     onAjustes = onAjustes,
-                    onProyectos = onProyectos,
+                    onSuscripcion = onSuscripcion,
                     onResenas = onResenas,
                     onEstadisticas = onEstadisticas
                 )
@@ -108,17 +112,19 @@ fun MainScaffoldTecnico(
                     onVolver = { actual = "inicio" },
                     onAbrirChat = onChats
                 )
-                "solicitudes" -> PresupuestosScreen(
-                    viewModel = presupuestosVM,
+                "clientes" -> MisClientesTecnicoScreen(
+                    viewModel = misClientesVM,
                     onVolver = { actual = "inicio" },
-                    esTecnico = true
+                    onAbrirChat = onChats,
+                    mostrarVolver = false
                 )
                 "mas" -> PantallaMasTecnico(
                     onPerfil = onPerfil,
                     onAjustes = onAjustes,
                     onSobreApp = onSobreApp,
                     onCerrarSesion = onCerrarSesion,
-                    onMisClientes = onMisClientes
+                    onSuscripcion = onSuscripcion,
+                    onVerPerfilPublico = onVerPerfilPublico
                 )
             }
         }
@@ -131,31 +137,35 @@ private fun PantallaMasTecnico(
     onAjustes: () -> Unit,
     onSobreApp: () -> Unit,
     onCerrarSesion: () -> Unit,
-    onMisClientes: () -> Unit = {}
+    onSuscripcion: () -> Unit = {},
+    onVerPerfilPublico: () -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Spacer(Modifier.height(8.dp))
-        Text("Más", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
-        Text("Tu cuenta", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
+        Text(c.tabMas, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = MaterialTheme.colorScheme.onBackground)
+        Text(c.tecCuenta, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         Spacer(Modifier.height(4.dp))
 
-        OpcTecnico(Icons.Default.Person, Color(0xFF7C3AED), "Perfil", "Tu cuenta en ZeroHaus", onPerfil)
-        OpcTecnico(Icons.Default.Settings, MaterialTheme.colorScheme.onSurfaceVariant, "Ajustes", "Preferencias de la app", onAjustes)
-        OpcTecnico(Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, "Sobre la app", "Información y versión", onSobreApp)
+        OpcTecnico(Icons.Default.Person, Color(0xFF7C3AED), c.tecPerfil, c.tecPerfilSub, onPerfil)
+        OpcTecnico(Icons.Default.Visibility, Color(0xFF0891B2), c.tecPerfilPublico, c.tecPerfilPublicoSub, onVerPerfilPublico)
+        OpcTecnico(Icons.Default.WorkspacePremium, Color(0xFF2563EB), c.tecMiSuscripcion, c.tecMiSuscripcionSub, onSuscripcion)
+        OpcTecnico(Icons.Default.Settings, MaterialTheme.colorScheme.onSurfaceVariant, c.masAjustes, c.tecAjustesSub, onAjustes)
+        OpcTecnico(Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, c.tecSobreApp, c.tecSobreAppSub, onSobreApp)
 
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
             onClick = onCerrarSesion,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            border = ButtonDefaults.outlinedButtonBorder.copy(brush = SolidColor(Color(0xFFDC2626)))
+            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = SolidColor(Color(0xFFDC2626)))
         ) {
-            Icon(Icons.Default.ExitToApp, null, tint = Color(0xFFDC2626))
+            Icon(Icons.AutoMirrored.Filled.ExitToApp, null, tint = Color(0xFFDC2626))
             Spacer(Modifier.width(8.dp))
-            Text("Cerrar sesión", color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
+            Text(c.cerrarSesion, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(20.dp))
     }

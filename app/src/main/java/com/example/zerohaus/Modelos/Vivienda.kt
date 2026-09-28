@@ -1,5 +1,10 @@
 package com.example.zerohaus.Modelos
 
+/**
+ * Vivienda de un propietario (`/viviendas`). Sus campos son la entrada del
+ * algoritmo energético; los valores de las opciones se guardan en español y
+ * se traducen solo al mostrarlos ([com.example.zerohaus.Util.TextosEnergia]).
+ */
 data class Vivienda(
     val id: String = "",
     val uid: String = "",

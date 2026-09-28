@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -25,11 +26,16 @@ import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
 import com.example.zerohaus.ViewModel.HistorialInformesViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Historial de informes: ver, comparar dos, compartir (PDF) o enviarlos
+ * por chat a un profesional, y eliminar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistorialInformesScreen(
@@ -43,6 +49,7 @@ fun HistorialInformesScreen(
     val fondo = MaterialTheme.colorScheme.background
     val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
+    val c = LocalCadenas.current
     val ctx = LocalContext.current
     val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
 
@@ -70,17 +77,17 @@ fun HistorialInformesScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Historial de informes", fontWeight = FontWeight.SemiBold)
-                        Text("${estado.informes.size} informes generados", color = gris, fontSize = 12.sp)
+                        Text(c.histTitulo, fontWeight = FontWeight.SemiBold)
+                        Text("${estado.informes.size} ${c.histSubtitulo}", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 },
                 actions = {
                     if (estado.modoComparar) {
                         TextButton(onClick = { viewModel.limpiarComparacion() }) {
-                            Text("Cancelar", color = Color(0xFFDC2626))
+                            Text(c.cancelar, color = Color(0xFFDC2626))
                         }
                     }
                 }
@@ -96,14 +103,14 @@ fun HistorialInformesScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFDC2626), modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Error al cargar informes", color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
+                    Text(c.histError, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
                     Text(estado.error!!, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { viewModel.cargarInformes(forzar = true) },
                         colors = ButtonDefaults.buttonColors(containerColor = verde)
-                    ) { Text("Reintentar", color = Color.White) }
+                    ) { Text(c.comReintentar, color = Color.White) }
                 }
             }
         } else if (estado.informes.isEmpty()) {
@@ -111,9 +118,9 @@ fun HistorialInformesScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Assessment, null, tint = gris, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("No hay informes aún", color = gris, fontWeight = FontWeight.SemiBold)
+                    Text(c.histVacioTitulo, color = gris, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
-                    Text("Realiza un preestudio para generar uno", color = gris, fontSize = 13.sp)
+                    Text(c.histVacioSub, color = gris, fontSize = 13.sp)
                 }
             }
         } else {
@@ -130,9 +137,9 @@ fun HistorialInformesScreen(
                             shape = RoundedCornerShape(12.dp),
                             border = BorderStroke(1.dp, verde)
                         ) {
-                            Icon(Icons.Default.CompareArrows, null, tint = verde)
+                            Icon(Icons.AutoMirrored.Filled.CompareArrows, null, tint = verde)
                             Spacer(Modifier.width(8.dp))
-                            Text("Comparar dos informes", color = verde, fontWeight = FontWeight.SemiBold)
+                            Text(c.histCompararDos, color = verde, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -149,9 +156,9 @@ fun HistorialInformesScreen(
                                 Icon(Icons.Default.Info, null, tint = Color(0xFF2563EB))
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    if (seleccionados == 0) "Toca el primer informe a comparar"
-                                    else if (seleccionados == 1) "Ahora toca el segundo informe"
-                                    else "Comparación lista",
+                                    if (seleccionados == 0) c.histTocaPrimero
+                                    else if (seleccionados == 1) c.histTocaSegundo
+                                    else c.histComparacionLista,
                                     color = Color(0xFF1E40AF),
                                     fontSize = 13.sp
                                 )
@@ -172,7 +179,7 @@ fun HistorialInformesScreen(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(Modifier.padding(16.dp)) {
-                                Text("Comparación", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(c.histComparacion, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                 Spacer(Modifier.height(12.dp))
 
                                 // Cabecera
@@ -188,28 +195,28 @@ fun HistorialInformesScreen(
                                         fontWeight = FontWeight.SemiBold, fontSize = 12.sp,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text("Delta", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = gris, modifier = Modifier.weight(0.8f))
+                                    Text(c.histDelta, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = gris, modifier = Modifier.weight(0.8f))
                                 }
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-                                FilaComparacion("Etiqueta", a.etiqueta, b.etiqueta, null, verde, gris)
+                                FilaComparacion(c.histEtiqueta, a.etiqueta, b.etiqueta, null, verde, gris)
                                 FilaComparacion(
-                                    "Consumo",
+                                    c.histConsumo,
                                     Formato.formatEnergia(a.consumoEstimado),
                                     Formato.formatEnergia(b.consumoEstimado),
                                     Formato.convertirEnergia(b.consumoEstimado - a.consumoEstimado),
                                     verde, gris
                                 )
                                 FilaComparacion(
-                                    "Emisiones",
+                                    c.histEmisiones,
                                     "${String.format("%.1f", a.emisiones)} kg",
                                     "${String.format("%.1f", b.emisiones)} kg",
                                     b.emisiones - a.emisiones,
                                     verde, gris
                                 )
                                 FilaComparacion(
-                                    "Coste",
+                                    c.histCoste,
                                     Formato.formatMoneda(a.costeAnual, 1),
                                     Formato.formatMoneda(b.costeAnual, 1),
                                     Formato.convertirMoneda(b.costeAnual - a.costeAnual),
@@ -220,9 +227,9 @@ fun HistorialInformesScreen(
                                 val mejora = a.consumoEstimado - b.consumoEstimado
                                 val mejoraColor = if (mejora > 0) verde else if (mejora < 0) Color(0xFFDC2626) else gris
                                 val mejoraTexto = when {
-                                    mejora > 0 -> "Mejora de ${Formato.formatEnergia(mejora)} entre informes"
-                                    mejora < 0 -> "Aumento de ${Formato.formatEnergia(-mejora)} entre informes"
-                                    else -> "Sin cambio en consumo"
+                                    mejora > 0 -> "${c.histMejoraDe} ${Formato.formatEnergia(mejora)} ${c.histEntreInformes}"
+                                    mejora < 0 -> "${c.histAumentoDe} ${Formato.formatEnergia(-mejora)} ${c.histEntreInformes}"
+                                    else -> c.histSinCambio
                                 }
                                 Text(mejoraTexto, color = mejoraColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             }
@@ -265,13 +272,13 @@ fun HistorialInformesScreen(
                                             onClick = { informeACompartir = informe },
                                             modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.Share, "Compartir", tint = gris, modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Share, c.comCompartir, tint = gris, modifier = Modifier.size(18.dp))
                                         }
                                         IconButton(
                                             onClick = { informeAEliminar = informe },
                                             modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Default.Delete, "Eliminar", tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
+                                            Icon(Icons.Default.Delete, c.comEliminar, tint = Color(0xFFDC2626), modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -293,9 +300,9 @@ fun HistorialInformesScreen(
         AlertDialog(
             onDismissRequest = { informeAEliminar = null },
             icon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
-            title = { Text("Eliminar informe", fontWeight = FontWeight.SemiBold) },
+            title = { Text(c.histEliminarTitulo, fontWeight = FontWeight.SemiBold) },
             text = {
-                Text("¿Quieres eliminar el informe de \"${informe.nombreVivienda}\"? Esta acción no se puede deshacer.")
+                Text("${c.histEliminarMsgA} \"${informe.nombreVivienda}\"${c.histEliminarMsgB}")
             },
             confirmButton = {
                 Button(
@@ -304,10 +311,10 @@ fun HistorialInformesScreen(
                         informeAEliminar = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) { Text("Eliminar", color = Color.White) }
+                ) { Text(c.comEliminar, color = Color.White) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { informeAEliminar = null }) { Text("Cancelar") }
+                OutlinedButton(onClick = { informeAEliminar = null }) { Text(c.cancelar) }
             }
         )
     }
@@ -319,7 +326,7 @@ fun HistorialInformesScreen(
         AlertDialog(
             onDismissRequest = { informeACompartir = null },
             icon = { Icon(Icons.Default.Share, null, tint = verde) },
-            title = { Text("Compartir informe", fontWeight = FontWeight.SemiBold) },
+            title = { Text(c.histCompartirTitulo, fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("\"${informe.nombreVivienda}\"", fontSize = 13.sp, color = gris)
@@ -334,18 +341,18 @@ fun HistorialInformesScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Compartir externamente")
+                        Text(c.histCompartirExterno)
                     }
 
                     if (chats.isNotEmpty()) {
                         HorizontalDivider()
-                        Text("Enviar a un técnico de la app:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(c.histEnviarTecnico, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         chats.forEach { chat ->
                             val otroNombre = chat.nombresParticipantes
                                 .filterKeys { it != miUid }
-                                .values.firstOrNull() ?: "Usuario"
+                                .values.firstOrNull() ?: c.comUsuarioFallback
                             val otroUid = chat.participantes.firstOrNull { it != miUid } ?: ""
 
                             Card(
@@ -355,7 +362,7 @@ fun HistorialInformesScreen(
                                         informeACompartir = null
                                         enviarInformeAChat(ctx, informe, chat.id, otroNombre) { ok ->
                                             enviandoAChat = false
-                                            mensajeEnvio = if (ok) "Informe enviado a $otroNombre" else "Error al enviar"
+                                            mensajeEnvio = if (ok) "${c.histInformeEnviado} $otroNombre" else c.histErrorEnviar
                                         }
                                     }
                                 },
@@ -386,7 +393,7 @@ fun HistorialInformesScreen(
                         }
                     } else {
                         Text(
-                            "No tienes chats activos. Contacta con un técnico primero para poder enviarle informes.",
+                            c.histSinChats,
                             fontSize = 12.sp,
                             color = gris
                         )
@@ -395,7 +402,7 @@ fun HistorialInformesScreen(
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { informeACompartir = null }) { Text("Cancelar") }
+                TextButton(onClick = { informeACompartir = null }) { Text(c.cancelar) }
             }
         )
     }
@@ -406,7 +413,7 @@ fun HistorialInformesScreen(
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     CircularProgressIndicator(color = verde, modifier = Modifier.size(24.dp))
-                    Text("Enviando informe...")
+                    Text(c.histEnviando)
                 }
             },
             confirmButton = {}

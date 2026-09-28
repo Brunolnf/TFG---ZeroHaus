@@ -6,6 +6,10 @@ import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
+/**
+ * Informes energéticos: los genera con el algoritmo, los guarda en
+ * `/informes` y lee el historial y los consejos de IA ya generados.
+ */
 class RepositorioInformes {
 
     private val db = FirebaseFirestore.getInstance()
@@ -29,6 +33,7 @@ class RepositorioInformes {
             etiqueta = resultado.etiqueta,
             estadoEficiencia = resultado.estadoEficiencia,
             consumoEstimado = resultado.consumoEstimado,
+            consumoPorM2 = resultado.consumoPorM2,
             emisiones = resultado.emisiones,
             costeAnual = resultado.costeAnual,
             recomendaciones = resultado.recomendaciones
@@ -68,6 +73,15 @@ class RepositorioInformes {
     // Sobrecarga de compatibilidad para llamadas que no necesitan el error
     fun obtenerInformes(callback: (List<InformeEnergetico>) -> Unit) =
         obtenerInformes(onSuccess = callback, onError = null)
+
+    /** Consejos de IA ya guardados en el informe, solo si están en [idioma]. */
+    fun obtenerSugerenciasGuardadas(informeId: String, idioma: String, callback: (SugerenciasIA?) -> Unit) {
+        db.collection("informes").document(informeId).getOrTimeout { snap ->
+            @Suppress("UNCHECKED_CAST")
+            val m = snap?.get("sugerenciasIA") as? Map<String, Any?>
+            callback(m?.takeIf { it["idioma"] == idioma }?.let { RepositorioIA.parsear(it) })
+        }
+    }
 
     fun eliminarInforme(informeId: String, callback: (Boolean) -> Unit) {
         db.collection("informes").document(informeId)

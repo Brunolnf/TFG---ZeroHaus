@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
+/**
+ * Tipo de aviso emergente: determina color e icono de [ZeroToast].
+ */
 enum class ToastTipo { EXITO, ERROR, INFO }
 
 /**

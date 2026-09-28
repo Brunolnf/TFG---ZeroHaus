@@ -9,6 +9,9 @@ import com.example.zerohaus.Estados.LoginEstado
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Util.AppEstado
 
+/**
+ * Validación del formulario de login, inicio de sesión y recuperación de contraseña.
+ */
 class LoginViewModel : ViewModel() {
 
     var estado by mutableStateOf(LoginEstado())

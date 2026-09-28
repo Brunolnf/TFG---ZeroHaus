@@ -1,16 +1,17 @@
 package com.example.zerohaus.Repositorios
 
-import com.example.zerohaus.Modelos.Proyecto
 import com.example.zerohaus.Modelos.Resena
-import com.example.zerohaus.Modelos.SolicitudPresupuesto
-import com.example.zerohaus.Modelos.Tarea
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Directorio de profesionales (`/tecnicos`): listado en tiempo real, perfil
+ * individual, perfil propio y edición. Incluye las coordenadas de las
+ * ciudades españolas para situarlos en el mapa.
+ */
 class RepositorioTecnicos {
 
     private val db = FirebaseFirestore.getInstance()
@@ -19,17 +20,6 @@ class RepositorioTecnicos {
     private fun uid() = auth.currentUser?.uid ?: ""
 
     companion object {
-        /** Máximo de solicitudes activas (no terminadas) que un cliente puede tener con un mismo técnico. */
-        const val MAX_SOLICITUDES_ACTIVAS = 5
-
-        /**
-         * Ventana de deduplicación: dos solicitudes idénticas (mismo cliente, técnico y
-         * descripción) creadas dentro de este margen se consideran el MISMO envío disparado
-         * dos veces, no dos solicitudes distintas. 60 s es de sobra: nadie manda dos
-         * presupuestos legítimos al mismo técnico en menos de un minuto.
-         */
-        const val VENTANA_DEDUP_MS = 60_000L
-
         // Coordenadas aproximadas del centro de las ciudades españolas más comunes
         private val CIUDADES_COORDS = mapOf(
             "madrid"         to (40.4168 to -3.7038),
@@ -270,11 +260,8 @@ class RepositorioTecnicos {
         var tecnicosBase: List<Tecnico> = emptyList()
         var resenasPorTecnico: Map<String, List<Resena>> = emptyMap()
 
-        // El contador de proyectos completados vive YA en el doc del técnico:
-        // arranca con el histórico sembrado (trabajos previos al tracking) y lo
-        // incrementa el trigger `on_solicitud_estado_cambiado` (Admin SDK) al
-        // detectar la transición a "Completado". El cliente no lo toca porque
-        // las rules congelan el campo. No hace falta cross-query a /proyectos.
+        // rating/opiniones se recalculan aquí sobre las reseñas vivas; el valor
+        // persistente del doc lo mantiene la Cloud Function `on_resena_changed`.
         fun emitir() {
             callback(tecnicosBase.map { t ->
                 val lista = resenasPorTecnico[t.id].orEmpty()
@@ -324,53 +311,6 @@ class RepositorioTecnicos {
 
     fun obtenerRanking(callback: (List<Tecnico>) -> Unit) = obtenerTecnicos(callback)
 
-    fun solicitarPresupuesto(solicitud: SolicitudPresupuesto, callback: (Result<Unit>) -> Unit) {
-        val clienteUid = uid()
-        db.collection("solicitudes")
-            .whereEqualTo("uidCliente", clienteUid)
-            .whereEqualTo("tecnicoId", solicitud.tecnicoId)
-            .get()
-            .addOnSuccessListener { snap ->
-                val ahora = System.currentTimeMillis()
-
-                // 1) ANTI-DUPLICADO: si ya existe una solicitud "Pendiente" con la misma
-                //    descripción creada hace < VENTANA_DEDUP_MS, es el mismo envío disparado
-                //    dos veces (doble tap, recomposición, reintento, doble callback…). No
-                //    creamos otra: devolvemos éxito como si la primera fuera la buena.
-                val duplicadoReciente = snap.documents.any { doc ->
-                    val fc = doc.getLong("fechaCreacion") ?: 0L
-                    doc.getString("estado") == "Pendiente" &&
-                        doc.getString("descripcion") == solicitud.descripcion &&
-                        (ahora - fc) in 0..VENTANA_DEDUP_MS
-                }
-                if (duplicadoReciente) {
-                    callback(Result.success(Unit))
-                    return@addOnSuccessListener
-                }
-
-                // 2) TOPE de 5 solicitudes ACTIVAS por técnico (las terminadas/rechazadas
-                //    no cuentan, así el historial no llena el cupo).
-                val activas = snap.documents.count { doc ->
-                    doc.getString("estado") !in listOf("Completado", "Rechazado")
-                }
-                if (activas >= MAX_SOLICITUDES_ACTIVAS) {
-                    callback(Result.failure(Exception("Has alcanzado el máximo de $MAX_SOLICITUDES_ACTIVAS solicitudes activas con este técnico")))
-                    return@addOnSuccessListener
-                }
-
-                val ref = db.collection("solicitudes").document()
-                val s = solicitud.copy(id = ref.id, uidCliente = clienteUid)
-                ref.set(s)
-                    .addOnSuccessListener { callback(Result.success(Unit)) }
-                    .addOnFailureListener { e ->
-                        callback(Result.failure(Exception(e.message ?: "Error enviando solicitud")))
-                    }
-            }
-            .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error verificando solicitudes")))
-            }
-    }
-
     /** Devuelve el perfil de técnico vinculado al uid de Auth actual. */
     fun obtenerMiPerfilTecnico(callback: (Tecnico?) -> Unit) {
         db.collection("tecnicos")
@@ -388,8 +328,6 @@ class RepositorioTecnicos {
         nombre: String,
         ciudad: String,
         descripcion: String,
-        telefono: String,
-        emailContacto: String,
         especialidades: List<String>,
         callback: (Result<Unit>) -> Unit
     ) {
@@ -398,8 +336,6 @@ class RepositorioTecnicos {
             "nombre" to nombre,
             "ciudad" to ciudad,
             "descripcion" to descripcion,
-            "telefono" to telefono,
-            "emailContacto" to emailContacto,
             "especialidades" to especialidades
         )
         if (coords != null) {
@@ -424,334 +360,6 @@ class RepositorioTecnicos {
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
                 callback(Result.failure(Exception(e.message ?: "Error registrando técnico")))
-            }
-    }
-
-    fun obtenerSolicitudesRecibidas(callback: (List<SolicitudPresupuesto>) -> Unit) {
-        db.collection("solicitudes")
-            .whereEqualTo("tecnicoUid", uid())
-            .getOrTimeout { snap ->
-                callback(snap?.documents
-                    ?.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                    ?.sortedByDescending { it.fechaCreacion } ?: emptyList())
-            }
-    }
-
-    fun obtenerMisSolicitudes(callback: (List<SolicitudPresupuesto>) -> Unit) {
-        db.collection("solicitudes")
-            .whereEqualTo("uidCliente", uid())
-            .getOrTimeout { snap ->
-                callback(snap?.documents
-                    ?.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                    ?.sortedByDescending { it.fechaCreacion } ?: emptyList())
-            }
-    }
-
-    /** Tiempo real: solicitudes que YO (cliente) he enviado. El callback se dispara
-     *  al instante con la caché y luego en cada cambio (nueva, estado actualizado…). */
-    fun escucharMisSolicitudes(callback: (List<SolicitudPresupuesto>) -> Unit): ListenerRegistration {
-        return db.collection("solicitudes")
-            .whereEqualTo("uidCliente", uid())
-            .addSnapshotListener { snap, _ ->
-                callback(snap?.documents
-                    ?.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                    ?.sortedByDescending { it.fechaCreacion } ?: emptyList())
-            }
-    }
-
-    /** Tiempo real: solicitudes recibidas por MÍ (técnico). */
-    fun escucharSolicitudesRecibidas(callback: (List<SolicitudPresupuesto>) -> Unit): ListenerRegistration {
-        return db.collection("solicitudes")
-            .whereEqualTo("tecnicoUid", uid())
-            .addSnapshotListener { snap, _ ->
-                callback(snap?.documents
-                    ?.mapNotNull { it.toObject(SolicitudPresupuesto::class.java) }
-                    ?.sortedByDescending { it.fechaCreacion } ?: emptyList())
-            }
-    }
-
-    fun responderPresupuesto(
-        solicitudId: String, precio: Double, respuesta: String,
-        callback: (Result<Unit>) -> Unit
-    ) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "Pendiente") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update(
-                mapOf(
-                    "estado" to "Presupuestado",
-                    "precioPresupuesto" to precio,
-                    "respuestaTecnico" to respuesta,
-                    "fechaRespuesta" to System.currentTimeMillis()
-                )
-            ).addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error respondiendo"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    fun aceptarPresupuesto(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "Presupuestado") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update("estado", "Aceptado")
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error aceptando"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    fun rechazarPresupuesto(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "Presupuestado") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update("estado", "Rechazado")
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error rechazando"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /** TÉCNICO — envía la ficha de inicio cuando el cliente ya aceptó el presupuesto. */
-    fun enviarFichaActividad(
-        solicitudId: String,
-        fechaInicio: Long,
-        fechaFinEstimada: Long,
-        descripcionFicha: String,
-        precioFinal: Double,
-        tareas: List<String>,
-        callback: (Result<Unit>) -> Unit
-    ) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val estadoActual = doc.getString("estado")
-            if (estadoActual != "Aceptado" && estadoActual != "FichaRechazada") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update(
-                mapOf(
-                    "estado" to "FichaEnviada",
-                    "fichaFechaInicio" to fechaInicio,
-                    "fichaFechaFinEstimada" to fechaFinEstimada,
-                    "fichaDescripcion" to descripcionFicha,
-                    "fichaPrecioFinal" to precioFinal,
-                    "fichaTareas" to tareas
-                )
-            ).addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error enviando ficha"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /** CLIENTE — acepta la ficha de inicio. Crea automáticamente el documento /proyectos. */
-    fun aceptarFichaYCrearProyecto(solicitudId: String, callback: (Result<String>) -> Unit) {
-        val refSol = db.collection("solicitudes").document(solicitudId)
-        refSol.get().addOnSuccessListener { doc ->
-            val sol = doc.toObject(SolicitudPresupuesto::class.java)
-            if (sol == null) { callback(Result.failure(Exception("Solicitud no encontrada"))); return@addOnSuccessListener }
-            if (sol.estado != "FichaEnviada") { callback(Result.success(sol.proyectoId)); return@addOnSuccessListener }
-
-            val refProy = db.collection("proyectos").document()
-            val proyecto = Proyecto(
-                id = refProy.id,
-                uid = sol.uidCliente,
-                titulo = if (sol.fichaDescripcion.isNotBlank()) sol.fichaDescripcion.take(60) else "Reforma con ${sol.tecnicoNombre}",
-                descripcion = sol.fichaDescripcion.ifBlank { sol.descripcion },
-                viviendaNombre = "",
-                tecnicoId = sol.tecnicoId,
-                tecnicoUid = sol.tecnicoUid,
-                tecnicoNombre = sol.tecnicoNombre,
-                progreso = 0,
-                estado = "En curso",
-                tareas = sol.fichaTareas.map { Tarea(nombre = it, completada = false) },
-                fechaInicio = sol.fichaFechaInicio,
-                fechaFinEstimada = sol.fichaFechaFinEstimada,
-                precio = sol.fichaPrecioFinal,
-                solicitudId = sol.id,
-                pagado = false
-            )
-
-            refProy.set(proyecto)
-                .addOnSuccessListener {
-                    // La notif al técnico la genera `on_solicitud_estado_cambiado` (plantilla "EnCurso").
-                    refSol.update(
-                        mapOf("estado" to "EnCurso", "proyectoId" to refProy.id)
-                    ).addOnSuccessListener { callback(Result.success(refProy.id)) }
-                        .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error actualizando solicitud"))) }
-                }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error creando proyecto"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /**
-     * CLIENTE — rechaza la ficha de inicio. Pasa a "FichaRechazada" (estado propio,
-     * no "Aceptado") para que la Cloud Function `on_solicitud_estado_cambiado` no
-     * dispare la plantilla "Aceptado" (que enviaría una notif errónea
-     * "Presupuesto aceptado" al técnico, duplicando la notif manual de rechazo).
-     */
-    fun rechazarFicha(solicitudId: String, motivo: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "FichaEnviada") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            // Guardamos el motivo en el doc para que el trigger
-            // `on_solicitud_estado_cambiado` (Admin SDK) pueda incluirlo en la
-            // notif al técnico. Antes el cliente creaba la notif cross-user, pero
-            // las rules ahora prohíben que el cliente escriba notifs en buzón ajeno.
-            ref.update(mapOf(
-                "estado" to "FichaRechazada",
-                "motivoRechazoFicha" to motivo.trim()
-            ))
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /** TÉCNICO — marca el trabajo como terminado, pendiente de pago. */
-    fun marcarTrabajoTerminado(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "EnCurso") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update("estado", "PendientePago")
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /**
-     * CLIENTE — declara que ya ha pagado al técnico (tarjeta simulada o efectivo).
-     * Pasa la solicitud a "PagoEnVerificacion". El técnico tendrá que confirmar la recepción.
-     */
-    fun clienteMarcaPagado(
-        solicitudId: String,
-        metodo: String,
-        referencia: String,
-        callback: (Result<Unit>) -> Unit
-    ) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "PendientePago") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update(
-                mapOf(
-                    "estado" to "PagoEnVerificacion",
-                    "metodoPago" to metodo,
-                    "referenciaPago" to referencia,
-                    "fechaPagoCliente" to System.currentTimeMillis()
-                )
-            ).addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /**
-     * TÉCNICO — confirma haber recibido el pago. Cierra solicitud y proyecto.
-     * Crea entrada en /pagos para historial.
-     */
-    fun tecnicoConfirmaPago(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            val sol = doc.toObject(SolicitudPresupuesto::class.java)
-            if (sol == null) { callback(Result.failure(Exception("Solicitud no encontrada"))); return@addOnSuccessListener }
-            if (sol.estado != "PagoEnVerificacion") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            val ahora = System.currentTimeMillis()
-
-            ref.update(
-                mapOf(
-                    "estado" to "Completado",
-                    "pagado" to true,
-                    "fechaPago" to ahora
-                )
-            ).addOnSuccessListener {
-                // Cerrar proyecto
-                if (sol.proyectoId.isNotEmpty()) {
-                    db.collection("proyectos").document(sol.proyectoId).update(
-                        mapOf("estado" to "Finalizado", "pagado" to true, "progreso" to 100)
-                    )
-                }
-                // El contador `proyectosCompletados` lo incrementa el trigger
-                // `on_solicitud_estado_cambiado` con Admin SDK al detectar la
-                // transición a "Completado". Las rules de /tecnicos congelan ese
-                // campo para el cliente para evitar métricas infladas a mano.
-
-                // Histórico de pagos (opcional)
-                val refPago = db.collection("pagos").document()
-                refPago.set(
-                    hashMapOf(
-                        "id" to refPago.id,
-                        "solicitudId" to sol.id,
-                        "uidCliente" to sol.uidCliente,
-                        "tecnicoUid" to sol.tecnicoUid,
-                        "tecnicoNombre" to sol.tecnicoNombre,
-                        "nombreCliente" to sol.nombreCliente,
-                        "importe" to sol.fichaPrecioFinal,
-                        "metodo" to sol.metodoPago,
-                        "referencia" to sol.referenciaPago,
-                        "fechaConfirmacion" to ahora
-                    )
-                )
-                callback(Result.success(Unit))
-            }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    /**
-     * CLIENTE — rechaza el pago previamente declarado (por error o no quiere ya).
-     * Vuelve a PendientePago.
-     */
-    fun cancelarMarcaPago(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") != "PagoEnVerificacion") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update(
-                mapOf(
-                    "estado" to "PendientePago",
-                    "metodoPago" to "",
-                    "referenciaPago" to "",
-                    "fechaPagoCliente" to 0L
-                )
-            )
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    fun completarSolicitud(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("solicitudes").document(solicitudId)
-        ref.get().addOnSuccessListener { doc ->
-            if (doc.getString("estado") == "Completado") { callback(Result.success(Unit)); return@addOnSuccessListener }
-            ref.update("estado", "Completado")
-                .addOnSuccessListener { callback(Result.success(Unit)) }
-                .addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error completando"))) }
-        }.addOnFailureListener { e -> callback(Result.failure(Exception(e.message ?: "Error"))) }
-    }
-
-    fun puedeValorar(tecnicoId: String, callback: (Boolean) -> Unit) {
-        db.collection("solicitudes")
-            .whereEqualTo("uidCliente", uid())
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.any { doc ->
-                    doc.getString("tecnicoId") == tecnicoId && doc.getString("estado") == "Completado"
-                })
-            }
-            .addOnFailureListener { callback(false) }
-    }
-
-    fun contarSolicitudesCompletadas(tecnicoId: String, callback: (Int) -> Unit) {
-        db.collection("solicitudes")
-            .whereEqualTo("uidCliente", uid())
-            .get()
-            .addOnSuccessListener { snap ->
-                callback(snap.documents.count { doc ->
-                    doc.getString("tecnicoId") == tecnicoId && doc.getString("estado") == "Completado"
-                })
-            }
-            .addOnFailureListener { callback(0) }
-    }
-
-    /**
-     * CLIENTE — cancela y elimina una solicitud propia en estado "Pendiente" o "Presupuestado".
-     * El documento se borra de Firestore; el técnico deja de verla.
-     */
-    fun cancelarSolicitud(solicitudId: String, callback: (Result<Unit>) -> Unit) {
-        db.collection("solicitudes").document(solicitudId)
-            .delete()
-            .addOnSuccessListener { callback(Result.success(Unit)) }
-            .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error cancelando solicitud")))
             }
     }
 

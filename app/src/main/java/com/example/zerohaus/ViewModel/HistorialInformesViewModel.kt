@@ -12,6 +12,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * Estado del historial de informes y de la comparación entre dos.
+ */
 data class HistorialEstado(
     val informes: List<InformeEnergetico> = emptyList(),
     val informeSeleccionado: InformeEnergetico? = null,
@@ -21,6 +24,9 @@ data class HistorialEstado(
     val error: String? = null
 )
 
+/**
+ * Historial de informes: carga, comparación y borrado.
+ */
 class HistorialInformesViewModel : ViewModel() {
 
     var estado by mutableStateOf(HistorialEstado())

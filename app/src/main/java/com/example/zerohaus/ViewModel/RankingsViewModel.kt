@@ -8,6 +8,9 @@ import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Ranking de profesionales por valoración media.
+ */
 class RankingsViewModel : ViewModel() {
 
     var ranking by mutableStateOf<List<Tecnico>>(emptyList())

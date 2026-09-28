@@ -1,6 +1,9 @@
 
 package com.example.zerohaus.Modelos
 
+/**
+ * Cuenta de la app (`/usuarios/{uid}`): datos básicos, tipo y estado de moderación.
+ */
 data class Usuario(
     val uid: String = "",
     val nombre: String = "",

@@ -8,6 +8,9 @@ import com.example.zerohaus.Modelos.Resena
 import com.example.zerohaus.Repositorios.RepositorioResenas
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 
+/**
+ * Estado de la pantalla de valoraciones recibidas.
+ */
 data class ResenasRecibidasEstado(
     val resenas: List<Resena> = emptyList(),
     val media: Double = 0.0,
@@ -16,6 +19,9 @@ data class ResenasRecibidasEstado(
     val cargando: Boolean = false
 )
 
+/**
+ * Valoraciones recibidas por el profesional.
+ */
 class ResenasRecibidasViewModel : ViewModel() {
 
     var estado by mutableStateOf(ResenasRecibidasEstado())

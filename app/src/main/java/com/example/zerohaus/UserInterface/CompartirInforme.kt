@@ -8,7 +8,10 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.Util.TextosEnergia
+import com.example.zerohaus.Util.getCadenas
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -23,28 +26,30 @@ fun compartirInformeSilencioso(context: Context, informe: InformeEnergetico, des
 }
 
 fun compartirInforme(context: Context, informe: InformeEnergetico) {
+    val c = getCadenas(AppEstado.idioma)
     val pdfFile = try { generarPdf(context, informe) } catch (_: Exception) { null }
     if (pdfFile != null) {
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdfFile)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "application/pdf"
-            putExtra(Intent.EXTRA_SUBJECT, "Informe energético — ${informe.nombreVivienda}")
+            putExtra(Intent.EXTRA_SUBJECT, "${c.infTitulo} — ${informe.nombreVivienda}")
             putExtra(Intent.EXTRA_TEXT, buildTextoInforme(informe))
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Compartir informe"))
+        context.startActivity(Intent.createChooser(intent, c.histCompartirTitulo))
     } else {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Informe energético — ${informe.nombreVivienda}")
+            putExtra(Intent.EXTRA_SUBJECT, "${c.infTitulo} — ${informe.nombreVivienda}")
             putExtra(Intent.EXTRA_TEXT, buildTextoInforme(informe))
         }
-        context.startActivity(Intent.createChooser(intent, "Compartir informe"))
+        context.startActivity(Intent.createChooser(intent, c.histCompartirTitulo))
     }
 }
 
 private fun generarPdf(context: Context, informe: InformeEnergetico): File {
+    val c = getCadenas(AppEstado.idioma)
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val fechaStr = sdf.format(Date(informe.fechaGeneracion))
 
@@ -74,7 +79,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     canvas.drawText("ZeroHaus", 24f, 34f, paint)
     paint.textSize = 11f
     paint.isFakeBoldText = false
-    canvas.drawText("INFORME ENERGÉTICO", 24f, 54f, paint)
+    canvas.drawText(c.infTitulo.uppercase(), 24f, 54f, paint)
 
     paint.textAlign = Paint.Align.RIGHT
     paint.textSize = 10f
@@ -96,11 +101,11 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.color = negro
     paint.textSize = 18f
     paint.isFakeBoldText = true
-    canvas.drawText(informe.estadoEficiencia, 90f, y + 24f, paint)
+    canvas.drawText(TextosEnergia.estado(informe.etiqueta, c), 90f, y + 24f, paint)
     paint.textSize = 11f
     paint.isFakeBoldText = false
     paint.color = gris
-    canvas.drawText("Calificación energética", 90f, y + 40f, paint)
+    canvas.drawText(c.infCalificacion, 90f, y + 40f, paint)
     y += 72f
 
     paint.color = grisClaro
@@ -109,9 +114,9 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
 
     val boxW = (pageWidth - 48f - 16f) / 3f
     val stats = listOf(
-        Triple("CONSUMO", Formato.formatEnergiaAnual(informe.consumoEstimado, 0), "Energía primaria"),
-        Triple("EMISIONES", "%.1f kg CO₂/año".format(informe.emisiones), "CO₂ equivalente"),
-        Triple("COSTE", Formato.formatMonedaAnual(informe.costeAnual, 0), "Estimación anual")
+        Triple(c.histConsumo.uppercase(), Formato.formatEnergiaAnual(informe.consumoEstimado, 0), c.pdfEnergiaFinal),
+        Triple(c.histEmisiones.uppercase(), Formato.formatEmisionesAnual(informe.emisiones), c.pdfCo2Equiv),
+        Triple(c.histCoste.uppercase(), Formato.formatMonedaAnual(informe.costeAnual, 0), c.pdfEstimacionAnual)
     )
     stats.forEachIndexed { i, (titulo, valor, desc) ->
         val bx = 24f + i * (boxW + 8f)
@@ -136,12 +141,12 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
         paint.color = negro
         paint.textSize = 14f
         paint.isFakeBoldText = true
-        canvas.drawText("Recomendaciones", 24f, y, paint)
+        canvas.drawText(c.infRecomendaciones, 24f, y, paint)
         y += 14f
         paint.color = gris
         paint.textSize = 9f
         paint.isFakeBoldText = false
-        canvas.drawText("Mejoras sugeridas para aumentar la eficiencia energética de tu vivienda", 24f, y, paint)
+        canvas.drawText(c.pdfMejoras, 24f, y, paint)
         y += 20f
 
         informe.recomendaciones.forEach { rec ->
@@ -159,11 +164,11 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
             paint.color = negro
             paint.textSize = 11f
             paint.isFakeBoldText = true
-            canvas.drawText(rec.titulo, 80f, y + 20f, paint)
+            canvas.drawText(TextosEnergia.recomendacion(rec.titulo, c), 80f, y + 20f, paint)
             paint.color = gris
             paint.textSize = 9f
             paint.isFakeBoldText = false
-            canvas.drawText("Ahorro estimado: ${rec.ahorroEstimado}%", 80f, y + 36f, paint)
+            canvas.drawText(if (rec.ahorroEuros > 0) "${c.infAhorroEstimado}: ${Formato.formatMonedaAnual(rec.ahorroEuros, 0)} (${rec.ahorroEstimado}%)" else "${c.infAhorroEstimado}: ${rec.ahorroEstimado}%", 80f, y + 36f, paint)
             y += 56f
         }
     }
@@ -173,11 +178,11 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.isFakeBoldText = false
     paint.textAlign = Paint.Align.CENTER
     canvas.drawText(
-        "Generado con ZeroHaus — Eficiencia energética inteligente",
+        c.pdfGenerado,
         pageWidth / 2f, (pageHeight - 22).toFloat(), paint
     )
     canvas.drawText(
-        "© 2026 ZeroHaus. Este informe es orientativo y no constituye asesoramiento técnico oficial.",
+        "© ${Calendar.getInstance().get(Calendar.YEAR)} ZeroHaus. ${c.pdfAviso}",
         pageWidth / 2f, (pageHeight - 10).toFloat(), paint
     )
 
@@ -211,21 +216,26 @@ private fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
 
 private fun buildTextoInforme(informe: InformeEnergetico): String {
     val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val c = getCadenas(AppEstado.idioma)
     return buildString {
-        appendLine("=== INFORME ENERGÉTICO ZEROHAUS ==="); appendLine()
-        appendLine("Vivienda: ${informe.nombreVivienda}")
-        appendLine("Fecha: ${sdf.format(Date(informe.fechaGeneracion))}"); appendLine()
-        appendLine("CALIFICACIÓN: ${informe.etiqueta} — ${informe.estadoEficiencia}"); appendLine()
-        appendLine("INDICADORES:")
-        appendLine("  Consumo: ${Formato.formatEnergiaAnual(informe.consumoEstimado)}")
-        appendLine("  Emisiones: ${informe.emisiones} kg CO₂/año")
-        appendLine("  Coste: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
+        appendLine("=== ${c.infTitulo.uppercase()} · ZEROHAUS ==="); appendLine()
+        appendLine("${c.infVivienda}: ${informe.nombreVivienda}")
+        appendLine("${c.pdfFecha}: ${sdf.format(Date(informe.fechaGeneracion))}"); appendLine()
+        appendLine("${c.infCalificacion.uppercase()}: ${informe.etiqueta} — ${TextosEnergia.estado(informe.etiqueta, c)}"); appendLine()
+        appendLine("${c.infIndicadores.uppercase()}:")
+        appendLine("  ${c.histConsumo}: ${Formato.formatEnergiaAnual(informe.consumoEstimado)}")
+        appendLine("  ${c.histEmisiones}: ${Formato.formatEmisionesAnual(informe.emisiones)}")
+        appendLine("  ${c.histCoste}: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
         if (informe.recomendaciones.isNotEmpty()) {
-            appendLine("RECOMENDACIONES:")
-            informe.recomendaciones.forEach { r -> appendLine("  • ${r.titulo} (ahorro ${r.ahorroEstimado}%)") }
+            appendLine("${c.infRecomendaciones.uppercase()}:")
+            informe.recomendaciones.forEach { r ->
+                val titulo = TextosEnergia.recomendacion(r.titulo, c)
+                val ahorro = if (r.ahorroEuros > 0) "${Formato.formatMonedaAnual(r.ahorroEuros, 0)}, ${r.ahorroEstimado}%" else "${r.ahorroEstimado}%"
+                appendLine("  • $titulo (${c.infAhorroEstimado}: $ahorro)")
+            }
             appendLine()
         }
-        appendLine("Generado con ZeroHaus — Eficiencia energética inteligente")
+        appendLine(c.pdfGenerado)
     }
 }
 

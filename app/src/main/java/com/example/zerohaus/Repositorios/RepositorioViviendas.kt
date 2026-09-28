@@ -6,6 +6,9 @@ import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 
+/**
+ * Viviendas del usuario (`/viviendas`): guardar, listar y eliminar.
+ */
 class RepositorioViviendas {
 
     private val db = FirebaseFirestore.getInstance()

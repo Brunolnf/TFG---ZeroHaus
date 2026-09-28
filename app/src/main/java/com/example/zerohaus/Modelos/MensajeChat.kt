@@ -1,5 +1,8 @@
 package com.example.zerohaus.Modelos
 
+/**
+ * Mensaje de una conversación (`/chats/{id}/mensajes`): texto, imagen o archivo.
+ */
 data class MensajeChat(
     val id: String = "",
     val chatId: String = "",
@@ -14,6 +17,9 @@ data class MensajeChat(
     val mediaBytes: Long = 0L
 )
 
+/**
+ * Conversación entre dos usuarios (`/chats`), con el último mensaje y los no leídos por participante.
+ */
 data class Chat(
     val id: String = "",
     val participantes: List<String> = emptyList(),

@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -23,8 +24,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.ViewModel.ViviendasViewModel
 
+/**
+ * Viviendas del propietario: listar, seleccionar la activa, editar y eliminar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MisViviendasScreen(
@@ -37,6 +43,7 @@ fun MisViviendasScreen(
     val fondo = MaterialTheme.colorScheme.background
     val borde = MaterialTheme.colorScheme.outline
     val estado = viewModel.estado
+    val c = LocalCadenas.current
 
     var confirmarEliminar by remember { mutableStateOf<String?>(null) }
     var viviendaEditando by remember { mutableStateOf<Vivienda?>(null) }
@@ -56,12 +63,12 @@ fun MisViviendasScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Mis viviendas", fontWeight = FontWeight.SemiBold)
-                        Text("${estado.viviendas.size} viviendas registradas", color = gris, fontSize = 12.sp)
+                        Text(c.vivTitulo, fontWeight = FontWeight.SemiBold)
+                        Text("${estado.viviendas.size} ${c.vivRegistradas}", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
         },
@@ -71,7 +78,7 @@ fun MisViviendasScreen(
                 containerColor = verde,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.Add, "Añadir vivienda")
+                Icon(Icons.Default.Add, c.vivAnadir)
             }
         }
     ) { pv ->
@@ -84,9 +91,9 @@ fun MisViviendasScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Home, null, tint = gris, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("No tienes viviendas registradas", color = gris, fontWeight = FontWeight.SemiBold)
+                    Text(c.vivVacio, color = gris, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Realiza un preestudio para añadir una", color = gris, fontSize = 13.sp)
+                    Text(c.vivVacioSub, color = gris, fontSize = 13.sp)
                 }
             }
         } else {
@@ -123,7 +130,7 @@ fun MisViviendasScreen(
                                         )
                                         if (esSeleccionada) {
                                             Spacer(Modifier.width(8.dp))
-                                            EstadoChip("Activa", verde, fontSize = 10)
+                                            EstadoChip(c.vivActiva, verde, fontSize = 10)
                                         }
                                     }
                                     if (v.direccion.isNotEmpty()) {
@@ -133,23 +140,23 @@ fun MisViviendasScreen(
                                 }
                                 Row {
                                     IconButton(onClick = { viviendaEditando = v }) {
-                                        Icon(Icons.Default.Edit, "Editar", tint = verde)
+                                        Icon(Icons.Default.Edit, c.vivEditar, tint = verde)
                                     }
                                     IconButton(onClick = { confirmarEliminar = v.id }) {
-                                        Icon(Icons.Default.Delete, "Eliminar", tint = Color(0xFFDC2626))
+                                        Icon(Icons.Default.Delete, c.comEliminar, tint = Color(0xFFDC2626))
                                     }
                                 }
                             }
                             Spacer(Modifier.height(8.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Text("${v.superficie} m²", color = gris, fontSize = 13.sp)
-                                Text("Año ${v.anioConstruccion}", color = gris, fontSize = 13.sp)
-                                Text(v.orientacion, color = gris, fontSize = 13.sp)
+                                Text("${c.vivAnio} ${v.anioConstruccion}", color = gris, fontSize = 13.sp)
+                                Text(TextosEnergia.opcion(v.orientacion, c), color = gris, fontSize = 13.sp)
                             }
                             Spacer(Modifier.height(4.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Text(v.calefaccion, color = gris, fontSize = 12.sp)
-                                Text(v.tipoVentanas, color = gris, fontSize = 12.sp)
+                                Text(TextosEnergia.opcion(v.calefaccion, c), color = gris, fontSize = 12.sp)
+                                Text(TextosEnergia.opcion(v.tipoVentanas, c), color = gris, fontSize = 12.sp)
                             }
                         }
                     }
@@ -162,16 +169,16 @@ fun MisViviendasScreen(
     if (confirmarEliminar != null) {
         AlertDialog(
             onDismissRequest = { confirmarEliminar = null },
-            title = { Text("Eliminar vivienda", fontWeight = FontWeight.SemiBold) },
-            text = { Text("¿Estás seguro? Se perderán todos los datos asociados.") },
+            title = { Text(c.vivEliminarTitulo, fontWeight = FontWeight.SemiBold) },
+            text = { Text(c.vivEliminarMsg) },
             confirmButton = {
                 Button(
                     onClick = { viewModel.eliminarVivienda(confirmarEliminar!!); confirmarEliminar = null },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) { Text("Eliminar", color = Color.White) }
+                ) { Text(c.comEliminar, color = Color.White) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { confirmarEliminar = null }) { Text("Cancelar") }
+                OutlinedButton(onClick = { confirmarEliminar = null }) { Text(c.cancelar) }
             }
         )
     }
@@ -196,6 +203,7 @@ private fun EditarViviendaDialog(
     onGuardar: (Vivienda) -> Unit
 ) {
     val verde = MaterialTheme.colorScheme.primary
+    val c = LocalCadenas.current
 
     var nombre by remember { mutableStateOf(vivienda.nombre) }
     var superficie by remember { mutableStateOf(vivienda.superficie.toString()) }
@@ -259,9 +267,9 @@ private fun EditarViviendaDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Editar vivienda", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(c.vivEditarTitulo, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, "Cerrar")
+                        Icon(Icons.Default.Close, c.cerrar)
                     }
                 }
 
@@ -277,7 +285,7 @@ private fun EditarViviendaDialog(
                     OutlinedTextField(
                         value = nombre,
                         onValueChange = { nombre = it },
-                        label = { Text("Nombre") },
+                        label = { Text(c.vivNombre) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -286,7 +294,7 @@ private fun EditarViviendaDialog(
                         OutlinedTextField(
                             value = superficie,
                             onValueChange = { if (it.all(Char::isDigit)) superficie = it },
-                            label = { Text("Superficie (m²)") },
+                            label = { Text(c.preSuperficie) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
@@ -294,7 +302,7 @@ private fun EditarViviendaDialog(
                         OutlinedTextField(
                             value = anio,
                             onValueChange = { if (it.all(Char::isDigit) && it.length <= 4) anio = it },
-                            label = { Text("Año construcción") },
+                            label = { Text(c.preAnio) },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
@@ -303,7 +311,7 @@ private fun EditarViviendaDialog(
                     OutlinedTextField(
                         value = ocupantes,
                         onValueChange = { if (it.all(Char::isDigit) && it.length <= 2) ocupantes = it },
-                        label = { Text("Nº de ocupantes") },
+                        label = { Text(c.preOcupantes) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -311,29 +319,29 @@ private fun EditarViviendaDialog(
                     OutlinedTextField(
                         value = direccion,
                         onValueChange = { direccion = it },
-                        label = { Text("Dirección") },
+                        label = { Text(c.preDireccion) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                     Column {
-                        Text("Provincia", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(c.preProvincia, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(6.dp))
                         SelectorProvincia(
                             valor = provincia,
                             onValor = { provincia = it }
                         )
                     }
-                    DropdownField("Tipo de vivienda", tipoVivienda, optsTipoVivienda) { tipoVivienda = it }
-                    DropdownField("Tipo de ventanas", ventanas, optsVentanas) { ventanas = it }
-                    DropdownField("Aislamiento", aislamiento, optsAislamiento) { aislamiento = it }
-                    DropdownField("Calefacción", calefaccion, optsCalefaccion) { calefaccion = it }
-                    DropdownField("Refrigeración", refrigeracion, optsRefrigeracion) { refrigeracion = it }
-                    DropdownField("ACS", acs, optsAcs) { acs = it }
-                    DropdownField("Iluminación", iluminacion, optsIluminacion) { iluminacion = it }
-                    DropdownField("Electrodomésticos", electrodomesticos, optsElectrodomesticos) { electrodomesticos = it }
-                    DropdownField("Fotovoltaica (autoconsumo)", fotovoltaica, optsFotovoltaica) { fotovoltaica = it }
-                    DropdownField("Orientación", orientacion, optsOrientacion) { orientacion = it }
+                    DropdownField(c.preTipoVivienda, tipoVivienda, optsTipoVivienda) { tipoVivienda = it }
+                    DropdownField(c.preVentanas, ventanas, optsVentanas) { ventanas = it }
+                    DropdownField(c.preAislamiento, aislamiento, optsAislamiento) { aislamiento = it }
+                    DropdownField(c.preCalefaccion, calefaccion, optsCalefaccion) { calefaccion = it }
+                    DropdownField(c.preRefrigeracion, refrigeracion, optsRefrigeracion) { refrigeracion = it }
+                    DropdownField(c.preAcs, acs, optsAcs) { acs = it }
+                    DropdownField(c.preIluminacion, iluminacion, optsIluminacion) { iluminacion = it }
+                    DropdownField(c.preElectrodomesticos, electrodomesticos, optsElectrodomesticos) { electrodomesticos = it }
+                    DropdownField(c.preFotovoltaica, fotovoltaica, optsFotovoltaica) { fotovoltaica = it }
+                    DropdownField(c.preOrientacion, orientacion, optsOrientacion) { orientacion = it }
                 }
 
                 HorizontalDivider()
@@ -346,7 +354,7 @@ private fun EditarViviendaDialog(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("Cancelar") }
+                    ) { Text(c.cancelar) }
                     Button(
                         onClick = {
                             onGuardar(
@@ -374,7 +382,7 @@ private fun EditarViviendaDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = verde),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
-                    ) { Text("Guardar", color = Color.White) }
+                    ) { Text(c.guardar, color = Color.White) }
                 }
             }
         }
@@ -384,21 +392,22 @@ private fun EditarViviendaDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DropdownField(label: String, valor: String, opciones: List<String>, onSelect: (String) -> Unit) {
+    val c = LocalCadenas.current
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
-            value = valor,
+            value = TextosEnergia.opcion(valor, c),
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             opciones.forEach { op ->
                 DropdownMenuItem(
-                    text = { Text(op) },
+                    text = { Text(TextosEnergia.opcion(op, c)) },
                     onClick = { onSelect(op); expanded = false }
                 )
             }

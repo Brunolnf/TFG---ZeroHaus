@@ -4,27 +4,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
-import com.example.zerohaus.Modelos.SolicitudPresupuesto
-import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.example.zerohaus.Repositorios.RepositorioChat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Cliente que ha escrito al profesional, con su última conversación.
+ */
 data class ClienteResumen(
     val uid: String,
     val nombre: String,
     val ultimoMensaje: String = "",
     val fechaUltima: Long = 0L,
-    val solicitudes: Int = 0,
-    val activas: Int = 0,
     val chatId: String = ""
 )
 
+/**
+ * Estado de la pantalla de clientes del profesional.
+ */
 data class MisClientesEstado(
     val clientes: List<ClienteResumen> = emptyList(),
-    val cargando: Boolean = false
+    val cargando: Boolean = false,
+    val abriendoChat: Boolean = false
 )
 
+/**
+ * Clientes del profesional, a partir de sus conversaciones en tiempo real.
+ */
 class MisClientesTecnicoViewModel : ViewModel() {
 
     var estado by mutableStateOf(MisClientesEstado())
@@ -32,93 +39,71 @@ class MisClientesTecnicoViewModel : ViewModel() {
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private val repoTecnicos = RepositorioTecnicos()
+    private val repoChat = RepositorioChat()
 
     private var listenerChats: ListenerRegistration? = null
-    private var listenerSolicitudes: ListenerRegistration? = null
-    private var ultimosChats: Map<String, ClienteResumen> = emptyMap()
-    private var ultimasSolicitudes: List<SolicitudPresupuesto> = emptyList()
 
     init { if (auth.currentUser != null) cargar() }
 
-    /**
-     * Suscribe chats y solicitudes en tiempo real y recompone la lista en cada
-     * cambio. Antes era one-shot con caché (`if (clientes.isNotEmpty()) return`):
-     * si llegaba un mensaje o solicitud nueva mientras la pantalla estaba abierta,
-     * no se actualizaba hasta reabrir la app.
-     */
     fun cargar(forzar: Boolean = false) {
-        if (listenerChats != null && listenerSolicitudes != null) return
+        if (listenerChats != null && !forzar) return
         estado = estado.copy(cargando = true)
         val miUid = auth.currentUser?.uid ?: run {
             estado = estado.copy(cargando = false); return
         }
 
+        listenerChats?.remove()
         listenerChats = db.collection("chats")
             .whereArrayContains("participantes", miUid)
             .addSnapshotListener { snap, _ ->
-                val mapa = mutableMapOf<String, ClienteResumen>()
+                val clientes = mutableListOf<ClienteResumen>()
                 snap?.documents?.forEach { doc ->
                     @Suppress("UNCHECKED_CAST")
                     val participantes = (doc.get("participantes") as? List<String>) ?: emptyList()
                     @Suppress("UNCHECKED_CAST")
                     val nombres = (doc.get("nombresParticipantes") as? Map<String, Any>) ?: emptyMap()
-                    val ultimo = doc.getString("ultimoMensaje") ?: ""
-                    val fecha = doc.getLong("fechaUltimoMensaje") ?: 0L
                     val otro = participantes.firstOrNull { it != miUid } ?: return@forEach
-                    val nombreOtro = (nombres[otro] as? String) ?: "Cliente"
-                    mapa[otro] = ClienteResumen(
-                        uid = otro,
-                        nombre = nombreOtro.replace(Regex(" \\(Técnico\\)"), "").trim(),
-                        ultimoMensaje = ultimo,
-                        fechaUltima = fecha,
-                        chatId = doc.id
+                    clientes.add(
+                        ClienteResumen(
+                            uid = otro,
+                            nombre = ((nombres[otro] as? String) ?: "Cliente").trim(),
+                            ultimoMensaje = doc.getString("ultimoMensaje") ?: "",
+                            fechaUltima = doc.getLong("fechaUltimoMensaje") ?: 0L,
+                            chatId = doc.id
+                        )
                     )
                 }
-                ultimosChats = mapa
-                recomponer()
-            }
-
-        listenerSolicitudes = repoTecnicos.escucharSolicitudesRecibidas { lista ->
-            ultimasSolicitudes = lista
-            recomponer()
-        }
-    }
-
-    private fun recomponer() {
-        val mapa = ultimosChats
-        val solicitudes = ultimasSolicitudes
-        val porCliente = solicitudes.groupBy { it.uidCliente }
-        val activosEstados = setOf("Pendiente", "Presupuestado", "Aceptado")
-        val conChat = mapa.values.map { c ->
-            val sols = porCliente[c.uid].orEmpty()
-            c.copy(
-                solicitudes = sols.size,
-                activas = sols.count { it.estado in activosEstados }
-            )
-        }
-        val sinChat = solicitudes
-            .filter { it.uidCliente !in mapa.keys && it.uidCliente.isNotBlank() }
-            .groupBy { it.uidCliente }
-            .map { (uid, sols) ->
-                ClienteResumen(
-                    uid = uid,
-                    nombre = sols.firstOrNull()?.nombreCliente ?: "Cliente",
-                    solicitudes = sols.size,
-                    activas = sols.count { it.estado in activosEstados }
+                estado = estado.copy(
+                    clientes = clientes.sortedByDescending { it.fechaUltima },
+                    cargando = false
                 )
             }
-        estado = estado.copy(
-            clientes = (conChat + sinChat).sortedByDescending { it.fechaUltima },
-            cargando = false
-        )
+    }
+
+    fun abrirChatConCliente(cliente: ClienteResumen, onChatListo: (String) -> Unit) {
+        if (cliente.chatId.isNotBlank()) { onChatListo(cliente.chatId); return }
+        if (estado.abriendoChat) return
+        estado = estado.copy(abriendoChat = true)
+        val miUid = auth.currentUser?.uid ?: return
+        db.collection("usuarios").document(miUid).get()
+            .addOnSuccessListener { doc ->
+                val miNombre = doc.getString("nombre") ?: "Profesional"
+                repoChat.obtenerOCrearChat(cliente.uid, cliente.nombre, miNombre) { chatId ->
+                    estado = estado.copy(abriendoChat = false)
+                    if (chatId.isNotBlank()) onChatListo(chatId)
+                }
+            }
+            .addOnFailureListener {
+                repoChat.obtenerOCrearChat(cliente.uid, cliente.nombre, "Profesional") { chatId ->
+                    estado = estado.copy(abriendoChat = false)
+                    if (chatId.isNotBlank()) onChatListo(chatId)
+                }
+            }
     }
 
     override fun onCleared() {
         super.onCleared()
         listenerChats?.remove()
-        listenerSolicitudes?.remove()
         listenerChats = null
-        listenerSolicitudes = null
     }
 }

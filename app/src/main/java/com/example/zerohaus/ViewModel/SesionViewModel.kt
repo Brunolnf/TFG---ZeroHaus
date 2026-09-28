@@ -10,6 +10,11 @@ import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.AppEstado
 import com.google.firebase.auth.FirebaseAuth
 
+/**
+ * Sesión a nivel de app: si hay usuario, sus datos, el rol de admin (custom
+ * claim) y el cierre de sesión. Tiene reintentos y un watchdog para no dejar
+ * la app en un spinner infinito si la carga se cuelga.
+ */
 class SesionViewModel : ViewModel() {
 
     private val auth = FirebaseAuth.getInstance()

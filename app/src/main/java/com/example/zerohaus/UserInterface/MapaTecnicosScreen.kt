@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,29 +21,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.TecnicosViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
 
-// 14 ubicaciones residenciales reales por toda España (interior de manzana, no carreteras ni aeropuertos)
-private val UBICACIONES_RESIDENCIALES_FALLBACK = listOf(
-    LatLng(40.4291, -3.6182),  // Madrid - San Blas
-    LatLng(41.3912,  2.1118),  // Barcelona - Les Corts
-    LatLng(37.3624, -5.9847),  // Sevilla - Heliópolis
-    LatLng(39.4901, -0.3894),  // Valencia - Marxalenes
-    LatLng(43.2641, -2.9374),  // Bilbao - Irala
-    LatLng(41.6488, -0.8908),  // Zaragoza - Centro
-    LatLng(36.7195, -4.4128),  // Málaga - La Malagueta
-    LatLng(37.1773, -3.6035),  // Granada - Camino de Ronda
-    LatLng(37.9849, -1.1314),  // Murcia - Centro
-    LatLng(38.3658, -0.4863),  // Alicante - Garbinet
-    LatLng(43.3582, -8.4133),  // A Coruña - Os Mallos
-    LatLng(42.2218, -8.7162),  // Vigo - O Calvario
-    LatLng(42.8071, -1.6514),  // Pamplona - Iturrama
-    LatLng(39.5705,  2.6398)   // Palma de Mallorca - Son Espanyolet
-)
-
+/**
+ * Mapa de profesionales (Google Maps). Solo se pinta una ubicación real: la
+ * del profesional o la de su ciudad; nunca se inventa.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapaTecnicosScreen(
@@ -50,6 +38,7 @@ fun MapaTecnicosScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
@@ -65,36 +54,30 @@ fun MapaTecnicosScreen(
 
     LaunchedEffect(Unit) { viewModel.cargarTecnicos(forzar = true) }
 
-    // Coordenadas: reales > ciudad conocida > fallback por hash.
-    // Si varios técnicos comparten la misma posición exacta, se aplica
-    // un pequeño desplazamiento (~300-500m) para que no se solapen.
+    // Posición: la del profesional o, si no la tiene, el centro de su ciudad.
+    // Sin ninguna de las dos NO se pinta (nunca se inventa una ubicación).
+    // Si varios comparten la misma posición exacta, se separan ~400 m en
+    // círculo para que no se solapen.
     val tecnicosConPos = remember(estado.tecnicos) {
         val posiciones = mutableMapOf<String, Int>() // clave → contador de repeticiones
-        estado.tecnicos.map { t ->
+        estado.tecnicos.mapNotNull { t ->
             val base = when {
-                t.latitud != 0.0 || t.longitud != 0.0 ->
-                    LatLng(t.latitud, t.longitud)
-                t.ciudad.isNotBlank() -> {
-                    val coords = com.example.zerohaus.Repositorios.RepositorioTecnicos.coordenadasDeCiudad(t.ciudad)
-                    if (coords != null) LatLng(coords.first, coords.second)
-                    else UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
-                }
-                else ->
-                    UBICACIONES_RESIDENCIALES_FALLBACK[Math.abs(t.id.hashCode()) % UBICACIONES_RESIDENCIALES_FALLBACK.size]
-            }
-            // Desplazar si hay colisión
-            val clave = "%.4f,%.4f".format(base.latitude, base.longitude)
+                t.latitud != 0.0 || t.longitud != 0.0 -> LatLng(t.latitud, t.longitud)
+                else -> com.example.zerohaus.Repositorios.RepositorioTecnicos.coordenadasDeCiudad(t.ciudad)
+                    ?.let { LatLng(it.first, it.second) }
+            } ?: return@mapNotNull null
+            val clave = String.format(java.util.Locale.US, "%.4f,%.4f", base.latitude, base.longitude)
             val n = posiciones.getOrDefault(clave, 0)
             posiciones[clave] = n + 1
             val pos = if (n > 0) {
-                // Distribuir en círculo alrededor del punto (radio ~0.004° ≈ 400m)
-                val angulo = Math.toRadians(n * 72.0) // 5 posiciones max en circulo
+                val angulo = Math.toRadians(n * 72.0)
                 LatLng(base.latitude + 0.004 * Math.cos(angulo), base.longitude + 0.004 * Math.sin(angulo))
             } else base
             t to pos
         }
     }
-    val hayUbicacionesAproximadas = estado.tecnicos.any { it.latitud == 0.0 && it.longitud == 0.0 }
+    // Profesionales que no se pueden situar (sin ciudad reconocida)
+    val hayUbicacionesAproximadas = tecnicosConPos.size < estado.tecnicos.size
 
     Scaffold(
         containerColor = fondo,
@@ -102,13 +85,13 @@ fun MapaTecnicosScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Mapa de técnicos", fontWeight = FontWeight.SemiBold)
-                        Text("${estado.tecnicos.size} técnicos disponibles", color = gris, fontSize = 12.sp)
+                        Text(c.mapaTitulo, fontWeight = FontWeight.SemiBold)
+                        Text("${estado.tecnicos.size} ${c.mapaSubtitulo}", color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver)
                     }
                 }
             )
@@ -130,7 +113,7 @@ fun MapaTecnicosScreen(
                     tecnicosConPos.forEach { (tecnico, posicion) ->
                         val esSeleccionado = tecnicoSeleccionado?.id == tecnico.id
                         MarkerComposable(
-                            keys = arrayOf(tecnico.id, esSeleccionado),
+                            keys = arrayOf<Any>(tecnico.id, esSeleccionado),
                             state = MarkerState(position = posicion),
                             title = tecnico.nombre,
                             snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull() ?: ""}",
@@ -240,7 +223,7 @@ fun MapaTecnicosScreen(
                         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, null, tint = gris, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Algunas ubicaciones son aproximadas", fontSize = 12.sp, color = gris)
+                            Text(c.mapaAproximadas, fontSize = 12.sp, color = gris)
                         }
                     }
                 }
@@ -265,7 +248,7 @@ fun MapaTecnicosScreen(
                             ) {
                                 Text(t.nombre, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
                                 IconButton(onClick = { tecnicoSeleccionado = null }) {
-                                    Icon(Icons.Default.Close, "Cerrar", tint = gris)
+                                    Icon(Icons.Default.Close, c.cerrar, tint = gris)
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -278,7 +261,7 @@ fun MapaTecnicosScreen(
                             if (t.ciudad.isNotEmpty()) {
                                 Text(t.ciudad, color = gris, fontSize = 12.sp)
                             }
-                            Text("${t.proyectosCompletados} proyectos completados", color = gris, fontSize = 12.sp)
+                            Text("${t.opiniones} ${c.comValoraciones}", color = gris, fontSize = 12.sp)
                             Spacer(Modifier.height(10.dp))
                             Button(
                                 onClick = { onVerPerfil(t.id) },
@@ -286,7 +269,7 @@ fun MapaTecnicosScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Ver perfil completo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                Text(c.comVerPerfilCompleto, color = Color.White, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }

@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
+/**
+ * Fila de 5 estrellas que admite fracciones (p. ej. 4,3 pinta la quinta al 30 %).
+ */
 @Composable
 fun FilaEstrellas(
     rating: Double,

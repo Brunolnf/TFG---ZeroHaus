@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.RegistroViewModel
 import com.example.zerohaus.Util.LocalCadenas
 
+/**
+ * Registro de cuenta: nombre, email, contraseña y tipo (propietario, técnico o empresa).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegistroScreen(
@@ -113,6 +116,7 @@ fun RegistroScreen(
                     }
                     val tipoDisplay = when (estado.tipoUsuario) {
                         "Técnico" -> c.tipoTecnico
+                        "Empresa" -> c.tipoEmpresa
                         else -> c.tipoPropietario
                     }
                     ExposedDropdownMenuBox(
@@ -127,13 +131,17 @@ fun RegistroScreen(
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
-                            modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = expandirTipo,
                             onDismissRequest = { expandirTipo = false }
                         ) {
-                            listOf("Propietario" to c.tipoPropietario, "Técnico" to c.tipoTecnico).forEach { (clave, etiqueta) ->
+                            listOf(
+                                "Propietario" to c.tipoPropietario,
+                                "Técnico" to c.tipoTecnico,
+                                "Empresa" to c.tipoEmpresa
+                            ).forEach { (clave, etiqueta) ->
                                 DropdownMenuItem(
                                     text = { Text(etiqueta) },
                                     onClick = { viewModel.cambiarTipoUsuario(clave); expandirTipo = false }

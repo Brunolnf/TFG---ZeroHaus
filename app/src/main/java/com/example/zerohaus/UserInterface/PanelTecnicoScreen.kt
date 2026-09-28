@@ -1,9 +1,5 @@
 package com.example.zerohaus.UserInterface
 
-import android.net.Uri
-import android.provider.OpenableColumns
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,12 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.zerohaus.ViewModel.CertificadoViewModel
+import com.example.zerohaus.Modelos.Planes
+import com.example.zerohaus.Modelos.esDestacado
+import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.ViewModel.PanelTecnicoViewModel
 import com.example.zerohaus.ViewModel.PanelViewModel
 import com.example.zerohaus.Util.LocalCadenas
@@ -35,14 +31,16 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Inicio del profesional: resumen de su perfil y actividad, accesos rápidos y notificaciones.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PanelTecnicoScreen(
     viewModel: PanelTecnicoViewModel,
     panelViewModel: PanelViewModel,
-    certificadoViewModel: CertificadoViewModel,
     onAjustes: () -> Unit = {},
-    onProyectos: () -> Unit = {},
+    onSuscripcion: () -> Unit = {},
     onResenas: () -> Unit = {},
     onEstadisticas: () -> Unit = {}
 ) {
@@ -51,20 +49,9 @@ fun PanelTecnicoScreen(
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val estado = viewModel.estado
     val panelEstado = panelViewModel.estado
-    val certEstado = certificadoViewModel.estado
+    val dorado = Color(0xFFF59E0B)
 
-    val context = LocalContext.current
     var mostrarNotif by remember { mutableStateOf(false) }
-    var mostrarCert by remember { mutableStateOf(false) }
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null && certEstado.puedeAgregar) {
-            val nombre = context.contentResolver
-                .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { if (it.moveToFirst()) it.getString(0) else null }
-                ?: uri.lastPathSegment ?: "archivo"
-            certificadoViewModel.agregarArchivo(uri, nombre)
-        }
-    }
 
     LaunchedEffect(Unit) {
         viewModel.cargar()
@@ -85,12 +72,9 @@ fun PanelTecnicoScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { mostrarCert = true }) {
-                        Icon(Icons.Default.AddCircle, null, tint = gris, modifier = Modifier.size(24.dp))
-                    }
                     Box {
                         IconButton(onClick = { mostrarNotif = true }) {
-                            Icon(Icons.Default.Notifications, null, tint = gris, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Notifications, c.panelNotificaciones, tint = gris, modifier = Modifier.size(24.dp))
                         }
                         if (panelEstado.hayNoLeidas) {
                             Box(
@@ -104,7 +88,7 @@ fun PanelTecnicoScreen(
                         }
                     }
                     IconButton(onClick = onAjustes) {
-                        Icon(Icons.Default.Settings, null, tint = gris, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Settings, c.ajustesTitulo, tint = gris, modifier = Modifier.size(24.dp))
                     }
                 }
             )
@@ -129,9 +113,9 @@ fun PanelTecnicoScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("No encontramos tu perfil", fontWeight = FontWeight.SemiBold, color = Color(0xFF991B1B))
+                        Text(c.ptecSinPerfilTitulo, fontWeight = FontWeight.SemiBold, color = Color(0xFF991B1B))
                         Text(
-                            "Tu cuenta está marcada como técnico pero no hay un perfil vinculado en la colección /tecnicos. Pide al administrador que vincule tu uid de Auth con tu perfil.",
+                            c.ptecSinPerfilSub,
                             fontSize = 13.sp, color = Color(0xFF7F1D1D)
                         )
                     }
@@ -139,14 +123,13 @@ fun PanelTecnicoScreen(
             } else {
                 val tec = estado.tecnico
 
-                // Cabecera verde con saludo, ciudad y stats
                 Card(
                     colors = CardDefaults.cardColors(containerColor = verde),
                     shape = RoundedCornerShape(20.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(20.dp)) {
-                        Text("Hola,", color = Color.White.copy(0.85f), fontSize = 14.sp)
+                        Text(c.ptecHola, color = Color.White.copy(0.85f), fontSize = 14.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(tec.nombre, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         if (tec.ciudad.isNotBlank()) {
@@ -159,39 +142,60 @@ fun PanelTecnicoScreen(
                         }
                         Spacer(Modifier.height(16.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            StatVerde("⭐ ${tec.rating}", "${tec.opiniones} opiniones")
-                            StatVerde("${tec.proyectosCompletados}", "Proyectos")
-                            StatVerde("${estado.solicitudesAceptadas}", "Trabajos activos")
+                            StatVerde("⭐ ${tec.rating}", "${tec.opiniones} ${c.comOpiniones}")
+                            StatVerde(
+                                if (tec.esDestacado) c.estDestacado
+                                else if (tec.esVerificado) c.estVerificado
+                                else c.estGratuito,
+                                c.subPlanActual
+                            )
                         }
                     }
                 }
 
-                // Mis proyectos asignados
+                // Suscripción
+                if (!tec.esVerificado) {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Info, null, tint = Color(0xFF92400E), modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                c.ptecCtaSuscripcion,
+                                fontSize = 13.sp, color = Color(0xFF92400E)
+                            )
+                        }
+                    }
+                }
+
                 ResumenCard(
-                    icono = Icons.Default.Construction,
-                    color = Color(0xFF2563EB),
-                    titulo = "Mis proyectos",
-                    subtitulo = "Gestiona tareas, marca progreso y entrega trabajos",
-                    badge = null,
-                    onClick = onProyectos
+                    icono = Icons.Default.WorkspacePremium,
+                    color = if (tec.esDestacado) dorado else if (tec.esVerificado) Color(0xFF065F46) else Color(0xFF2563EB),
+                    titulo = c.tecMiSuscripcion,
+                    subtitulo = if (tec.esDestacado) c.ptecPlanDestacadoActivo
+                                else if (tec.esVerificado) c.ptecPlanVerificadoActivo
+                                else c.ptecSinPlan,
+                    badge = if (!tec.esVerificado) c.ptecMejora else null,
+                    onClick = onSuscripcion
                 )
 
-                // Reseñas recibidas
                 ResumenCard(
                     icono = Icons.Default.Star,
                     color = Color(0xFFEAB308),
-                    titulo = "Mis reseñas",
-                    subtitulo = "${tec.opiniones} opiniones · ⭐ ${tec.rating} de media",
+                    titulo = c.resTitulo,
+                    subtitulo = "${tec.opiniones} ${c.comOpiniones} · ⭐ ${tec.rating} ${c.ptecDeMedia}",
                     badge = null,
                     onClick = onResenas
                 )
 
-                // Estadísticas
                 ResumenCard(
                     icono = Icons.Default.BarChart,
                     color = Color(0xFF065F46),
-                    titulo = "Estadísticas",
-                    subtitulo = "Ingresos, tasa de aceptación y rendimiento",
+                    titulo = c.estTitulo,
+                    subtitulo = c.ptecEstadisticasSub,
                     badge = null,
                     onClick = onEstadisticas
                 )
@@ -232,7 +236,7 @@ fun PanelTecnicoScreen(
                                         Spacer(Modifier.height(4.dp))
                                         Text(n.detalle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                                         Spacer(Modifier.height(4.dp))
-                                        Text(formatTimestampTec(n.fecha), color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                                        Text(formatTimestampTec(n.fecha, c.comHoy, c.comAyer), color = Color(0xFF9CA3AF), fontSize = 11.sp)
                                     }
                                 }
                             }
@@ -251,145 +255,6 @@ fun PanelTecnicoScreen(
             confirmButton = {
                 Button(onClick = { mostrarNotif = false }, colors = ButtonDefaults.buttonColors(containerColor = verde)) {
                     Text(c.cerrar, color = Color.White)
-                }
-            }
-        )
-    }
-
-    if (mostrarCert) {
-        var abrirT by remember { mutableStateOf(false) }
-        AlertDialog(
-            onDismissRequest = { mostrarCert = false; certificadoViewModel.limpiar() },
-            title = { Text(c.panelSubirCertificado, fontSize = 20.sp, fontWeight = FontWeight.SemiBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    OutlinedTextField(
-                        value = certEstado.nombre,
-                        onValueChange = { certificadoViewModel.cambiarNombre(it) },
-                        label = { Text(c.panelNombreLabel) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Box(Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = certEstado.tipo.ifBlank { "Selecciona un tipo" },
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(c.panelTipoLabel) },
-                            textStyle = LocalTextStyle.current.copy(
-                                color = if (certEstado.tipoSeleccionado)
-                                    MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            trailingIcon = {
-                                IconButton(onClick = { abrirT = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, null)
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        DropdownMenu(expanded = abrirT, onDismissRequest = { abrirT = false }) {
-                            listOf("Instalación", "Auditoría", "Energías renovables", "Certificación").forEach { o ->
-                                DropdownMenuItem(text = { Text(o) }, onClick = {
-                                    certificadoViewModel.cambiarTipo(o); abrirT = false
-                                })
-                            }
-                        }
-                    }
-
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "Archivos (${certEstado.archivos.size}/6)",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 13.sp
-                        )
-                        if (certEstado.archivos.isNotEmpty() && certEstado.puedeAgregar) {
-                            TextButton(
-                                onClick = { filePicker.launch("*/*") },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                            ) {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(15.dp))
-                                Spacer(Modifier.width(2.dp))
-                                Text("Añadir", fontSize = 12.sp)
-                            }
-                        }
-                    }
-
-                    if (certEstado.archivos.isEmpty()) {
-                        OutlinedButton(
-                            onClick = { filePicker.launch("*/*") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.AttachFile, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(c.panelSeleccionarArchivo)
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            certEstado.archivos.forEachIndexed { index, archivo ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.InsertDriveFile, null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = verde
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        archivo.nombre,
-                                        modifier = Modifier.weight(1f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    IconButton(
-                                        onClick = { certificadoViewModel.eliminarArchivo(index) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Close, null,
-                                            modifier = Modifier.size(15.dp),
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (certEstado.cargando) LinearProgressIndicator(Modifier.fillMaxWidth(), color = verde)
-                    certEstado.error?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
-                    }
-                    if (certEstado.exito) Text(c.panelCertificadoSubido, color = verde, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { certificadoViewModel.subirCertificado() },
-                    enabled = certEstado.listo && !certEstado.cargando,
-                    colors = ButtonDefaults.buttonColors(containerColor = verde)
-                ) { Text(c.subir, color = Color.White) }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { mostrarCert = false; certificadoViewModel.limpiar() }) {
-                    Text(c.cancelar)
                 }
             }
         )
@@ -450,7 +315,7 @@ private fun ResumenCard(
     }
 }
 
-private fun formatTimestampTec(ts: Long): String {
+private fun formatTimestampTec(ts: Long, hoyTxt: String, ayerTxt: String): String {
     val hoy = Calendar.getInstance()
     val msg = Calendar.getInstance().apply { timeInMillis = ts }
     val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -458,10 +323,10 @@ private fun formatTimestampTec(ts: Long): String {
     return when {
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR) ->
-            "Hoy · ${sdfHora.format(Date(ts))}"
+            "$hoyTxt · ${sdfHora.format(Date(ts))}"
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) - msg.get(Calendar.DAY_OF_YEAR) == 1 ->
-            "Ayer · ${sdfHora.format(Date(ts))}"
+            "$ayerTxt · ${sdfHora.format(Date(ts))}"
         else -> sdfFecha.format(Date(ts))
     }
 }

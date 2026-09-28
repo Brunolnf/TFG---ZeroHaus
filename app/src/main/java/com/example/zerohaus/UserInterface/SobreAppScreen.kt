@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,6 +17,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.LocalCadenas
 
+/**
+ * Información sobre la app: qué hace, funciones principales y versión.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SobreAppScreen(onVolver: () -> Unit = {}) {
@@ -69,7 +73,7 @@ fun SobreAppScreen(onVolver: () -> Unit = {}) {
                         c.sobreFuncViviendas,
                         c.sobreFuncBusqueda,
                         c.sobreFuncChat,
-                        c.sobreFuncPresupuestos,
+                        c.sobreFuncContacto,
                         c.sobreFuncGraficas,
                         c.sobreFuncValoraciones
                     ).forEach { t ->

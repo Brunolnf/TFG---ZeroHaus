@@ -5,15 +5,23 @@ import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.google.firebase.auth.ActionCodeSettings
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
+import com.google.firebase.functions.FirebaseFunctions
 
+/**
+ * Autenticación y cuenta: login (con comprobación de bloqueo), registro,
+ * recuperación y cambio de contraseña, perfil del usuario y borrado de la
+ * propia cuenta (Cloud Function `eliminar_mi_cuenta`).
+ */
 class RepositorioAutenticacion {
 
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
+    private val functions = FirebaseFunctions.getInstance("europe-west1")
 
     fun login(
         email: String,
@@ -88,21 +96,25 @@ class RepositorioAutenticacion {
                     callback(Result.failure(Exception("No se pudo obtener el usuario")))
                     return@addOnSuccessListener
                 }
+                // El email se verifica después con un código de 6 dígitos
+                // (pantalla VerificarEmail + Cloud Functions de verificación).
                 val usuario = Usuario(uid = uid, nombre = nombre, email = email, tipoUsuario = tipo)
                 db.collection("usuarios").document(uid).set(usuario)
                     .addOnSuccessListener {
-                        if (tipo == "Técnico") {
-                            // Crear perfil básico de técnico para que aparezca en búsquedas
+                        if (tipo == "Técnico" || tipo == "Empresa") {
+                            // Crear perfil profesional para que aparezca en búsquedas.
                             val tecnico = Tecnico(
                                 id = uid,
                                 uid = uid,
                                 nombre = nombre,
-                                emailContacto = email
+                                emailContacto = email,
+                                tipoProfesional = if (tipo == "Empresa") Tecnico.TIPO_EMPRESA
+                                                  else Tecnico.TIPO_TECNICO
                             )
                             db.collection("tecnicos").document(uid).set(tecnico)
                                 .addOnSuccessListener { callback(Result.success(Unit)) }
                                 .addOnFailureListener { e ->
-                                    callback(Result.failure(Exception(e.message ?: "Error creando perfil de técnico")))
+                                    callback(Result.failure(Exception(e.message ?: "Error creando perfil profesional")))
                                 }
                         } else {
                             callback(Result.success(Unit))
@@ -154,7 +166,7 @@ class RepositorioAutenticacion {
      *
      * [obtenerUsuario] llama al callback dos veces (caché y luego servidor) para
      * refrescar la UI. Eso es correcto para pantallas de display, pero en acciones
-     * de escritura (crear solicitud de presupuesto, publicar reseña…) provoca que
+     * de escritura (publicar una reseña, crear un chat…) provoca que
      * la acción se ejecute dos veces y se creen DOCUMENTOS DUPLICADOS. Usa esta
      * variante en cualquier callback que cree o modifique datos.
      */
@@ -196,6 +208,60 @@ class RepositorioAutenticacion {
 
     fun getUid(): String? = auth.currentUser?.uid
 
+    fun getEmail(): String? = auth.currentUser?.email
+
+    /**
+     * Cambia la contraseña del usuario actual. Firebase exige un login reciente
+     * para operaciones sensibles, así que primero re-autenticamos con la
+     * contraseña actual (que además la valida) y solo entonces actualizamos.
+     */
+    fun cambiarPassword(
+        passwordActual: String,
+        passwordNueva: String,
+        callback: (Result<Unit>) -> Unit
+    ) {
+        val user = auth.currentUser
+        val email = user?.email
+        if (user == null || email.isNullOrBlank()) {
+            callback(Result.failure(Exception("No hay sesión activa.")))
+            return
+        }
+        val credencial = EmailAuthProvider.getCredential(email, passwordActual)
+        user.reauthenticate(credencial)
+            .addOnSuccessListener {
+                user.updatePassword(passwordNueva)
+                    .addOnSuccessListener { callback(Result.success(Unit)) }
+                    .addOnFailureListener { e ->
+                        callback(Result.failure(Exception(traducirError(e.message))))
+                    }
+            }
+            .addOnFailureListener { e ->
+                callback(Result.failure(Exception(traducirError(e.message))))
+            }
+    }
+
+    /**
+     * Borrado self-service de la cuenta: delega en la Cloud Function
+     * `eliminar_mi_cuenta`, que borra en cascada todos los datos del usuario y
+     * su cuenta de Auth server-side (RGPD / requisito de Google Play). Al
+     * terminar cerramos la sesión local.
+     */
+    fun eliminarMiCuenta(callback: (Result<Unit>) -> Unit) {
+        if (auth.currentUser == null) {
+            callback(Result.failure(Exception("No hay sesión activa.")))
+            return
+        }
+        functions.getHttpsCallable("eliminar_mi_cuenta")
+            .call()
+            .addOnSuccessListener {
+                auth.signOut()
+                callback(Result.success(Unit))
+            }
+            .addOnFailureListener { e ->
+                callback(Result.failure(Exception(e.message ?: "No se pudo eliminar la cuenta.")))
+            }
+    }
+
     /**
      * Envía el email de recuperación. Por seguridad **no revela** si el correo
      * existe o no: ante "user-not-found" devuelve éxito igualmente, así un
@@ -226,15 +292,20 @@ class RepositorioAutenticacion {
     }
 
     private fun codigoIdiomaFirebase(idioma: String): String = when (idioma) {
-        "English"   -> "en"
-        "Català"    -> "ca"
-        "Euskara"   -> "eu"
-        "Galego"    -> "gl"
-        "Português" -> "pt"
-        "Français"  -> "fr"
-        "Deutsch"   -> "de"
-        "Italiano"  -> "it"
-        else        -> "es"
+        "English"    -> "en"
+        "Català"     -> "ca"
+        "Euskara"    -> "eu"
+        "Galego"     -> "gl"
+        "Português"  -> "pt"
+        "Français"   -> "fr"
+        "Deutsch"    -> "de"
+        "Italiano"   -> "it"
+        "العربية"    -> "ar"
+        "中文"        -> "zh"
+        "Română"     -> "ro"
+        "Nederlands" -> "nl"
+        "Polski"     -> "pl"
+        else         -> "es"
     }
 
     private fun traducirError(msg: String?): String {

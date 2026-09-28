@@ -7,10 +7,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
+/**
+ * Estado del formulario del preestudio.
+ */
 data class PreestudioEstado(
     val nombreVivienda: String = "Mi vivienda principal",
     val superficie: String = "100",
@@ -36,6 +41,9 @@ data class PreestudioEstado(
     val cargandoViviendas: Boolean = false
 )
 
+/**
+ * Valida el preestudio, guarda la vivienda si es nueva y genera el informe.
+ */
 class PreestudioViewModel : ViewModel() {
 
     var estado by mutableStateOf(PreestudioEstado())
@@ -68,29 +76,23 @@ class PreestudioViewModel : ViewModel() {
         val anio = estado.anio.toIntOrNull()
         val ocupantes = estado.ocupantes.toIntOrNull()
         val algo = com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+        val c = getCadenas(AppEstado.idioma)
+        val anioActual = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
 
-        when {
-            estado.nombreVivienda.isBlank() ->
-                { estado = estado.copy(error = "El nombre de la vivienda no puede estar vacío"); return }
-            superficie == null || superficie <= 0 || superficie > 5000 ->
-                { estado = estado.copy(error = "Introduce una superficie válida (1–5000 m²)"); return }
-            anio == null || anio < 1900 || anio > java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) ->
-                { estado = estado.copy(error = "Introduce un año de construcción válido (1900–${java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)})"); return }
-            estado.provincia !in algo.provinciasOrdenadas ->
-                { estado = estado.copy(error = "Selecciona una provincia válida de la lista"); return }
-            estado.iluminacion !in algo.opcionesIluminacion ->
-                { estado = estado.copy(error = "Selecciona el tipo de iluminación"); return }
-            estado.tipoVivienda !in algo.opcionesTipoVivienda ->
-                { estado = estado.copy(error = "Selecciona el tipo de vivienda"); return }
-            estado.refrigeracion !in algo.opcionesRefrigeracion ->
-                { estado = estado.copy(error = "Selecciona el sistema de refrigeración"); return }
-            estado.fotovoltaica !in algo.opcionesFotovoltaica ->
-                { estado = estado.copy(error = "Indica si hay instalación fotovoltaica"); return }
-            estado.electrodomesticos !in algo.opcionesElectrodomesticos ->
-                { estado = estado.copy(error = "Selecciona la clase de electrodomésticos"); return }
-            ocupantes == null || ocupantes !in 1..20 ->
-                { estado = estado.copy(error = "Introduce un número de ocupantes válido (1–20)"); return }
+        val error = when {
+            estado.nombreVivienda.isBlank() -> c.errNombreVivienda
+            superficie == null || superficie <= 0 || superficie > 5000 -> c.errSuperficie
+            anio == null || anio < 1900 || anio > anioActual -> "${c.errAnio} (1900–$anioActual)"
+            estado.provincia !in algo.provinciasOrdenadas -> "${c.errSeleccionaCampo}: ${c.preProvincia}"
+            estado.iluminacion !in algo.opcionesIluminacion -> "${c.errSeleccionaCampo}: ${c.preIluminacion}"
+            estado.tipoVivienda !in algo.opcionesTipoVivienda -> "${c.errSeleccionaCampo}: ${c.preTipoVivienda}"
+            estado.refrigeracion !in algo.opcionesRefrigeracion -> "${c.errSeleccionaCampo}: ${c.preRefrigeracion}"
+            estado.fotovoltaica !in algo.opcionesFotovoltaica -> "${c.errSeleccionaCampo}: ${c.preFotovoltaica}"
+            estado.electrodomesticos !in algo.opcionesElectrodomesticos -> "${c.errSeleccionaCampo}: ${c.preElectrodomesticos}"
+            ocupantes == null || ocupantes !in 1..20 -> c.errOcupantes
+            else -> null
         }
+        if (error != null) { estado = estado.copy(error = error); return }
 
         estado = estado.copy(cargando = true, error = null)
 

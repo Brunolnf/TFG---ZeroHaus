@@ -12,6 +12,9 @@
 -->
 <full-backup-content>
     <exclude domain="sharedpref" path="ajustes.xml" />
+    <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+    <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
     <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
     <exclude domain="file" path="firebase-installations-store" />
+    <exclude domain="sharedpref" path="__androidx_security_crypto_encrypted_prefs__.xml" />
 </full-backup-content>

@@ -1,5 +1,6 @@
 ﻿package com.example.zerohaus.UserInterface
 
+import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,21 +27,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.zerohaus.ViewModel.CertificadoViewModel
 import com.example.zerohaus.ViewModel.PanelViewModel
+import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.ResenaApp
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Inicio del propietario: saludo, resumen del último informe, accesos rápidos y notificaciones.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PanelScreen(
     panelViewModel: PanelViewModel,
     onNuevoPreestudio: () -> Unit = {},
     onMisViviendas: () -> Unit = {},
-    onMisProyectos: () -> Unit = {},
-    onPresupuestos: () -> Unit = {},
+    onBuscarProfesionales: () -> Unit = {},
     onHistorialInformes: () -> Unit = {},
     onGraficas: () -> Unit = {},
     onVerUltimoInforme: () -> Unit = {},
@@ -50,8 +55,16 @@ fun PanelScreen(
     val verde = MaterialTheme.colorScheme.primary
     val estado = panelViewModel.estado
     var mostrarNotif by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
     LaunchedEffect(Unit) { panelViewModel.cargarDatos() }
-    val nombre = estado.usuario?.nombre ?: "Usuario"
+    // Momento feliz: usuario con un informe ya cargado → pedimos valoración
+    // (una vez, tras varias interacciones; Google además lo limita).
+    LaunchedEffect(estado.cargando, estado.ultimoInforme) {
+        if (!estado.cargando && estado.ultimoInforme != null) {
+            (ctx as? Activity)?.let { ResenaApp.pedirSiProcede(it, AppPreferencias(it)) }
+        }
+    }
+    val nombre = estado.usuario?.nombre ?: c.comUsuarioFallback
     val fotoUrl = estado.usuario?.fotoPerfil ?: ""
     val vivienda = estado.vivienda
     val informe = estado.ultimoInforme
@@ -72,21 +85,21 @@ fun PanelScreen(
                 actions = {
                     Box {
                         IconButton(onClick = { mostrarNotif = true }) {
-                            Icon(Icons.Default.Notifications, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Notifications, c.panelNotificaciones, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                         }
                         if (estado.hayNoLeidas) {
                             Box(Modifier.size(9.dp).clip(CircleShape).background(Color(0xFFEF4444)).align(Alignment.TopEnd).offset(x = (-6).dp, y = 6.dp))
                         }
                     }
                     IconButton(onClick = onAjustes) {
-                        Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Settings, c.ajustesTitulo, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
                     }
                 }
             )
         }
     ) { pv ->
         if (estado.cargando) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = verde) }
+            PanelSkeleton(Modifier.padding(pv))
         } else {
             LazyColumn(
                 Modifier.padding(pv).fillMaxSize().padding(horizontal = 18.dp),
@@ -98,7 +111,7 @@ fun PanelScreen(
                         if (fotoUrl.isNotEmpty()) {
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current).data(fotoUrl).crossfade(true).build(),
-                                contentDescription = "Perfil",
+                                contentDescription = c.perfFotoPerfil,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.size(44.dp).clip(CircleShape).clickable { onPerfil() }
                             )
@@ -134,9 +147,9 @@ fun PanelScreen(
                             Spacer(Modifier.height(14.dp))
                             if (informe != null) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatEnergia(informe.consumoEstimado), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.emisiones} kg CO₂", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatMonedaAnual(informe.costeAnual), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.consumoEstimado, { Formato.formatEnergia(it) }, Color.White, 15.sp, FontWeight.SemiBold) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.emisiones.toDouble(), { "${it.toInt()} kg CO₂" }, Color.White, 15.sp, FontWeight.SemiBold) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.costeAnual, { Formato.formatMonedaAnual(it) }, Color.White, 15.sp, FontWeight.SemiBold) }
                                 }
                             } else {
                                 Text(c.panelSinDatos, color = Color.White.copy(0.8f))
@@ -158,10 +171,9 @@ fun PanelScreen(
                 item { Text(c.panelAccionesRapidas, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground) }
                 item { TarjetaAccion(Icons.Default.Add, Color(0xFFD1FAE5), Color(0xFF065F46), c.panelNuevoPreestudio, c.panelNuevoPreestudioSub, onNuevoPreestudio) }
                 item { TarjetaAccion(Icons.Default.Home, Color(0xFFE0F2FE), Color(0xFF0284C7), c.masViviendas, c.panelMisViviendasSub, onMisViviendas) }
-                item { TarjetaAccion(Icons.Default.Menu, Color(0xFFEDE9FE), Color(0xFF7C3AED), c.masProyectos, c.panelMisProyectosSub, onMisProyectos) }
-                item { TarjetaAccion(Icons.Default.Description, Color(0xFFDBEAFE), Color(0xFF2563EB), c.masPresupuestos, c.panelPresupuestosSub, onPresupuestos) }
+                item { TarjetaAccion(Icons.Default.Search, Color(0xFFDBEAFE), Color(0xFF2563EB), c.explorarBuscarTecnicos, c.panelBuscarTecnicosSub, onBuscarProfesionales) }
                 item { TarjetaAccion(Icons.Default.Assessment, Color(0xFFD1FAE5), Color(0xFF065F46), c.explorarHistorial, c.panelHistorialInformesSub, onHistorialInformes) }
-                item { TarjetaAccion(Icons.Default.ShowChart, Color(0xFFFCE7F3), Color(0xFFDB2777), c.explorarGraficas, c.panelGraficasSub, onGraficas) }
+                item { TarjetaAccion(Icons.AutoMirrored.Filled.ShowChart, Color(0xFFFCE7F3), Color(0xFFDB2777), c.explorarGraficas, c.panelGraficasSub, onGraficas) }
                 item { Spacer(Modifier.height(16.dp)) }
             }
         }
@@ -198,7 +210,7 @@ fun PanelScreen(
                                         Spacer(Modifier.height(4.dp))
                                         Text(n.detalle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                                         Spacer(Modifier.height(4.dp))
-                                        Text(formatTimestampPanel(n.fecha), color = Color(0xFF9CA3AF), fontSize = 11.sp)
+                                        Text(formatTimestampPanel(n.fecha, c.comHoy, c.comAyer), color = Color(0xFF9CA3AF), fontSize = 11.sp)
                                     }
                                 }
                             }
@@ -243,7 +255,7 @@ private fun TarjetaAccion(icono: ImageVector, bgI: Color, cI: Color, titulo: Str
     }
 }
 
-private fun formatTimestampPanel(ts: Long): String {
+private fun formatTimestampPanel(ts: Long, hoyTxt: String, ayerTxt: String): String {
     val hoy = Calendar.getInstance()
     val msg = Calendar.getInstance().apply { timeInMillis = ts }
     val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -251,10 +263,10 @@ private fun formatTimestampPanel(ts: Long): String {
     return when {
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR) ->
-            "Hoy · ${sdfHora.format(Date(ts))}"
+            "$hoyTxt · ${sdfHora.format(Date(ts))}"
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) - msg.get(Calendar.DAY_OF_YEAR) == 1 ->
-            "Ayer · ${sdfHora.format(Date(ts))}"
+            "$ayerTxt · ${sdfHora.format(Date(ts))}"
         else -> sdfFecha.format(Date(ts))
     }
 }

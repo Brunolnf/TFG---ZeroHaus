@@ -3,6 +3,7 @@ package com.example.zerohaus.Repositorios
 import android.net.Uri
 import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -10,6 +11,11 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Source
 import com.google.firebase.storage.FirebaseStorage
 
+/**
+ * Chat entre clientes y profesionales: crear o recuperar conversaciones,
+ * escuchar mensajes en tiempo real (paginados), enviar texto, imágenes y
+ * archivos (Cloud Storage) y marcar como leídos.
+ */
 class RepositorioChat {
 
     private val db = FirebaseFirestore.getInstance()
@@ -120,6 +126,24 @@ class RepositorioChat {
             .addOnFailureListener { callback("") }
     }
 
+    /**
+     * Id del chat CON MENSAJES entre el usuario actual y [otroUid], o null.
+     * Es el requisito para poder valorar a un profesional.
+     */
+    fun buscarConversacionCon(otroUid: String, callback: (String?) -> Unit) {
+        val miUid = uid()
+        if (miUid.isBlank() || otroUid.isBlank()) { callback(null); return }
+        db.collection("chats")
+            .whereArrayContains("participantes", miUid)
+            .getOrTimeout { snap ->
+                val chat = snap?.documents
+                    ?.mapNotNull { it.toObject(Chat::class.java)?.copy(id = it.id) }
+                    ?.filter { otroUid in it.participantes && it.fechaUltimoMensaje > 0 }
+                    ?.maxByOrNull { it.fechaUltimoMensaje }
+                callback(chat?.id)
+            }
+    }
+
     fun escucharChats(callback: (List<Chat>) -> Unit): ListenerRegistration {
         return db.collection("chats")
             .whereArrayContains("participantes", uid())
@@ -132,9 +156,15 @@ class RepositorioChat {
             }
     }
 
-    fun cargarMensajesDesdeCache(chatId: String, callback: (List<MensajeChat>) -> Unit) {
+    /** Los [limite] mensajes más recientes, ordenados del más antiguo al más nuevo. */
+    private fun ultimosMensajes(chatId: String, limite: Long) =
         db.collection("chats").document(chatId)
             .collection("mensajes")
+            .orderBy("fecha")
+            .limitToLast(limite)
+
+    fun cargarMensajesDesdeCache(chatId: String, limite: Long, callback: (List<MensajeChat>) -> Unit) {
+        ultimosMensajes(chatId, limite)
             .get(Source.CACHE)
             .addOnSuccessListener { snap ->
                 val mensajes = snap.documents
@@ -145,18 +175,22 @@ class RepositorioChat {
             .addOnFailureListener { callback(emptyList()) }
     }
 
+    /**
+     * Escucha en tiempo real los [limite] mensajes más recientes. `hayMas` indica
+     * que la ventana está llena y puede haber mensajes anteriores que cargar.
+     */
     fun escucharMensajes(
         chatId: String,
-        callback: (List<MensajeChat>) -> Unit
+        limite: Long,
+        callback: (mensajes: List<MensajeChat>, hayMas: Boolean) -> Unit
     ): ListenerRegistration {
-        return db.collection("chats").document(chatId)
-            .collection("mensajes")
+        return ultimosMensajes(chatId, limite)
             .addSnapshotListener { snap, error ->
                 if (error != null || snap == null) return@addSnapshotListener
                 val mensajes = snap.documents
                     .mapNotNull { it.toObject(MensajeChat::class.java) }
                     .sortedBy { it.fecha }
-                callback(mensajes)
+                callback(mensajes, snap.size() >= limite)
             }
     }
 

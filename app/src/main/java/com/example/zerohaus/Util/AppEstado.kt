@@ -4,6 +4,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
+/**
+ * Estado global observable (idioma, tema, unidades, notificaciones, caché
+ * del tipo de usuario y del rol de admin). Al ser estado Compose, cambiar un
+ * valor recompone la interfaz al momento.
+ */
 object AppEstado {
     var tema by mutableStateOf("Sistema")
     var idioma by mutableStateOf("Español")

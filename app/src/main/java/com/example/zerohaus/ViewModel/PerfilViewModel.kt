@@ -8,11 +8,15 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
+
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.example.zerohaus.Util.Telefono
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 
+/**
+ * Estado del perfil propio.
+ */
 data class PerfilEstado(
     val usuario: Usuario? = null,
     val nombre: String = "",
@@ -32,8 +36,14 @@ data class PerfilEstado(
     val subiendoFoto: Boolean = false,
     val exito: Boolean = false,
     val error: String? = null
-)
+) {
+    /** Técnicos certificadores y empresas de reformas comparten el perfil profesional. */
+    val esProfesional: Boolean get() = tipoUsuario == "Técnico" || tipoUsuario == "Empresa"
+}
 
+/**
+ * Edición del perfil propio. Técnicos y empresas editan también su perfil profesional.
+ */
 class PerfilViewModel : ViewModel() {
 
     var estado by mutableStateOf(PerfilEstado())
@@ -41,6 +51,7 @@ class PerfilViewModel : ViewModel() {
 
     private val repo = RepositorioAutenticacion()
     private val repoTecnicos = RepositorioTecnicos()
+
     private val storage = FirebaseStorage.getInstance()
     private val auth = FirebaseAuth.getInstance()
 
@@ -57,17 +68,19 @@ class PerfilViewModel : ViewModel() {
                     tipoUsuario = usuario.tipoUsuario,
                     fotoPerfil = usuario.fotoPerfil
                 )
-                if (usuario.tipoUsuario == "Técnico") {
+                if (usuario.tipoUsuario == "Técnico" || usuario.tipoUsuario == "Empresa") {
                     // Buscamos por campo uid (no por ID de documento, que es diferente al Auth UID)
                     repoTecnicos.obtenerMiPerfilTecnico { tecnico ->
                         estado = estado.copy(
                             especialidades = tecnico?.especialidades?.joinToString(", ") ?: "",
                             descripcion = tecnico?.descripcion ?: "",
-                            telefono = Telefono.normalizar(tecnico?.telefono),
-                            emailContacto = tecnico?.emailContacto?.ifEmpty { usuario.email } ?: usuario.email,
                             tecnicoDocId = tecnico?.id ?: "",
                             ciudad = tecnico?.ciudad ?: "",
                             cargando = false
+                        )
+                        estado = estado.copy(
+                            telefono = Telefono.normalizar(tecnico?.telefono),
+                            emailContacto = (tecnico?.emailContacto ?: "").ifBlank { usuario.email }
                         )
                     }
                 } else {
@@ -98,7 +111,7 @@ class PerfilViewModel : ViewModel() {
             result
                 .onSuccess {
                     estado = estado.copy(usuario = actualizado)
-                    if (usuario.tipoUsuario == "Técnico") {
+                    if (estado.esProfesional) {
                         val especialidadesLista = estado.especialidades
                             .split(",")
                             .map { it.trim() }
@@ -112,8 +125,6 @@ class PerfilViewModel : ViewModel() {
                                 nombre = estado.nombre,
                                 ciudad = estado.ciudad,
                                 descripcion = estado.descripcion,
-                                telefono = estado.telefono,
-                                emailContacto = estado.emailContacto.ifEmpty { usuario.email },
                                 especialidades = especialidadesLista
                             ) { _ -> estado = estado.copy(guardando = false, exito = true) }
                         } else {
@@ -123,8 +134,8 @@ class PerfilViewModel : ViewModel() {
                                 ciudad = estado.ciudad,
                                 especialidades = especialidadesLista,
                                 descripcion = estado.descripcion,
-                                telefono = estado.telefono,
-                                emailContacto = estado.emailContacto.ifEmpty { usuario.email }
+                                tipoProfesional = if (usuario.tipoUsuario == "Empresa") Tecnico.TIPO_EMPRESA
+                                                  else Tecnico.TIPO_TECNICO
                             )
                             repoTecnicos.registrarTecnico(tecnico) { _ ->
                                 estado = estado.copy(guardando = false, exito = true)

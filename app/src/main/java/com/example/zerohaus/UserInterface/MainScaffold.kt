@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,12 +20,15 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.*
 import com.example.zerohaus.Util.LocalCadenas
 
+/**
+ * Estructura principal del propietario: barra inferior (inicio, explorar, mensajes, más) y sus pestañas.
+ */
 @Composable
 fun MainScaffold(
-    panelViewModel: PanelViewModel, certificadoViewModel: CertificadoViewModel, chatViewModel: ChatViewModel,
+    panelViewModel: PanelViewModel, chatViewModel: ChatViewModel,
     onCerrarSesion: () -> Unit = {}, onNuevoPreestudio: () -> Unit = {}, onBuscarTecnicos: () -> Unit = {},
-    onMisProyectos: () -> Unit = {}, onRankings: () -> Unit = {}, onVerUltimoInforme: () -> Unit = {},
-    onPerfil: () -> Unit = {}, onPresupuestos: () -> Unit = {}, onHistorialInformes: () -> Unit = {},
+    onRankings: () -> Unit = {}, onVerUltimoInforme: () -> Unit = {},
+    onPerfil: () -> Unit = {}, onHistorialInformes: () -> Unit = {},
     onMisViviendas: () -> Unit = {}, onChats: (String) -> Unit = {}, onGraficas: () -> Unit = {},
     onMapaTecnicos: () -> Unit = {}, onSobreApp: () -> Unit = {}, onAjustes: () -> Unit = {}
 ) {
@@ -41,7 +45,7 @@ fun MainScaffold(
     LaunchedEffect(Unit) { chatViewModel.cargarChats() }
     val noLeidos = chatViewModel.contarNoLeidos()
     val notificaciones = panelViewModel.estado.notificaciones
-    val noLeidasInicio = notificaciones.count { !it.leida && it.tipo in listOf("presupuesto", "proyecto") }
+    val noLeidasInicio = notificaciones.count { !it.leida && it.tipo != "chat" }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -82,7 +86,7 @@ fun MainScaffold(
         // así evitamos doblar la altura de la status bar.
         Box(Modifier.padding(bottom = pv.calculateBottomPadding())) {
             when (actual) {
-                "inicio" -> PanelScreen(panelViewModel, onNuevoPreestudio, onMisViviendas, onMisProyectos, onPresupuestos, onHistorialInformes, onGraficas, onVerUltimoInforme, onPerfil, onAjustes)
+                "inicio" -> PanelScreen(panelViewModel, onNuevoPreestudio, onMisViviendas, onBuscarTecnicos, onHistorialInformes, onGraficas, onVerUltimoInforme, onPerfil, onAjustes)
                 "mensajes" -> ChatsListScreen(chatViewModel, { actual = "inicio" }, onChats)
                 "explorar" -> PantallaExplorar(onBuscarTecnicos, onMapaTecnicos, onRankings)
                 "mas" -> PantallaMas(onPerfil, onAjustes, onSobreApp, onCerrarSesion)
@@ -124,11 +128,11 @@ private fun PantallaMas(
             onClick = onCerrarSesion,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            border = ButtonDefaults.outlinedButtonBorder.copy(
+            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                 brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFDC2626))
             )
         ) {
-            Icon(Icons.Default.ExitToApp, null, tint = Color(0xFFDC2626))
+            Icon(Icons.AutoMirrored.Filled.ExitToApp, null, tint = Color(0xFFDC2626))
             Spacer(Modifier.width(8.dp))
             Text(c.cerrarSesion, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
         }

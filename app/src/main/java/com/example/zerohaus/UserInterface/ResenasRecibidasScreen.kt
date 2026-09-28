@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,16 +20,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Resena
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ResenasRecibidasViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Valoraciones que ha recibido el profesional.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResenasRecibidasScreen(
     viewModel: ResenasRecibidasViewModel,
     onVolver: () -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val estado = viewModel.estado
@@ -39,9 +45,9 @@ fun ResenasRecibidasScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Mis reseñas", fontWeight = FontWeight.SemiBold) },
+                title = { Text(c.resTitulo, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
         }
@@ -80,7 +86,7 @@ fun ResenasRecibidasScreen(
                                     )
                                 }
                             }
-                            Text("${estado.totales} reseñas", color = gris, fontSize = 12.sp)
+                            Text("${estado.totales} ${c.comValoraciones}", color = gris, fontSize = 12.sp)
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -114,10 +120,10 @@ fun ResenasRecibidasScreen(
                     ) {
                         Icon(Icons.Default.Star, null, tint = gris, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(12.dp))
-                        Text("Aún no tienes reseñas", fontWeight = FontWeight.SemiBold)
+                        Text(c.resVacioTitulo, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Cuando tus clientes te valoren tras completar un trabajo, sus opiniones aparecerán aquí.",
+                            c.resVacioSub,
                             color = gris, fontSize = 13.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
@@ -154,7 +160,7 @@ private fun ResenaCard(r: Resena) {
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(r.nombreUsuario.ifBlank { "Cliente" }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(r.nombreUsuario.ifBlank { LocalCadenas.current.comClienteFallback }, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Text(sdf.format(Date(r.fecha)), color = gris, fontSize = 11.sp)
                 }
                 Row {

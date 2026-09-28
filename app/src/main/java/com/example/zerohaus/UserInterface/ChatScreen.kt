@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -41,11 +42,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Conversación: mensajes en tiempo real (paginados de 50 en 50), envío de
+ * texto, fotos y archivos (máx. 15 MB), visor de imágenes y borrado de mensajes.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
@@ -60,6 +66,7 @@ fun ChatScreen(
     val fondo = MaterialTheme.colorScheme.background
 
     val estado = viewModel.chatEstado
+    val cad = LocalCadenas.current
     val miUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
     val sdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
@@ -71,11 +78,6 @@ fun ChatScreen(
     var imagenAmpliada by remember { mutableStateOf<String?>(null) }
     var archivoAmpliado by remember { mutableStateOf<MensajeChat?>(null) }
     var mensajeAEliminar by remember { mutableStateOf<MensajeChat?>(null) }
-
-    // Estado del diálogo "solicitar presupuesto"
-    var mostrarDialogoPresupuesto by remember { mutableStateOf(false) }
-    var descripcionPresupuesto by remember { mutableStateOf("") }
-    var enviandoPresupuesto by remember { mutableStateOf(false) }
 
     val imagenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -94,8 +96,10 @@ fun ChatScreen(
                     if (si >= 0) bytes = c.getLong(si)
                 }
             }
-            if (bytes > 50 * 1024 * 1024) {
-                errorLocal = "El archivo supera el límite de 50 MB"
+            // Mismo tope que storage.rules (15 MB): si no, el upload sería
+            // rechazado por el servidor con un error genérico.
+            if (bytes > 15 * 1024 * 1024) {
+                errorLocal = cad.chatArchivoLimite
             } else {
                 viewModel.enviarArchivo(chatId, uri, nombre, bytes)
             }
@@ -104,8 +108,12 @@ fun ChatScreen(
 
     LaunchedEffect(chatId) { viewModel.abrirChat(chatId) }
     DisposableEffect(Unit) { onDispose { viewModel.cerrarChat() } }
-    LaunchedEffect(estado.mensajes.size) {
-        if (estado.mensajes.isNotEmpty()) listState.animateScrollToItem(estado.mensajes.lastIndex)
+    // Baja al final solo cuando llega un mensaje NUEVO (no al cargar anteriores)
+    LaunchedEffect(estado.mensajes.lastOrNull()?.id) {
+        if (estado.mensajes.isNotEmpty()) {
+            val cabecera = if (estado.hayMasMensajes) 1 else 0
+            listState.animateScrollToItem(estado.mensajes.lastIndex + cabecera)
+        }
     }
 
     Scaffold(
@@ -141,30 +149,16 @@ fun ChatScreen(
                             )
                             when {
                                 estado.otroTecnicoDocId.isNotEmpty() ->
-                                    Text("Ver perfil", color = verde, fontSize = 11.sp)
+                                    Text(cad.chatVerPerfil, color = verde, fontSize = 11.sp)
                                 estado.nombreOtroUsuario.isNotEmpty() ->
-                                    Text("Conversación", color = gris, fontSize = 11.sp)
+                                    Text(cad.chatConversacion, color = gris, fontSize = 11.sp)
                             }
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
-                    }
-                },
-                actions = {
-                    if (estado.otroTecnicoDocId.isNotEmpty()) {
-                        IconButton(onClick = {
-                            descripcionPresupuesto = ""
-                            mostrarDialogoPresupuesto = true
-                        }) {
-                            Icon(
-                                Icons.Default.RequestQuote,
-                                contentDescription = "Solicitar presupuesto",
-                                tint = verde
-                            )
-                        }
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, cad.volver)
                     }
                 }
             )
@@ -190,8 +184,8 @@ fun ChatScreen(
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(Modifier.height(12.dp))
-                        Text("No hay mensajes aún", color = gris)
-                        Text("Escribe el primer mensaje", color = gris.copy(0.7f), fontSize = 13.sp)
+                        Text(cad.chatVacio, color = gris)
+                        Text(cad.chatVacioSub, color = gris.copy(0.7f), fontSize = 13.sp)
                     }
                 }
             } else {
@@ -203,6 +197,19 @@ fun ChatScreen(
                     state = listState,
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (estado.hayMasMensajes) {
+                        item(key = "cargar_anteriores") {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                if (estado.cargandoAnteriores) {
+                                    CircularProgressIndicator(Modifier.size(20.dp), color = verde, strokeWidth = 2.dp)
+                                } else {
+                                    TextButton(onClick = { viewModel.cargarMensajesAnteriores() }) {
+                                        Text(cad.chatAnteriores, color = verde, fontSize = 13.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     items(estado.mensajes, key = { it.id }) { msg ->
                         val esMio = msg.emisorUid == miUid
                         Column(
@@ -271,7 +278,7 @@ fun ChatScreen(
                             ) {
                                 Icon(Icons.Default.AddCircle, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Foto", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(cad.chatFoto, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
                             OutlinedButton(
                                 onClick = { archivoLauncher.launch(arrayOf("*/*")) },
@@ -283,7 +290,7 @@ fun ChatScreen(
                             ) {
                                 Icon(Icons.Default.Description, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Archivo", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                Text(cad.chatArchivo, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
                         }
 
@@ -299,7 +306,7 @@ fun ChatScreen(
                                 value = estado.texto,
                                 onValueChange = { if (it.length <= 2000) viewModel.cambiarTexto(it) },
                                 modifier = Modifier.weight(1f),
-                                placeholder = { Text("Escribe un mensaje…", color = gris) },
+                                placeholder = { Text(cad.chatEscribe, color = gris) },
                                 shape = RoundedCornerShape(24.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -315,7 +322,7 @@ fun ChatScreen(
                                 enabled = estado.texto.isNotBlank() && !estado.enviando,
                                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = verde)
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = Color.White)
+                                Icon(Icons.AutoMirrored.Filled.Send, cad.chatEnviar, tint = Color.White)
                             }
                         }
                     }
@@ -324,83 +331,12 @@ fun ChatScreen(
         }
     }
 
-    if (mostrarDialogoPresupuesto) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!enviandoPresupuesto) mostrarDialogoPresupuesto = false
-            },
-            icon = { Icon(Icons.Default.RequestQuote, null, tint = verde) },
-            title = { Text("Solicitar presupuesto", fontWeight = FontWeight.SemiBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Técnico: ${estado.nombreOtroUsuario}",
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    OutlinedTextField(
-                        value = descripcionPresupuesto,
-                        onValueChange = { if (it.length <= 500) descripcionPresupuesto = it },
-                        label = { Text("Describe lo que necesitas") },
-                        placeholder = { Text("Ej: Quiero instalar paneles solares en mi vivienda de 120m²") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 6,
-                        enabled = !enviandoPresupuesto,
-                        supportingText = { Text("${descripcionPresupuesto.length} / 500", fontSize = 11.sp) }
-                    )
-                    Text(
-                        "El técnico recibirá tu solicitud y podrás seguir el estado en la sección Presupuestos.",
-                        fontSize = 12.sp,
-                        color = gris
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        enviandoPresupuesto = true
-                        viewModel.solicitarPresupuestoAlTecnico(descripcionPresupuesto) { result ->
-                            enviandoPresupuesto = false
-                            result
-                                .onSuccess {
-                                    mostrarDialogoPresupuesto = false
-                                    descripcionPresupuesto = ""
-                                    toastExito = true
-                                    errorLocal = "Solicitud enviada a ${estado.nombreOtroUsuario}"
-                                }
-                                .onFailure { e ->
-                                    toastExito = false
-                                    errorLocal = e.message ?: "Error al enviar la solicitud"
-                                }
-                        }
-                    },
-                    enabled = !enviandoPresupuesto && descripcionPresupuesto.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = verde)
-                ) {
-                    if (enviandoPresupuesto) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text("Enviar solicitud", color = Color.White)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { mostrarDialogoPresupuesto = false },
-                    enabled = !enviandoPresupuesto
-                ) { Text("Cancelar") }
-            }
-        )
-    }
-
     mensajeAEliminar?.let { msg ->
         AlertDialog(
             onDismissRequest = { mensajeAEliminar = null },
             icon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFDC2626)) },
-            title = { Text("Eliminar mensaje", fontWeight = FontWeight.SemiBold) },
-            text = { Text("¿Quieres eliminar este mensaje? Esta acción no se puede deshacer.") },
+            title = { Text(cad.chatEliminarTitulo, fontWeight = FontWeight.SemiBold) },
+            text = { Text(cad.chatEliminarMsg) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -408,10 +344,10 @@ fun ChatScreen(
                         mensajeAEliminar = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) { Text("Eliminar", color = Color.White) }
+                ) { Text(cad.comEliminar, color = Color.White) }
             },
             dismissButton = {
-                OutlinedButton(onClick = { mensajeAEliminar = null }) { Text("Cancelar") }
+                OutlinedButton(onClick = { mensajeAEliminar = null }) { Text(cad.cancelar) }
             }
         )
     }
@@ -438,7 +374,7 @@ fun ChatScreen(
             ) {
                 AsyncImage(
                     model = url,
-                    contentDescription = "Imagen ampliada",
+                    contentDescription = cad.chatImagen,
                     modifier = Modifier
                         .fillMaxWidth()
                         .wrapContentHeight()
@@ -460,7 +396,7 @@ fun ChatScreen(
                     onClick = { imagenAmpliada = null },
                     modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
                 ) {
-                    Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.Close, cad.cerrar, tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 // Indicador de zoom al hacer pinch
                 if (scale > 1.1f) {
@@ -573,22 +509,22 @@ fun ChatScreen(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Abrir archivo", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            Text(cad.chatAbrirArchivo, color = Color.White, fontWeight = FontWeight.SemiBold)
                         }
                         OutlinedButton(
                             onClick = { archivoAmpliado = null },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("Cerrar") }
+                        ) { Text(cad.cerrar) }
                     }
                 }
                 IconButton(
                     onClick = { archivoAmpliado = null },
                     modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
                 ) {
-                    Icon(Icons.Default.Close, "Cerrar", tint = Color.White, modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.Close, cad.cerrar, tint = Color.White, modifier = Modifier.size(28.dp))
                 }
             }
         }
@@ -606,6 +542,7 @@ private fun BarraPreviewImagen(
     gris: Color,
     enviando: Boolean
 ) {
+    val cad = LocalCadenas.current
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
@@ -630,7 +567,7 @@ private fun BarraPreviewImagen(
                         .clickable(enabled = !enviando, onClick = onCancelar),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Close, "Cancelar", tint = Color.White, modifier = Modifier.size(12.dp))
+                    Icon(Icons.Default.Close, cad.cancelar, tint = Color.White, modifier = Modifier.size(12.dp))
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -638,7 +575,7 @@ private fun BarraPreviewImagen(
                 value = caption,
                 onValueChange = onCaptionChange,
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Añadir descripción…", color = gris, fontSize = 13.sp) },
+                placeholder = { Text(cad.chatAnadirDescripcion, color = gris, fontSize = 13.sp) },
                 shape = RoundedCornerShape(20.dp),
                 singleLine = true,
                 enabled = !enviando,
@@ -658,7 +595,7 @@ private fun BarraPreviewImagen(
                 if (enviando) {
                     CircularProgressIndicator(Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                 } else {
-                    Icon(Icons.AutoMirrored.Filled.Send, "Enviar", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.Send, cad.chatEnviar, tint = Color.White)
                 }
             }
         }
@@ -678,6 +615,7 @@ private fun BurbujaMensaje(
     onVerArchivo: (MensajeChat) -> Unit = {},
     onEliminar: (() -> Unit)? = null
 ) {
+    val cad = LocalCadenas.current
     val shape = RoundedCornerShape(
         topStart = if (esMio) 18.dp else 4.dp,
         topEnd = if (esMio) 4.dp else 18.dp,
@@ -700,7 +638,7 @@ private fun BurbujaMensaje(
                 Column {
                     AsyncImage(
                         model = msg.mediaUrl,
-                        contentDescription = "Imagen",
+                        contentDescription = cad.chatImagen,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 220.dp),
@@ -847,7 +785,7 @@ private fun archivoColor(ext: String, fallback: Color): Color = when (ext) {
 
 private fun archivoIcono(ext: String): ImageVector = when (ext) {
     "PDF" -> Icons.Default.PictureAsPdf
-    "DOC", "DOCX", "TXT" -> Icons.Default.Article
+    "DOC", "DOCX", "TXT" -> Icons.AutoMirrored.Filled.Article
     "XLS", "XLSX" -> Icons.Default.TableChart
     "PPT", "PPTX" -> Icons.Default.Slideshow
     "ZIP", "RAR", "7Z" -> Icons.Default.Archive

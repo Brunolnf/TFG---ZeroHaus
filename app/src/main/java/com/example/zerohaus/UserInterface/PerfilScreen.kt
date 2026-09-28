@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +32,10 @@ import coil.request.ImageRequest
 import com.example.zerohaus.ViewModel.PerfilViewModel
 import com.example.zerohaus.Util.LocalCadenas
 
+/**
+ * Perfil propio: nombre y foto y, en profesionales, los datos públicos
+ * (especialidades, descripción, teléfono, email y ciudad).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerfilScreen(
@@ -98,7 +103,7 @@ fun PerfilScreen(
                     if (estado.fotoPerfil.isNotEmpty()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current).data(estado.fotoPerfil).crossfade(true).build(),
-                            contentDescription = "Foto de perfil",
+                            contentDescription = c.perfFotoPerfil,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
                         )
@@ -151,11 +156,12 @@ fun PerfilScreen(
                         Text(c.perfilTipoUsuarioLabel, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                         val tipoDisplay = when (estado.tipoUsuario) {
                             "Técnico" -> c.tipoTecnico
+                            "Empresa" -> c.tipoEmpresa
                             else -> c.tipoPropietario
                         }
                         OutlinedTextField(
                             value = tipoDisplay, onValueChange = {}, readOnly = true,
-                            leadingIcon = { Icon(if (estado.tipoUsuario == "Técnico") Icons.Default.Build else Icons.Default.Home, null, tint = gris) },
+                            leadingIcon = { Icon(if (estado.esProfesional) Icons.Default.Build else Icons.Default.Home, null, tint = gris) },
                             singleLine = true, shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                             modifier = Modifier.fillMaxWidth()
@@ -163,8 +169,8 @@ fun PerfilScreen(
                     }
                 }
 
-                // Perfil técnico
-                if (estado.tipoUsuario == "Técnico") {
+                // Perfil profesional (técnico certificador o empresa de reformas)
+                if (estado.esProfesional) {
                     Card(
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -193,7 +199,10 @@ fun PerfilScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text("Teléfono", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                c.perfTelefonoPublico,
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface
+                            )
                             OutlinedTextField(
                                 value = estado.telefono,
                                 onValueChange = { viewModel.cambiarTelefono(it) },
@@ -202,7 +211,7 @@ fun PerfilScreen(
                                 prefix = { Text("+34 ", color = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                supportingText = { Text("9 dígitos (España)", fontSize = 11.sp, color = gris) },
+                                supportingText = { Text(c.perfTelefonoAyuda, fontSize = 11.sp, color = gris) },
                                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -218,11 +227,11 @@ fun PerfilScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Text("Ciudad", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(c.perfCiudad, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
                             OutlinedTextField(
                                 value = estado.ciudad,
                                 onValueChange = { viewModel.cambiarCiudad(it) },
-                                placeholder = { Text("Tu ciudad de trabajo") },
+                                placeholder = { Text(c.perfCiudadEj) },
                                 leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = gris) },
                                 singleLine = true, shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(unfocusedBorderColor = borde, focusedBorderColor = verde),
@@ -233,7 +242,7 @@ fun PerfilScreen(
 
                 }
 
-                val esTecnico = estado.tipoUsuario == "Técnico"
+                val esTecnico = estado.esProfesional
                 val perfilCompleto = estado.nombre.isNotBlank() && (!esTecnico || (
                     estado.especialidades.isNotBlank()
                         && estado.descripcion.isNotBlank()
@@ -286,9 +295,9 @@ fun PerfilScreen(
                             onClick = { confirmarCierre = true },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFDC2626)))
+                            border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFDC2626)))
                         ) {
-                            Icon(Icons.Default.ExitToApp, null, tint = Color(0xFFDC2626))
+                            Icon(Icons.AutoMirrored.Filled.ExitToApp, null, tint = Color(0xFFDC2626))
                             Spacer(Modifier.width(8.dp))
                             Text(c.cerrarSesion, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                         }
@@ -304,7 +313,7 @@ fun PerfilScreen(
         AlertDialog(
             onDismissRequest = { confirmarCierre = false },
             title = { Text(c.cerrarSesion, fontWeight = FontWeight.SemiBold) },
-            text = { Text("¿Seguro que quieres cerrar sesión?") },
+            text = { Text(c.perfCerrarSesionConfirma) },
             confirmButton = {
                 TextButton(onClick = { confirmarCierre = false; onCerrarSesion() }) {
                     Text(c.cerrarSesion, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)

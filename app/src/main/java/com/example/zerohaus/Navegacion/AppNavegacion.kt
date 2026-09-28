@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.UserInterface.*
 import com.example.zerohaus.Util.AdminConfig
@@ -28,6 +29,17 @@ import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.ViewModel.*
 import com.google.firebase.auth.FirebaseAuth
 
+private const val RUTA_VERIFICAR = "verificar_email"
+// Patrón completo (con el argumento opcional): es el que identifica el destino,
+// así que es el que debe usarse como startDestination.
+private const val RUTA_VERIFICAR_PATRON = "$RUTA_VERIFICAR?siguiente={siguiente}"
+
+/**
+ * Grafo de navegación de toda la app. Decide la pantalla inicial (login,
+ * verificación del email, panel de admin o app principal) y reacciona al
+ * cierre de sesión. Los perfiles cliente y profesional comparten el grafo y
+ * bifurcan en la ruta `main` según el tipo de usuario.
+ */
 @Composable
 fun AppNavegacion() {
     val sesionVM: SesionViewModel = viewModel()
@@ -57,11 +69,30 @@ fun AppNavegacion() {
     // startDestination se fija una sola vez cuando el NavHost se crea.
     // Los cambios posteriores de auth los gestiona el LaunchedEffect de abajo.
     val startDestination = remember {
+        val emailVerificado = FirebaseAuth.getInstance().currentUser?.isEmailVerified == true
         when {
+            // Sesión abierta pero sin verificar el email: no se entra hasta
+            // introducir el código (también si era una sesión antigua).
+            logueado && !emailVerificado -> RUTA_VERIFICAR_PATRON
             esAdmin  -> "admin"
             logueado -> "main"
             else     -> "login"
         }
+    }
+
+    // Destino tras un login/verificación: panel de admin o app normal según
+    // el claim del token (pedido fresco, ya incluye email_verified).
+    val entrarEnLaApp: () -> Unit = {
+        sesionVM.postLogin()
+        FirebaseAuth.getInstance().currentUser
+            ?.getIdToken(true)
+            ?.addOnSuccessListener { result ->
+                val destino = if (result.claims["admin"] == true) "admin" else "main"
+                nav.navigate(destino) { popUpTo(nav.graph.id) { inclusive = true } }
+            }
+            ?.addOnFailureListener {
+                nav.navigate("main") { popUpTo(nav.graph.id) { inclusive = true } }
+            }
     }
 
     // Al cerrar sesión navega explícitamente a login vaciando el back stack.
@@ -96,22 +127,13 @@ fun AppNavegacion() {
                     // logout, ese flag stale vuelve a disparar este callback. Si no hay
                     // sesión REAL, ignorarlo evita rebotar a "main" sin usuario (causa
                     // del spinner verde infinito).
-                    if (FirebaseAuth.getInstance().currentUser != null) {
-                        sesionVM.postLogin()
-                        // postLogin() dispara refrescarClaims(forzar=true), pero el
-                        // callback de getIdToken es async. Pedimos el token aquí
-                        // mismo y decidimos destino cuando llega; mientras tanto
-                        // navegamos a "main" como fallback (UX no se cuelga).
-                        FirebaseAuth.getInstance().currentUser
-                            ?.getIdToken(true)
-                            ?.addOnSuccessListener { result ->
-                                val esAdminClaim = result.claims["admin"] == true
-                                val destino = if (esAdminClaim) "admin" else "main"
-                                nav.navigate(destino) { popUpTo("login") { inclusive = true } }
-                            }
-                            ?.addOnFailureListener {
-                                nav.navigate("main") { popUpTo("login") { inclusive = true } }
-                            }
+                    val user = FirebaseAuth.getInstance().currentUser
+                    when {
+                        user == null -> Unit
+                        // Sin email verificado no se entra: primero el código
+                        !user.isEmailVerified ->
+                            nav.navigate(RUTA_VERIFICAR) { popUpTo("login") { inclusive = true } }
+                        else -> entrarEnLaApp()
                     }
                 },
                 onIrARegistro  = { nav.navigate("registro") },
@@ -123,9 +145,28 @@ fun AppNavegacion() {
             RegistroScreen(
                 viewModel = registroVM,
                 onRegistroExitoso = {
-                    nav.navigate("onboarding") { popUpTo("login") { inclusive = true } }
+                    // Cuenta recién creada: verificar el email y después el onboarding
+                    nav.navigate("$RUTA_VERIFICAR?siguiente=onboarding") { popUpTo("login") { inclusive = true } }
                 },
                 onIniciarSesion = { nav.popBackStack() }
+            )
+        }
+        composable(
+            RUTA_VERIFICAR_PATRON,
+            arguments = listOf(navArgument("siguiente") { nullable = true; defaultValue = null })
+        ) { entry ->
+            val siguiente = entry.arguments?.getString("siguiente")
+            val verificarVM: VerificarEmailViewModel = viewModel()
+            VerificarEmailScreen(
+                viewModel = verificarVM,
+                onVerificado = {
+                    if (siguiente == "onboarding") {
+                        nav.navigate("onboarding") { popUpTo(nav.graph.id) { inclusive = true } }
+                    } else {
+                        entrarEnLaApp()
+                    }
+                },
+                onUsarOtraCuenta = cerrarSesion
             )
         }
         composable("onboarding") {
@@ -186,42 +227,41 @@ fun AppNavegacion() {
                 return@composable
             }
 
-            if (tipoUsuario == "Técnico") {
+            // Técnicos certificadores y empresas de reformas comparten la UI profesional
+            if (tipoUsuario == "Técnico" || tipoUsuario == "Empresa") {
                 val panelTecnicoVM: PanelTecnicoViewModel = viewModel()
                 val panelVM: PanelViewModel = viewModel()
-                val certificadoVM: CertificadoViewModel = viewModel()
-                val presupuestosVM: PresupuestosViewModel = viewModel()
+                val misClientesVM: MisClientesTecnicoViewModel = viewModel()
                 MainScaffoldTecnico(
                     panelTecnicoVM = panelTecnicoVM,
                     panelVM = panelVM,
-                    certificadoVM = certificadoVM,
-                    presupuestosVM = presupuestosVM,
+                    misClientesVM = misClientesVM,
                     chatVM = chatVM,
                     onCerrarSesion = cerrarSesion,
                     onPerfil       = { nav.navigate("perfil") },
                     onAjustes      = { nav.navigate("ajustes") },
                     onSobreApp     = { nav.navigate("sobre_app") },
                     onChats        = { id -> nav.navigate("chat/$id") },
-                    onProyectos    = { nav.navigate("proyectos_tecnico") },
+                    onSuscripcion  = { nav.navigate("suscripcion") },
                     onResenas      = { nav.navigate("resenas_tecnico") },
                     onEstadisticas = { nav.navigate("estadisticas_tecnico") },
-                    onMisClientes  = { nav.navigate("mis_clientes_tecnico") }
+                    onVerPerfilPublico = {
+                        FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+                            nav.navigate("perfil_tecnico/$uid")
+                        }
+                    }
                 )
             } else {
                 val panelVM: PanelViewModel = viewModel()
-                val certificadoVM: CertificadoViewModel = viewModel()
                 MainScaffold(
                     panelViewModel = panelVM,
-                    certificadoViewModel = certificadoVM,
                     chatViewModel = chatVM,
                     onCerrarSesion = cerrarSesion,
                     onNuevoPreestudio   = { nav.navigate("preestudio") },
                     onBuscarTecnicos    = { nav.navigate("tecnicos") },
-                    onMisProyectos      = { nav.navigate("proyectos") },
                     onRankings          = { nav.navigate("rankings") },
                     onVerUltimoInforme  = { nav.navigate("informe") },
                     onPerfil            = { nav.navigate("perfil") },
-                    onPresupuestos      = { nav.navigate("presupuestos") },
                     onHistorialInformes = { nav.navigate("historial_informes") },
                     onMisViviendas      = { nav.navigate("mis_viviendas") },
                     onChats             = { id -> nav.navigate("chat/$id") },
@@ -296,14 +336,6 @@ fun AppNavegacion() {
                 onVerPerfil = { id -> nav.navigate("perfil_tecnico/$id") }
             )
         }
-        composable("proyectos") {
-            val proyectosVM: ProyectosViewModel = viewModel()
-            MisProyectosScreen(viewModel = proyectosVM, onVolver = { nav.popBackStack() })
-        }
-        composable("presupuestos") {
-            val presupuestosVM: PresupuestosViewModel = viewModel()
-            PresupuestosScreen(viewModel = presupuestosVM, onVolver = { nav.popBackStack() })
-        }
         composable("historial_informes") {
             val historialVM: HistorialInformesViewModel = viewModel()
             HistorialInformesScreen(
@@ -348,28 +380,33 @@ fun AppNavegacion() {
         }
         composable("ajustes") {
             val ajustesVM: AjustesViewModel = viewModel()
-            AjustesScreen(viewModel = ajustesVM, onVolver = { nav.popBackStack() })
-        }
-
-        composable("mis_clientes_tecnico") {
-            val misClientesVM: MisClientesTecnicoViewModel = viewModel()
-            MisClientesTecnicoScreen(
-                viewModel = misClientesVM,
+            AjustesScreen(
+                viewModel = ajustesVM,
                 onVolver = { nav.popBackStack() },
-                onAbrirChat = { chatId -> nav.navigate("chat/$chatId") }
+                onCerrarSesion = cerrarSesion
             )
         }
-        composable("proyectos_tecnico") {
-            val proyectosTecVM: ProyectosAsignadosViewModel = viewModel()
-            ProyectosAsignadosScreen(viewModel = proyectosTecVM, onVolver = { nav.popBackStack() })
-        }
+
         composable("resenas_tecnico") {
             val resenasTecVM: ResenasRecibidasViewModel = viewModel()
             ResenasRecibidasScreen(viewModel = resenasTecVM, onVolver = { nav.popBackStack() })
         }
         composable("estadisticas_tecnico") {
             val estadisticasTecVM: EstadisticasTecnicoViewModel = viewModel()
-            EstadisticasTecnicoScreen(viewModel = estadisticasTecVM, onVolver = { nav.popBackStack() })
+            EstadisticasTecnicoScreen(
+                viewModel = estadisticasTecVM,
+                onVolver = { nav.popBackStack() },
+                onSuscripcion = { nav.navigate("suscripcion") },
+                onEditarPerfil = { nav.navigate("perfil") }
+            )
+        }
+        // Suscripción del profesional (verificado / destacado)
+        composable("suscripcion") {
+            val suscripcionVM: SuscripcionViewModel = viewModel()
+            SuscripcionScreen(
+                viewModel = suscripcionVM,
+                onVolver = { nav.popBackStack() }
+            )
         }
     }
 }

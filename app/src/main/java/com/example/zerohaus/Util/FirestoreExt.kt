@@ -26,6 +26,11 @@ import com.google.firebase.firestore.Source
  */
 private const val DEFAULT_TIMEOUT_MS = 8000L
 
+/**
+ * Lectura con plazo máximo: llama al callback EXACTAMENTE una vez, con la
+ * respuesta del servidor o, si no llega a tiempo, con la caché local (o null).
+ * Evita spinners infinitos cuando la red o App Check se quedan colgados.
+ */
 fun Query.getOrTimeout(timeoutMs: Long = DEFAULT_TIMEOUT_MS, callback: (QuerySnapshot?) -> Unit) {
     val handler = Handler(Looper.getMainLooper())
     var done = false

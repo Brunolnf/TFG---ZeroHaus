@@ -7,8 +7,12 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.RepositorioViviendas
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 
+/**
+ * Estado de la pantalla de viviendas.
+ */
 data class ViviendasEstado(
     val viviendas: List<Vivienda> = emptyList(),
     val viviendaSeleccionada: Vivienda? = null,
@@ -18,6 +22,9 @@ data class ViviendasEstado(
     val error: String? = null
 )
 
+/**
+ * Viviendas del usuario: carga, selección, edición y borrado.
+ */
 class ViviendasViewModel : ViewModel() {
 
     var estado by mutableStateOf(ViviendasEstado())
@@ -71,7 +78,7 @@ class ViviendasViewModel : ViewModel() {
         repo.eliminarVivienda(viviendaId) { result ->
             result
                 .onSuccess {
-                    estado = estado.copy(eliminando = false, mensaje = "Vivienda eliminada")
+                    estado = estado.copy(eliminando = false, mensaje = getCadenas(AppEstado.idioma).vivEliminada)
                     cargarViviendas(forzar = true)
                 }
                 .onFailure {
@@ -89,7 +96,7 @@ class ViviendasViewModel : ViewModel() {
         estado = estado.copy(cargando = true)
         repo.guardarVivienda(vivienda) { result ->
             result.onSuccess {
-                estado = estado.copy(mensaje = "Vivienda actualizada")
+                estado = estado.copy(mensaje = getCadenas(AppEstado.idioma).vivActualizada)
                 cargarViviendas(forzar = true)
             }.onFailure {
                 estado = estado.copy(cargando = false, error = it.message)

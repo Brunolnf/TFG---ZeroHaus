@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Refresh
@@ -28,10 +29,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.GraficasViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Gráficas de evolución de los últimos informes: etiqueta, consumo, emisiones y coste.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GraficasConsumoScreen(
@@ -47,6 +52,7 @@ fun GraficasConsumoScreen(
     val lineaEje = MaterialTheme.colorScheme.outlineVariant
 
     val estado = viewModel.estado
+    val c = LocalCadenas.current
     val sdf = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
@@ -57,19 +63,19 @@ fun GraficasConsumoScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Gráficas de consumo", fontWeight = FontWeight.SemiBold)
+                        Text(c.grafTitulo, fontWeight = FontWeight.SemiBold)
                         if (estado.informes.isNotEmpty()) {
                             val subtitulo = if (estado.informes.size > 5)
-                                "Últimos 5 de ${estado.informes.size} informes"
+                                "${c.grafUltimos5De} ${estado.informes.size} ${c.grafInformes}"
                             else
-                                "${estado.informes.size} informes generados"
+                                "${estado.informes.size} ${c.histSubtitulo}"
                             Text(subtitulo, color = gris, fontSize = 12.sp)
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = c.volver)
                     }
                 }
             )
@@ -94,10 +100,10 @@ fun GraficasConsumoScreen(
                 ) {
                     Icon(Icons.Default.BarChart, null, tint = gris.copy(0.4f), modifier = Modifier.size(56.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Sin datos todavía", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(c.grafSinDatos, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Genera un informe energético para ver las gráficas",
+                        c.grafSinDatosSub,
                         color = gris, fontSize = 13.sp, textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(14.dp))
@@ -107,7 +113,7 @@ fun GraficasConsumoScreen(
                     ) {
                         Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Reintentar")
+                        Text(c.comReintentar)
                     }
                 }
             }
@@ -135,20 +141,20 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Resumen", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(c.grafResumen, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        ResumenStat("Informes", "${estado.informes.size}", gris)
-                        ResumenStat("Consumo actual", Formato.formatEnergia(ultimo.consumoEstimado), gris)
-                        ResumenStat("Etiqueta", ultimo.etiqueta, etiquetaColor(ultimo.etiqueta))
+                        ResumenStat(c.grafInformesLbl, "${estado.informes.size}", gris)
+                        ResumenStat(c.grafConsumoActual, Formato.formatEnergia(ultimo.consumoEstimado), gris)
+                        ResumenStat(c.histEtiqueta, ultimo.etiqueta, etiquetaColor(ultimo.etiqueta))
                     }
                     if (datos.size >= 2) {
                         Spacer(Modifier.height(10.dp))
                         val mejoraColor = if (mejora >= 0) verde else Color(0xFFDC2626)
                         val mejoraTexto = if (mejora >= 0)
-                            "Reducción de ${Formato.formatEnergia(mejora)} respecto al primer informe"
+                            "${c.grafReduccion} ${Formato.formatEnergia(mejora)} ${c.grafRespectoPrimero}"
                         else
-                            "Aumento de ${Formato.formatEnergia(-mejora)} respecto al primer informe"
+                            "${c.grafAumento} ${Formato.formatEnergia(-mejora)} ${c.grafRespectoPrimero}"
                         Text(mejoraTexto, color = mejoraColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                     }
                 }
@@ -162,7 +168,7 @@ fun GraficasConsumoScreen(
                     border = BorderStroke(1.dp, borde)
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text("Evolución etiqueta energética", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(c.grafEvolucionEtiqueta, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(12.dp))
                         Row(
                             Modifier.fillMaxWidth(),
@@ -198,7 +204,7 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Consumo energético (${AppEstado.unidadEnergia}/año)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${c.grafConsumo} (${AppEstado.unidadEnergia}/${c.uAnio})", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
 
                     val maxConsumo = datos.maxOf { it.consumoEstimado }.toFloat().coerceAtLeast(1f)
@@ -258,7 +264,7 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Emisiones CO₂ (kg/año)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${c.grafEmisiones} (kg/${c.uAnio})", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
 
                     val max = datos.maxOf { it.emisiones }.toFloat().coerceAtLeast(1f)
@@ -324,7 +330,7 @@ fun GraficasConsumoScreen(
                 border = BorderStroke(1.dp, borde)
             ) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Coste anual estimado (${Formato.simboloMoneda()})", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("${c.grafCoste} (${Formato.simboloMoneda()})", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(16.dp))
 
                     val max = datos.maxOf { it.costeAnual }.toFloat().coerceAtLeast(1f)

@@ -11,6 +11,9 @@ import com.example.zerohaus.Repositorios.*
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 
+/**
+ * Estado del panel de inicio del propietario.
+ */
 data class PanelEstado(
     val usuario: Usuario? = null,
     val vivienda: Vivienda? = null,
@@ -20,6 +23,9 @@ data class PanelEstado(
     val cargando: Boolean = false
 )
 
+/**
+ * Panel del propietario: usuario, vivienda, último informe y notificaciones en tiempo real.
+ */
 class PanelViewModel : ViewModel() {
 
     var estado by mutableStateOf(PanelEstado())

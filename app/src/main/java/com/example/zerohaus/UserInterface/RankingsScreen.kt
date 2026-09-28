@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
@@ -25,8 +26,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.RankingsViewModel
 
+/**
+ * Ranking de profesionales ordenado por valoración media.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RankingsScreen(
@@ -34,6 +39,7 @@ fun RankingsScreen(
     onVolver: () -> Unit = {},
     onVerPerfil: (String) -> Unit = {}
 ) {
+    val c = LocalCadenas.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val fondo = MaterialTheme.colorScheme.background
@@ -47,12 +53,12 @@ fun RankingsScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Rankings", fontWeight = FontWeight.SemiBold)
-                        Text("Mejores técnicos valorados", color = gris, fontSize = 12.sp)
+                        Text(c.rankTitulo, fontWeight = FontWeight.SemiBold)
+                        Text(c.rankSubtitulo, color = gris, fontSize = 12.sp)
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") }
+                    IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
                 }
             )
         }
@@ -66,7 +72,7 @@ fun RankingsScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.Star, null, tint = gris.copy(0.4f), modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(10.dp))
-                    Text("No hay técnicos registrados aún", color = gris)
+                    Text(c.rankVacio, color = gris)
                     Spacer(Modifier.height(10.dp))
                     OutlinedButton(
                         onClick = { viewModel.cargarRanking(forzar = true) },
@@ -74,7 +80,7 @@ fun RankingsScreen(
                     ) {
                         Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text("Reintentar")
+                        Text(c.comReintentar)
                     }
                 }
             }
@@ -193,7 +199,7 @@ fun RankingsScreen(
 
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "${t.opiniones} opiniones · ${t.proyectosCompletados} proyectos",
+                                    "${t.opiniones} ${c.comOpiniones}",
                                     color = gris,
                                     fontSize = 12.sp
                                 )

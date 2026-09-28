@@ -60,6 +60,9 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFECACA)
 )
 
+/**
+ * Tema Material 3 de la app (verde ZeroHaus), con modo claro, oscuro o el del sistema.
+ */
 @Composable
 fun ZeroHausTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

@@ -8,6 +8,9 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Estados.RegistroEstado
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 
+/**
+ * Validación del formulario de registro y creación de la cuenta.
+ */
 class RegistroViewModel : ViewModel() {
 
     var estado by mutableStateOf(RegistroEstado())

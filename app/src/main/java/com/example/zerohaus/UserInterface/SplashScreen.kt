@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.LocalCadenas
 import kotlinx.coroutines.delay
 
+/**
+ * Pantalla de bienvenida animada que se muestra al abrir la app (se puede saltar).
+ */
 @Composable
 fun SplashScreen(onTerminado: () -> Unit) {
     val c = LocalCadenas.current

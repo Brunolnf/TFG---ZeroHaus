@@ -19,6 +19,9 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.LoginViewModel
 import com.example.zerohaus.Util.LocalCadenas
 
+/**
+ * Inicio de sesión con email y contraseña.
+ */
 @Composable
 fun LoginScreen(
     viewModel: LoginViewModel,
@@ -168,7 +171,7 @@ fun LoginScreen(
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(vertical = 14.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                        border = ButtonDefaults.outlinedButtonBorder(enabled = true).copy(
                             brush = androidx.compose.ui.graphics.SolidColor(verde)
                         )
                     ) {
