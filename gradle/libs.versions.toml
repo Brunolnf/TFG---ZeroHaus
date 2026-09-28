@@ -1,10 +1,9 @@
 # Solo las versiones de los plugins de Gradle (build.gradle.kts raíz).
 # Las dependencias de la app están declaradas en app/build.gradle.kts.
 [versions]
-agp = "8.13.2"
-kotlin = "2.2.20"
+agp = "9.4.1"
+kotlin = "2.4.20"
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
