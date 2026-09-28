@@ -28,7 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationRequest
+import kotlin.math.roundToInt
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.example.zerohaus.Modelos.Tecnico
@@ -37,6 +37,7 @@ import com.example.zerohaus.Modelos.esEmpresa
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.OrdenTecnicos
+import com.example.zerohaus.ViewModel.OrigenUbicacion
 import com.example.zerohaus.ViewModel.TecnicosViewModel
 import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.Modelos.Especialidades
@@ -217,6 +218,27 @@ fun TecnicosScreen(
                         }
                     }
 
+                    // Desde dónde se miden las distancias (o por qué no hay)
+                    val avisoUbicacion = when {
+                        estado.origenUbicacion == OrigenUbicacion.VIVIENDA ->
+                            "${c.tecDistanciasVivienda} (${estado.provinciaReferencia})"
+                        estado.orden == OrdenTecnicos.PROXIMIDAD && estado.origenUbicacion == null ->
+                            c.tecSinUbicacion
+                        else -> null
+                    }
+                    if (avisoUbicacion != null) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationOn, null, tint = gris, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(avisoUbicacion, color = gris, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = { locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) { Text(c.tecUsarUbicacion, fontSize = 12.sp) }
+                        }
+                    }
+
                     estado.filtro?.let {
                         Spacer(Modifier.height(6.dp))
                         AssistChip(
@@ -372,8 +394,13 @@ fun TecnicosScreen(
                                                     if (t.ciudad.isNotEmpty()) append(" · ")
                                                     // distanciaKm == 0 con coords conocidas = mismo punto que el
                                                     // usuario; mostramos "<1 km" en vez de "0.0 km" o esconderla.
+                                                    // Desde la provincia de la vivienda solo es aproximada.
                                                     append(
-                                                        if (t.distanciaKm < 1.0) "<1 km"
+                                                        if (estado.origenUbicacion == OrigenUbicacion.VIVIENDA) {
+                                                            if (t.distanciaKm < 10.0) "≈ <10 km"
+                                                            else "≈ ${t.distanciaKm.roundToInt()} km"
+                                                        }
+                                                        else if (t.distanciaKm < 1.0) "<1 km"
                                                         else "${t.distanciaKm} km"
                                                     )
                                                 }

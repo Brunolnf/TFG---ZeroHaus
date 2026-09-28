@@ -7,11 +7,12 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 ### Añadido
 - **Del informe al profesional**: cada mejora que hace un profesional tiene un botón que abre el directorio filtrado por su especialidad.
 - **Catálogo único de especialidades**: el profesional las elige de una lista en su perfil y se muestran traducidas en todas las pantallas; el buscador encuentra también por el nombre traducido.
+- **Distancias sin GPS**: si el usuario no da permiso de ubicación, el directorio mide desde la capital de la provincia de su vivienda, lo indica y marca las distancias como aproximadas; con un toque se puede usar el GPS.
 - Icono temático de Android 13+ (capa monocroma del icono adaptativo).
 - El administrador puede marcar un email como verificado (para la cuenta de prueba de los revisores de Google Play).
 - Integración continua con GitHub Actions: tests de la app, compilación, tests de reglas y validación del backend y los textos.
 - `herramientas/i18n.py` para añadir, cambiar, limpiar y comprobar textos en los 14 idiomas.
-- Tests de traducciones (14 idiomas completos, sin textos vacíos, todas las opciones traducidas), especialidades y estadísticas: 39 tests en total.
+- Tests de traducciones (14 idiomas completos, sin textos vacíos, todas las opciones traducidas), especialidades y estadísticas y ubicaciones: 42 tests en total.
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
 ### Cambiado
@@ -20,6 +21,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 ### Corregido
 - El filtro por especialidad dejaba fuera a los profesionales que la habían escrito a mano de otra forma («placas solares» en vez de «Fotovoltaica»).
 - El directorio mostraba distancias calculadas desde Madrid cuando no había ubicación real del usuario.
+- Ordenar por proximidad sin ninguna ubicación dejaba la lista en un orden arbitrario; ahora se ordena por valoración.
 - `gradlew` no tenía permiso de ejecución en el repositorio (fallaba en Linux y macOS).
 
 ## [2.2.0] — 2026-09-28 · versionCode 5

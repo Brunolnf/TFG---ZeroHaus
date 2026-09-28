@@ -20,6 +20,13 @@ import com.google.firebase.firestore.ListenerRegistration
  */
 enum class OrdenTecnicos { VALORACION, PROXIMIDAD }
 
+/**
+ * De dónde sale la posición desde la que se miden las distancias: el GPS del
+ * móvil o, si no hay permiso, la capital de la provincia de la vivienda del
+ * usuario (aproximada, pero real).
+ */
+enum class OrigenUbicacion { GPS, VIVIENDA }
+
 data class TecnicosEstado(
     val tecnicos: List<Tecnico> = emptyList(),
     val busqueda: String = "",
@@ -27,10 +34,13 @@ data class TecnicosEstado(
     // null = todos; Tecnico.TIPO_TECNICO / Tecnico.TIPO_EMPRESA
     val filtroTipo: String? = null,
     val orden: OrdenTecnicos = OrdenTecnicos.VALORACION,
-    // Ubicación real del usuario; 0.0 = desconocida (sin permiso o sin GPS).
-    // Mientras sea desconocida no se calculan ni se muestran distancias.
+    // Ubicación del usuario; 0.0 = desconocida (sin GPS ni vivienda con
+    // provincia). Mientras sea desconocida no se calculan ni se muestran distancias.
     val latUsuario: Double = 0.0,
     val lngUsuario: Double = 0.0,
+    val origenUbicacion: OrigenUbicacion? = null,
+    // Provincia usada como referencia cuando el origen es VIVIENDA
+    val provinciaReferencia: String = "",
     val cargando: Boolean = false,
     val mensajeExito: String? = null,
     val error: String? = null
@@ -44,6 +54,7 @@ class TecnicosViewModel : ViewModel() {
     var estado by mutableStateOf(TecnicosEstado())
         private set
     private val repo = RepositorioTecnicos()
+    private val repoViviendas = RepositorioViviendas()
     private val auth = FirebaseAuth.getInstance()
 
     private var listenerTec: ListenerRegistration? = null
@@ -84,12 +95,17 @@ class TecnicosViewModel : ViewModel() {
         listenerTec?.remove(); listenerTec = null
         listenerRes?.remove(); listenerRes = null
         uidEscuchado = auth.currentUser?.uid
+        // La ubicación sacada de la vivienda es de la cuenta anterior
+        if (estado.origenUbicacion == OrigenUbicacion.VIVIENDA) {
+            estado = estado.copy(latUsuario = 0.0, lngUsuario = 0.0, origenUbicacion = null, provinciaReferencia = "")
+        }
         if (uidEscuchado == null) {
             // Sin sesión no podemos leer (reglas exigen auth). Esperamos al
             // siguiente disparo del AuthStateListener.
             estado = estado.copy(tecnicos = emptyList(), cargando = false)
             return
         }
+        if (estado.origenUbicacion == null) usarProvinciaDeLaVivienda()
         estado = estado.copy(cargando = estado.tecnicos.isEmpty())
         val (regT, regR) = repo.escucharTecnicos { lista ->
             val procesados = lista.map { t ->
@@ -105,19 +121,45 @@ class TecnicosViewModel : ViewModel() {
         listenerRes = regR
     }
 
+    /** Posición del GPS del móvil; tiene prioridad sobre la de la vivienda. */
     fun actualizarUbicacion(lat: Double, lng: Double) {
         // La app solo opera en España: una posición fuera (p. ej. la de
         // fábrica de un emulador) no sirve para calcular distancias. En ese
         // caso no se usa ninguna, en vez de fingir que el usuario está en Madrid.
         val enEspana = lat in 27.0..44.0 && lng in -19.0..5.0
         if (!enEspana) return
+        aplicarUbicacion(lat, lng, OrigenUbicacion.GPS, provincia = "")
+    }
 
+    /**
+     * Sin GPS, las distancias se miden desde la capital de la provincia de la
+     * vivienda más reciente del usuario. Si no tiene viviendas (o es un
+     * profesional), no hay ubicación y el directorio se ordena por valoración.
+     */
+    private fun usarProvinciaDeLaVivienda() {
+        val uid = uidEscuchado ?: return
+        repoViviendas.obtenerViviendas { viviendas ->
+            // El GPS o un cambio de cuenta pueden haber llegado mientras tanto
+            if (estado.origenUbicacion != null || uid != uidEscuchado) return@obtenerViviendas
+            val provincia = viviendas
+                .filter { it.provincia.isNotBlank() }
+                .maxByOrNull { it.fechaCreacion }?.provincia ?: return@obtenerViviendas
+            val (lat, lng) = RepositorioTecnicos.coordenadasDeProvincia(provincia) ?: return@obtenerViviendas
+            aplicarUbicacion(lat, lng, OrigenUbicacion.VIVIENDA, provincia)
+        }
+    }
+
+    private fun aplicarUbicacion(lat: Double, lng: Double, origen: OrigenUbicacion, provincia: String) {
         val tecnicosActualizados = estado.tecnicos.map { t ->
             val (tLat, tLng) = coordsEfectivasTecnico(t)
             if (tLat != 0.0) t.copy(distanciaKm = calcularDistanciaKm(lat, lng, tLat, tLng))
             else t
         }
-        estado = estado.copy(latUsuario = lat, lngUsuario = lng, tecnicos = tecnicosActualizados)
+        estado = estado.copy(
+            latUsuario = lat, lngUsuario = lng,
+            origenUbicacion = origen, provinciaReferencia = provincia,
+            tecnicos = tecnicosActualizados
+        )
     }
 
     /** Devuelve las coordenadas reales del técnico, o las de su ciudad si no tiene GPS. */
@@ -167,17 +209,17 @@ class TecnicosViewModel : ViewModel() {
             // perfiles antiguos ("placas solares" cuenta como Fotovoltaica)
             .filter { t -> estado.filtro == null || estado.filtro in Especialidades.canonicas(t.especialidades) }
             .filter { t -> estado.filtroTipo == null || t.tipoProfesional == estado.filtroTipo }
-        // Verificados/destacados siempre primero, luego por criterio seleccionado
-        return when (estado.orden) {
-            OrdenTecnicos.VALORACION -> filtrados.sortedWith(
-                compareByDescending<Tecnico> { it.nivelPlan }.thenByDescending { it.rating }
-            )
-            OrdenTecnicos.PROXIMIDAD -> filtrados.sortedWith(
+        // Verificados/destacados siempre primero, luego por criterio seleccionado.
+        // Sin ubicación no hay distancias: "proximidad" ordena por valoración.
+        return if (estado.orden == OrdenTecnicos.PROXIMIDAD && estado.latUsuario != 0.0) {
+            filtrados.sortedWith(
                 compareByDescending<Tecnico> { it.nivelPlan }.thenBy { t ->
                     val (tLat, _) = coordsEfectivasTecnico(t)
                     if (tLat == 0.0) Double.MAX_VALUE else t.distanciaKm
-                }
+                }.thenByDescending { it.rating }
             )
+        } else {
+            filtrados.sortedWith(compareByDescending<Tecnico> { it.nivelPlan }.thenByDescending { it.rating })
         }
     }
 

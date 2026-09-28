@@ -601,6 +601,9 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consultoría",
     "infBuscarProfesionales" to "Buscar profesionales",
     "perfEspecialidadesAyuda" to "Marca las especialidades que ofreces: así te encuentran los clientes al filtrar.",
+    "tecDistanciasVivienda" to "Distancias aproximadas desde la provincia de tu vivienda",
+    "tecSinUbicacion" to "Activa la ubicación o añade una vivienda para ordenar por cercanía",
+    "tecUsarUbicacion" to "Usar mi ubicación",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1184,6 +1187,9 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consulting",
     "infBuscarProfesionales" to "Find professionals",
     "perfEspecialidadesAyuda" to "Tick the specialities you offer so clients find you when filtering.",
+    "tecDistanciasVivienda" to "Approximate distances from your home's province",
+    "tecSinUbicacion" to "Turn on location or add a home to sort by distance",
+    "tecUsarUbicacion" to "Use my location",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1767,6 +1773,9 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consultoria",
     "infBuscarProfesionales" to "Cercar professionals",
     "perfEspecialidadesAyuda" to "Marca les especialitats que ofereixes: així et troben els clients en filtrar.",
+    "tecDistanciasVivienda" to "Distàncies aproximades des de la província del teu habitatge",
+    "tecSinUbicacion" to "Activa la ubicació o afegeix un habitatge per ordenar per proximitat",
+    "tecUsarUbicacion" to "Fes servir la meva ubicació",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2350,6 +2359,9 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Aholkularitza",
     "infBuscarProfesionales" to "Profesionalak bilatu",
     "perfEspecialidadesAyuda" to "Markatu eskaintzen dituzun espezialitateak: horrela aurkituko zaituzte bezeroek iragaztean.",
+    "tecDistanciasVivienda" to "Zure etxebizitzaren probintziatik gutxi gorabeherako distantziak",
+    "tecSinUbicacion" to "Aktibatu kokapena edo gehitu etxebizitza bat hurbiltasunaren arabera ordenatzeko",
+    "tecUsarUbicacion" to "Erabili nire kokapena",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2933,6 +2945,9 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consultoría",
     "infBuscarProfesionales" to "Buscar profesionais",
     "perfEspecialidadesAyuda" to "Marca as especialidades que ofreces: así atópante os clientes ao filtrar.",
+    "tecDistanciasVivienda" to "Distancias aproximadas desde a provincia da túa vivenda",
+    "tecSinUbicacion" to "Activa a localización ou engade unha vivenda para ordenar por proximidade",
+    "tecUsarUbicacion" to "Usar a miña localización",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3516,6 +3531,9 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consultoria",
     "infBuscarProfesionales" to "Procurar profissionais",
     "perfEspecialidadesAyuda" to "Marque as especialidades que oferece: assim os clientes encontram-no ao filtrar.",
+    "tecDistanciasVivienda" to "Distâncias aproximadas a partir da província da sua casa",
+    "tecSinUbicacion" to "Ative a localização ou adicione uma casa para ordenar por proximidade",
+    "tecUsarUbicacion" to "Usar a minha localização",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4099,6 +4117,9 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Conseil",
     "infBuscarProfesionales" to "Trouver des professionnels",
     "perfEspecialidadesAyuda" to "Cochez vos spécialités : les clients vous trouveront en filtrant.",
+    "tecDistanciasVivienda" to "Distances approximatives depuis la province de votre logement",
+    "tecSinUbicacion" to "Activez la localisation ou ajoutez un logement pour trier par proximité",
+    "tecUsarUbicacion" to "Utiliser ma position",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4682,6 +4703,9 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Beratung",
     "infBuscarProfesionales" to "Fachleute finden",
     "perfEspecialidadesAyuda" to "Wähle deine Fachgebiete aus, damit Kunden dich beim Filtern finden.",
+    "tecDistanciasVivienda" to "Ungefähre Entfernungen ab der Provinz deiner Wohnung",
+    "tecSinUbicacion" to "Aktiviere den Standort oder füge eine Wohnung hinzu, um nach Nähe zu sortieren",
+    "tecUsarUbicacion" to "Meinen Standort verwenden",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5265,6 +5289,9 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consulenza",
     "infBuscarProfesionales" to "Trova professionisti",
     "perfEspecialidadesAyuda" to "Seleziona le specialità che offri: così i clienti ti trovano filtrando.",
+    "tecDistanciasVivienda" to "Distanze approssimative dalla provincia della tua abitazione",
+    "tecSinUbicacion" to "Attiva la posizione o aggiungi un'abitazione per ordinare per vicinanza",
+    "tecUsarUbicacion" to "Usa la mia posizione",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5848,6 +5875,9 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "الاستشارات",
     "infBuscarProfesionales" to "ابحث عن محترفين",
     "perfEspecialidadesAyuda" to "حدد تخصصاتك ليجدك العملاء عند التصفية.",
+    "tecDistanciasVivienda" to "مسافات تقريبية من مقاطعة منزلك",
+    "tecSinUbicacion" to "فعّل الموقع أو أضف منزلًا للترتيب حسب القرب",
+    "tecUsarUbicacion" to "استخدام موقعي",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6431,6 +6461,9 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "咨询",
     "infBuscarProfesionales" to "查找专业人士",
     "perfEspecialidadesAyuda" to "勾选您提供的专长，客户筛选时就能找到您。",
+    "tecDistanciasVivienda" to "距离为从您住宅所在省份起算的近似值",
+    "tecSinUbicacion" to "开启定位或添加住宅以按距离排序",
+    "tecUsarUbicacion" to "使用我的位置",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7014,6 +7047,9 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Consultanță",
     "infBuscarProfesionales" to "Caută profesioniști",
     "perfEspecialidadesAyuda" to "Bifează specializările pe care le oferi, ca să te găsească clienții la filtrare.",
+    "tecDistanciasVivienda" to "Distanțe aproximative de la provincia locuinței tale",
+    "tecSinUbicacion" to "Activează locația sau adaugă o locuință pentru a sorta după apropiere",
+    "tecUsarUbicacion" to "Folosește locația mea",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7597,6 +7633,9 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Advies",
     "infBuscarProfesionales" to "Professionals zoeken",
     "perfEspecialidadesAyuda" to "Vink je specialismen aan, zodat klanten je vinden bij het filteren.",
+    "tecDistanciasVivienda" to "Geschatte afstanden vanaf de provincie van je woning",
+    "tecSinUbicacion" to "Zet je locatie aan of voeg een woning toe om op afstand te sorteren",
+    "tecUsarUbicacion" to "Mijn locatie gebruiken",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8180,4 +8219,7 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "espConsultoria" to "Doradztwo",
     "infBuscarProfesionales" to "Znajdź specjalistów",
     "perfEspecialidadesAyuda" to "Zaznacz swoje specjalizacje, aby klienci znaleźli Cię przy filtrowaniu.",
+    "tecDistanciasVivienda" to "Przybliżone odległości od prowincji twojego mieszkania",
+    "tecSinUbicacion" to "Włącz lokalizację lub dodaj mieszkanie, aby sortować według odległości",
+    "tecUsarUbicacion" to "Użyj mojej lokalizacji",
 ), respaldo = espanol) }

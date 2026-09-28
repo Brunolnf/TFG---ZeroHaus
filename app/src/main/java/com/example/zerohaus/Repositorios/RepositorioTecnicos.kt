@@ -218,6 +218,21 @@ class RepositorioTecnicos {
             return claveCoincidente?.let { CIUDADES_COORDS[it] }
         }
 
+        // Provincias cuyo nombre no es el de su capital (el resto coincide)
+        private val CAPITAL_DE_PROVINCIA = mapOf(
+            "Álava" to "vitoria", "Asturias" to "oviedo", "Bizkaia" to "bilbao",
+            "Cantabria" to "santander", "Gipuzkoa" to "donostia",
+            "Illes Balears" to "palma", "La Rioja" to "logroño",
+            "Navarra" to "pamplona", "Santa Cruz de Tenerife" to "santa cruz"
+        )
+
+        /**
+         * Coordenadas de la capital de una provincia (con el nombre de
+         * [AlgoritmoEnergetico.provinciasOrdenadas]), o null si no se conoce.
+         */
+        fun coordenadasDeProvincia(provincia: String): Pair<Double, Double>? =
+            coordenadasDeCiudad(CAPITAL_DE_PROVINCIA[provincia.trim()] ?: provincia)
+
         private fun quitarTildes(s: String): String = s
             .replace('á', 'a').replace('é', 'e').replace('í', 'i')
             .replace('ó', 'o').replace('ú', 'u').replace('ü', 'u')

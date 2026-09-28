@@ -668,6 +668,9 @@ class AppCadenas internal constructor(
     val espConsultoria: String get() = t("espConsultoria")
     val infBuscarProfesionales: String get() = t("infBuscarProfesionales")
     val perfEspecialidadesAyuda: String get() = t("perfEspecialidadesAyuda")
+    val tecDistanciasVivienda: String get() = t("tecDistanciasVivienda")
+    val tecSinUbicacion: String get() = t("tecSinUbicacion")
+    val tecUsarUbicacion: String get() = t("tecUsarUbicacion")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
