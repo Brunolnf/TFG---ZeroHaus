@@ -5,4 +5,4 @@ firebase-admin>=6.5.0
 # falla localmente al hacer el análisis del codebase.
 tzdata>=2024.1
 # Gemini en Vertex AI (sugerencias personalizadas del informe)
-google-genai>=1.0.0
+google-genai>=2.6.0
