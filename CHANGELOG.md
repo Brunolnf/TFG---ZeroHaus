@@ -8,6 +8,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - **Factura de la luz con IA**: en el preestudio se puede hacer una foto o subir el PDF de la factura; Gemini lee consumo, días, importe y potencia contratada (función `leer_factura`). El informe calcula el coste y los ahorros con el precio real que paga el usuario y muestra el consumo real frente al estimado, también en el PDF y el texto compartidos y en los consejos de la IA. El archivo no se guarda; cuenta dentro del límite diario de IA.
 - **Precios de la energía con Firebase Remote Config** (`precio_electricidad`, `precio_gas`, `precio_biomasa`): se cambian desde la consola sin publicar versión; los valores fuera de rango se ignoran.
 - La lista de viviendas indica cuáles tienen factura de la luz y su precio.
+- Tests del backend (`functions-tests/`, 11 con `unittest`): validación de la factura, que el prompt de la IA no lleve datos personales, limpieza de la respuesta de Gemini y que ningún modelo por defecto esté retirado. Se ejecutan en el CI.
 - `herramientas/distribuir.ps1`: compila la versión release y la envía a probadores con Firebase App Distribution.
 - **Del informe al profesional**: cada mejora que hace un profesional tiene un botón que abre el directorio filtrado por su especialidad.
 - **Catálogo único de especialidades**: el profesional las elige de una lista en su perfil y se muestran traducidas en todas las pantallas; el buscador encuentra también por el nombre traducido.
