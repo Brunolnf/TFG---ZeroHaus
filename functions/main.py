@@ -797,6 +797,7 @@ _CAMPOS_VIVIENDA_IA = [
     "superficie", "anioConstruccion", "tipoVivienda", "provincia", "orientacion",
     "tipoVentanas", "aislamiento", "calefaccion", "acs", "refrigeracion",
     "iluminacion", "fotovoltaica", "electrodomesticos", "ocupantes",
+    "potenciaContratadaKw",
 ]
 
 
@@ -815,6 +816,11 @@ def _prompt_ia(informe: dict, vivienda: dict, idioma: str) -> str:
         "emisiones_kg_co2_anio": informe.get("emisiones"),
         "coste_eur_anio": informe.get("costeAnual"),
     }
+    # Si el usuario añadió su factura de la luz: consumo real y precio que paga
+    if (informe.get("consumoLuzFactura") or 0) > 0:
+        resultado["consumo_luz_estimado_kwh_anio"] = informe.get("consumoLuzEstimado")
+        resultado["consumo_luz_real_factura_kwh_anio"] = informe.get("consumoLuzFactura")
+        resultado["precio_luz_factura_eur_kwh"] = informe.get("precioLuz")
     return (
         "Eres un asesor de eficiencia energética de viviendas en España. "
         "Con los datos de esta vivienda y su informe, da consejos concretos, "
@@ -823,7 +829,9 @@ def _prompt_ia(informe: dict, vivienda: dict, idioma: str) -> str:
         "de vivienda, y añade consejos que el cálculo no contempla (ventilación, "
         "puentes térmicos, termostato, tarifa eléctrica, ayudas públicas españolas "
         "como el PREE o las deducciones del IRPF por eficiencia). No inventes "
-        "cifras distintas de las del informe.\n\n"
+        "cifras distintas de las del informe. Si hay datos de la factura de la luz, "
+        "compara el consumo real con el estimado y, si la potencia contratada "
+        "parece alta para la vivienda, sugiere revisarla.\n\n"
         f"VIVIENDA: {json.dumps(datos_vivienda, ensure_ascii=False)}\n"
         f"INFORME: {json.dumps(resultado, ensure_ascii=False)}\n"
         f"MEJORAS YA CALCULADAS: {json.dumps(recomendaciones, ensure_ascii=False)}\n\n"
@@ -833,16 +841,17 @@ def _prompt_ia(informe: dict, vivienda: dict, idioma: str) -> str:
     )
 
 
-def _llamar_gemini(prompt: str) -> dict:
-    """Llama a Gemini en Vertex AI con respuesta JSON estructurada. Prueba cada
-    modelo configurado en cada región hasta que uno responda."""
+def _llamar_gemini(contenido, esquema: dict = _ESQUEMA_IA, temperatura: float = 0.4) -> dict:
+    """Llama a Gemini en Vertex AI con respuesta JSON estructurada según
+    `esquema`. `contenido` es el prompt o una lista de partes (texto, imagen,
+    PDF). Prueba cada modelo configurado en cada región hasta que uno responda."""
     from google import genai
     from google.genai import types
 
     config = types.GenerateContentConfig(
         response_mime_type="application/json",
-        response_schema=_ESQUEMA_IA,
-        temperature=0.4,
+        response_schema=esquema,
+        temperature=temperatura,
         # Los Gemini 3 razonan antes de responder y ese razonamiento cuenta
         # dentro de max_output_tokens: nivel bajo para que el JSON no se corte
         # y la respuesta tarde menos.
@@ -854,12 +863,35 @@ def _llamar_gemini(prompt: str) -> dict:
         client = genai.Client(vertexai=True, project=PROJECT_ID, location=ubicacion)
         for modelo in GEMINI_MODELOS:
             try:
-                resp = client.models.generate_content(model=modelo, contents=prompt, config=config)
+                resp = client.models.generate_content(model=modelo, contents=contenido, config=config)
                 return json.loads(resp.text)
             except Exception as e:  # modelo no disponible en la región, cuota, etc.
                 ultimo_error = e
                 print(f"[IA] {modelo}@{ubicacion} falló: {str(e)[:200]}")
     raise RuntimeError(f"Gemini no disponible: {ultimo_error}")
+
+
+def _consumir_cupo_ia(db, uid: str) -> None:
+    """Gasta una consulta del límite diario de IA del usuario (compartido por
+    los consejos y la lectura de facturas). Transaccional para que no se cuele
+    en paralelo; si no quedan, lanza RESOURCE_EXHAUSTED."""
+    hoy = time.strftime("%Y%m%d", time.gmtime())
+    limite_ref = db.collection("limites_ia").document(uid)
+
+    @firestore.transactional
+    def _consumir(txn):
+        d = (limite_ref.get(transaction=txn).to_dict() or {})
+        usados = int(d.get("usados") or 0) if d.get("dia") == hoy else 0
+        if usados >= IA_LIMITE_DIARIO:
+            return False
+        txn.set(limite_ref, {"dia": hoy, "usados": usados + 1})
+        return True
+
+    if not _consumir(db.transaction()):
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Has alcanzado el límite diario de consultas a la IA.",
+        )
 
 
 def _limpiar_respuesta_ia(r: dict) -> dict:
@@ -914,24 +946,7 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     if cache.get("idioma") == idioma and cache.get("consejos") and not regenerar:
         return {"ok": True, "cache": True, **cache}
 
-    # Límite diario por usuario (transaccional para que no se cuele en paralelo)
-    hoy = time.strftime("%Y%m%d", time.gmtime())
-    limite_ref = db.collection("limites_ia").document(uid)
-
-    @firestore.transactional
-    def _consumir(txn):
-        d = (limite_ref.get(transaction=txn).to_dict() or {})
-        usados = int(d.get("usados") or 0) if d.get("dia") == hoy else 0
-        if usados >= IA_LIMITE_DIARIO:
-            return False
-        txn.set(limite_ref, {"dia": hoy, "usados": usados + 1})
-        return True
-
-    if not _consumir(db.transaction()):
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
-            "Has alcanzado el límite diario de consultas a la IA.",
-        )
+    _consumir_cupo_ia(db, uid)
 
     vivienda = {}
     vivienda_id = informe.get("viviendaId")
@@ -952,6 +967,119 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     guardado = {**resultado, "idioma": idioma, "generado": _ahora_ms()}
     informe_ref.update({"sugerenciasIA": guardado})
     return {"ok": True, "cache": False, **guardado}
+
+
+# ── Lectura de la factura de la luz ─────────────────────────────────────
+#
+# El usuario manda una foto o el PDF de su factura y Gemini extrae solo los
+# números que usa el informe: consumo, días facturados, importe y potencia.
+# La imagen se procesa en memoria y NO se guarda en ningún sitio, ni se
+# registra en los logs. Tampoco se piden nombre, dirección, CUPS ni cuenta.
+
+FACTURA_TIPOS = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+FACTURA_MAX_BYTES = 7 * 1024 * 1024  # las callables admiten 10 MB con base64
+
+_ESQUEMA_FACTURA = {
+    "type": "OBJECT",
+    "properties": {
+        "esFacturaLuz": {"type": "BOOLEAN"},
+        "consumoKwh": {"type": "NUMBER"},
+        "dias": {"type": "INTEGER"},
+        "importeTotal": {"type": "NUMBER"},
+        "potenciaKw": {"type": "NUMBER"},
+    },
+    "required": ["esFacturaLuz", "consumoKwh", "dias", "importeTotal", "potenciaKw"],
+}
+
+_PROMPT_FACTURA = (
+    "Eres un lector de facturas de electricidad de hogares en España. Del "
+    "documento adjunto extrae únicamente estos datos del periodo facturado:\n"
+    "- consumoKwh: energía activa consumida en kWh (suma de todos los periodos "
+    "P1, P2, P3 si vienen separados).\n"
+    "- dias: número de días del periodo de facturación.\n"
+    "- importeTotal: importe total de la factura en euros, con impuestos.\n"
+    "- potenciaKw: potencia contratada en kW (la mayor si hay varias).\n"
+    "Si el documento no es una factura de electricidad o no se lee, pon "
+    "esFacturaLuz a false y el resto a 0. Si un dato no aparece, pon 0. "
+    "No extraigas nombres, direcciones, CUPS ni números de cuenta."
+)
+
+
+class _FacturaNoValida(Exception):
+    pass
+
+
+def _validar_factura(r: dict) -> dict:
+    """Comprueba que lo leído tiene sentido y lo pasa a datos anuales."""
+    try:
+        consumo = float(r.get("consumoKwh") or 0)
+        dias = int(r.get("dias") or 0)
+        importe = float(r.get("importeTotal") or 0)
+        potencia = float(r.get("potenciaKw") or 0)
+    except (TypeError, ValueError):
+        raise _FacturaNoValida()
+    if not r.get("esFacturaLuz") or consumo <= 0 or importe <= 0 or not 1 <= dias <= 400:
+        raise _FacturaNoValida()
+    precio = importe / consumo
+    # Precio medio real de un hogar (impuestos y término de potencia incluidos):
+    # fuera de este rango es que se ha leído mal algún número.
+    if not 0.05 <= precio <= 1.5:
+        raise _FacturaNoValida()
+    return {
+        "consumoKwh": round(consumo, 1),
+        "dias": dias,
+        "importeTotal": round(importe, 2),
+        "potenciaKw": round(potencia, 2) if 0 < potencia <= 50 else 0.0,
+        "consumoAnualKwh": round(consumo * 365 / dias, 1),
+        "precioMedio": round(precio, 4),
+    }
+
+
+@https_fn.on_call(
+    region=REGION,
+    enforce_app_check=True,
+    timeout_sec=120,
+    memory=options.MemoryOption.MB_512,
+)
+def leer_factura(req: https_fn.CallableRequest) -> dict:
+    """Lee una factura de la luz con Gemini. Args: mime (image/jpeg, image/png,
+    image/webp o application/pdf) y datos (el archivo en base64). Devuelve
+    consumo del periodo y anualizado, días, importe, potencia y precio medio."""
+    import base64
+    from google.genai import types
+
+    if req.auth is None:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
+    data = req.data or {}
+    mime = str(data.get("mime") or "")
+    if mime not in FACTURA_TIPOS:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Formato no admitido.", {"motivo": "formato"})
+    try:
+        archivo = base64.b64decode(str(data.get("datos") or ""), validate=True)
+    except (ValueError, TypeError):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Archivo no válido.", {"motivo": "formato"})
+    if not archivo or len(archivo) > FACTURA_MAX_BYTES:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Archivo demasiado grande.", {"motivo": "tamano"})
+
+    _consumir_cupo_ia(firestore.client(), req.auth.uid)
+
+    try:
+        leido = _llamar_gemini(
+            [types.Part.from_bytes(data=archivo, mime_type=mime), _PROMPT_FACTURA],
+            esquema=_ESQUEMA_FACTURA,
+            temperatura=0.0,
+        )
+    except Exception as e:
+        print(f"[FACTURA] Gemini no disponible: {str(e)[:200]}")
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo leer la factura. Inténtalo más tarde.")
+    try:
+        return {"ok": True, **_validar_factura(leido)}
+    except _FacturaNoValida:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "No parece una factura de la luz o no se lee bien.",
+            {"motivo": "no_legible"},
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════

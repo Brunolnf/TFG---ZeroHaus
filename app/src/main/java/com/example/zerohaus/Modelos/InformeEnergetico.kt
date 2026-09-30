@@ -16,7 +16,13 @@ data class InformeEnergetico(
     val emisiones: Double = 0.0,         // kg CO₂/año
     val costeAnual: Double = 0.0,        // €/año
     val recomendaciones: List<Recomendacion> = emptyList(),
-    val fechaGeneracion: Long = System.currentTimeMillis()
+    val fechaGeneracion: Long = System.currentTimeMillis(),
+    // Electricidad: precio aplicado (el de la factura o el medio), consumo de
+    // luz que estima el cálculo y el real de la factura (0 si no hay factura).
+    // Todo 0 en informes antiguos.
+    val precioLuz: Double = 0.0,           // €/kWh
+    val consumoLuzEstimado: Double = 0.0,  // kWh/año
+    val consumoLuzFactura: Double = 0.0    // kWh/año
 )
 
 /**

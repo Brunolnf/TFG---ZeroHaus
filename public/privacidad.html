@@ -49,6 +49,7 @@
     <tr><td>Verificación del correo</td><td>Al registrarte te enviamos por email un código de 6 dígitos. Guardamos solo una huella cifrada (HMAC) de cada código, nunca el código en claro, para impedir que se repita; caduca a los 10 minutos.</td></tr>
     <tr><td>Estadísticas de profesionales</td><td>Cuando visitas el perfil de un profesional o le contactas (chat o llamada) registramos ese evento para que el profesional vea cuántas visitas y contactos recibe. El evento individual (que incluye tu identificador) se <strong>borra a las 48 horas</strong>; el profesional solo ve totales, nunca quién le visitó.</td></tr>
     <tr><td>Consejos con IA</td><td>Solo si pulsas «Generar consejos» en un informe: enviamos a Google Gemini las <strong>características técnicas</strong> de la vivienda (superficie, año, provincia, sistemas…) y los resultados del informe. <strong>Nunca</strong> tu nombre, dirección, email ni el nombre de la vivienda. La respuesta se guarda en tu informe. Máximo 10 consultas al día.</td></tr>
+    <tr><td>Factura de la luz</td><td>Solo si la añades en un preestudio (opcional): la foto o el PDF se envía a Google Gemini para leer el consumo, los días facturados, el importe y la potencia contratada. <strong>El archivo no se guarda</strong> en ningún sitio y no se leen tu nombre, dirección, CUPS ni cuenta bancaria. De la vivienda solo guardamos el consumo anual, el precio medio de la luz y la potencia. Cuenta dentro del máximo de 10 consultas de IA al día.</td></tr>
     <tr><td>Técnicos</td><td>Identificador de notificaciones (token FCM), modelo y versión del dispositivo, e informes de errores y rendimiento.</td></tr>
     <tr><td>Suscripciones</td><td>Estado de la suscripción del profesional. Los pagos los procesa Google Play: <strong>no recibimos ni almacenamos datos de tarjeta</strong>.</td></tr>
   </table>
@@ -62,6 +63,7 @@
     <li><strong>Verificar tu correo</strong> con un código de un solo uso — base: ejecución del contrato y seguridad (evitar cuentas con correos ajenos).</li>
     <li><strong>Estadísticas agregadas para profesionales</strong> — base: interés legítimo (que el profesional conozca el alcance de su perfil), sin identificar a los visitantes.</li>
     <li><strong>Consejos personalizados con IA</strong> — base: tu solicitud expresa al pulsar el botón.</li>
+    <li><strong>Leer tu factura de la luz</strong> para calcular el coste con tu precio real — base: tu solicitud expresa al añadirla.</li>
     <li><strong>Gestionar suscripciones de profesionales</strong> — base: ejecución del contrato.</li>
     <li><strong>Seguridad, prevención de fraude y mejora</strong> (Crashlytics, Performance, App Check) — base: interés legítimo.</li>
     <li><strong>Analítica de uso</strong> agregada — base: consentimiento/interés legítimo.</li>
@@ -70,10 +72,10 @@
   <h2>3. Con quién se comparten</h2>
   <p>No vendemos tus datos. Se tratan a través de encargados que actúan por cuenta nuestra:</p>
   <ul>
-    <li><strong>Google Firebase</strong> (Authentication, Firestore, Storage, Cloud Messaging, Analytics, Crashlytics, Performance, Functions y Hosting) — alojamiento y funciones de la app. Firestore y las funciones se ejecutan en la región <em>europe-west1</em> (UE).</li>
+    <li><strong>Google Firebase</strong> (Authentication, Firestore, Storage, Cloud Messaging, Analytics, Crashlytics, Performance, Remote Config, Functions y Hosting) — alojamiento y funciones de la app. Firestore y las funciones se ejecutan en la región <em>europe-west1</em> (UE).</li>
     <li><strong>Google Play Billing</strong> — procesamiento de los pagos de suscripción.</li>
     <li><strong>Google Maps</strong> — visualización de mapas y ubicación.</li>
-    <li><strong>Google Cloud Vertex AI (Gemini)</strong> — generación de los consejos con IA, solo cuando los pides y con los datos técnicos indicados arriba. Se procesa preferentemente en la UE (<em>europe-west1</em>).</li>
+    <li><strong>Google Cloud Vertex AI (Gemini)</strong> — generación de los consejos con IA y lectura de la factura de la luz, solo cuando los pides y con los datos indicados arriba. Se procesa preferentemente en la UE (<em>europe-west1</em>).</li>
     <li><strong>Proveedor de correo (Google Gmail, SMTP)</strong> — envío de los códigos de verificación y de los avisos por email.</li>
   </ul>
   <p>Algunos servicios de Google pueden implicar transferencias internacionales, amparadas en las cláusulas contractuales tipo de la UE.</p>

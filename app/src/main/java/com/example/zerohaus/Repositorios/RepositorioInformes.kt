@@ -36,7 +36,10 @@ class RepositorioInformes {
             consumoPorM2 = resultado.consumoPorM2,
             emisiones = resultado.emisiones,
             costeAnual = resultado.costeAnual,
-            recomendaciones = resultado.recomendaciones
+            recomendaciones = resultado.recomendaciones,
+            precioLuz = resultado.precioLuz,
+            consumoLuzEstimado = resultado.consumoLuzEstimado,
+            consumoLuzFactura = vivienda.consumoLuzFacturaKwh
         )
 
         ref.set(informe)

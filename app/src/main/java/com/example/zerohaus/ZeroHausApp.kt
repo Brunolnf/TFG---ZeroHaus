@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
+import com.example.zerohaus.Util.ConfigRemota
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.example.zerohaus.Util.SecurityUtil
 import com.example.zerohaus.Util.Diagnostico
@@ -48,6 +49,10 @@ class ZeroHausApp : Application() {
         //    llamadas sin token, así que en debug hay que registrar el token que
         //    sale en Logcat en Firebase Console → App Check.
         FirebaseAppCheck.getInstance().installAppCheckProviderFactory(ProveedorAppCheck.fabrica)
+
+        // Precios de la energía de los informes (Firebase Remote Config), ya
+        // con App Check instalado para que sus peticiones lleven el token.
+        ConfigRemota.inicializar()
 
         // 4. Caché persistente de Firestore: las pantallas ya visitadas cargan al
         //    instante desde disco y la app sigue funcionando aunque la red falle.
