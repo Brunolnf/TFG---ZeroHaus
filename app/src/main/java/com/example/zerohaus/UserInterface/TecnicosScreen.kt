@@ -69,7 +69,9 @@ fun TecnicosScreen(
     val borde = MaterialTheme.colorScheme.outline
     val amarillo = Color(0xFFFFC107)
     val estado = viewModel.estado
-    val filtrados = viewModel.tecnicosFiltrados()
+    // Filtrar y ordenar solo cuando cambian los datos, los filtros o el idioma,
+    // no en cada recomposición de la pantalla
+    val filtrados = remember(estado, c) { viewModel.tecnicosFiltrados() }
     val ctx = LocalContext.current
 
     var mostrarFiltros by remember { mutableStateOf(false) }

@@ -26,13 +26,14 @@ import kotlinx.coroutines.delay
 fun SplashScreen(onTerminado: () -> Unit) {
     val c = LocalCadenas.current
     var iniciar by remember { mutableStateOf(false) }
-    val escala by animateFloatAsState(targetValue = if (iniciar) 1f else 0.4f, animationSpec = tween(700, easing = EaseOutBack), label = "e")
-    val opacidad by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(600), label = "o")
-    val opTexto by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(500, delayMillis = 400), label = "ot")
+    val escala by animateFloatAsState(targetValue = if (iniciar) 1f else 0.4f, animationSpec = tween(400, easing = EaseOutBack), label = "e")
+    val opacidad by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(350), label = "o")
+    val opTexto by animateFloatAsState(targetValue = if (iniciar) 1f else 0f, animationSpec = tween(300, delayMillis = 150), label = "ot")
 
     LaunchedEffect(Unit) {
         iniciar = true
-        delay(1200)
+        // Corta a propósito: se ve cada vez que se abre la app
+        delay(500)
         onTerminado()
     }
 

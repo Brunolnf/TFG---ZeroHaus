@@ -1,9 +1,7 @@
 package com.example.zerohaus.UserInterface
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -12,12 +10,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -25,8 +19,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 
 /**
@@ -81,39 +73,4 @@ fun PanelSkeleton(modifier: Modifier = Modifier) {
             ShimmerBox(Modifier.fillMaxWidth().height(76.dp), shape = RoundedCornerShape(16.dp))
         }
     }
-}
-
-/**
- * Número que sube desde 0 hasta su valor al aparecer (count-up). Cada frame se
- * vuelve a formatear con [formato], así respeta unidades/moneda del usuario.
- */
-@Composable
-fun ContadorAnimado(
-    valor: Double,
-    formato: (Double) -> String,
-    color: Color,
-    fontSize: TextUnit,
-    fontWeight: FontWeight,
-    modifier: Modifier = Modifier
-) {
-    var lanzar by remember { mutableStateOf(false) }
-    val animado by animateFloatAsState(
-        targetValue = if (lanzar) valor.toFloat() else 0f,
-        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
-        label = "contador"
-    )
-    LaunchedEffectUnaVez { lanzar = true }
-    Text(
-        text = formato(animado.toDouble()),
-        color = color,
-        fontWeight = fontWeight,
-        fontSize = fontSize,
-        modifier = modifier
-    )
-}
-
-/** Dispara [accion] una sola vez cuando el composable entra en pantalla. */
-@Composable
-private fun LaunchedEffectUnaVez(accion: () -> Unit) {
-    androidx.compose.runtime.LaunchedEffect(Unit) { accion() }
 }

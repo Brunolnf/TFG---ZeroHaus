@@ -147,9 +147,9 @@ fun PanelScreen(
                             Spacer(Modifier.height(14.dp))
                             if (informe != null) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.consumoEstimado, { Formato.formatEnergia(it) }, Color.White, 15.sp, FontWeight.SemiBold) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.emisiones.toDouble(), { "${it.toInt()} kg CO₂" }, Color.White, 15.sp, FontWeight.SemiBold) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); ContadorAnimado(informe.costeAnual, { Formato.formatMonedaAnual(it) }, Color.White, 15.sp, FontWeight.SemiBold) }
+                                    Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatEnergia(informe.consumoEstimado), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.emisiones.toDouble().toInt()} kg CO₂", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatMonedaAnual(informe.costeAnual), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                                 }
                             } else {
                                 Text(c.panelSinDatos, color = Color.White.copy(0.8f))
