@@ -97,5 +97,11 @@ jobs:
           SMTP_CLAVE: ci
         run: python -c "import main; print('main.py OK')"
 
+      - name: Tests de la lógica de las funciones
+        env:
+          SMTP_USUARIO: ci@example.com
+          SMTP_CLAVE: ci
+        run: python -m unittest discover -s functions-tests -v
+
       - name: Los 14 idiomas están completos
         run: python herramientas/i18n.py comprobar
