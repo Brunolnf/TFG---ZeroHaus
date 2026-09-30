@@ -764,7 +764,10 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
 # email). El resultado se guarda en el propio informe (caché por idioma) y hay
 # un límite diario por usuario para acotar el coste.
 
-GEMINI_MODELOS = [m for m in os.environ.get("GEMINI_MODEL", "gemini-2.5-flash,gemini-2.0-flash-001").split(",") if m]
+# gemini-2.0-flash se apagó en junio de 2026 y gemini-2.5-flash el 20/10/2026
+# (solo sigue para proyectos que ya lo usaban). 3.5 Flash tiene endpoint en
+# europe-west1 (datos en la UE); 3.8 Flash, el estable más nuevo, va por global.
+GEMINI_MODELOS = [m for m in os.environ.get("GEMINI_MODEL", "gemini-3.5-flash,gemini-3.8-flash").split(",") if m]
 GEMINI_UBICACIONES = ["europe-west1", "global"]
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "10"))
 
@@ -840,7 +843,11 @@ def _llamar_gemini(prompt: str) -> dict:
         response_mime_type="application/json",
         response_schema=_ESQUEMA_IA,
         temperature=0.4,
-        max_output_tokens=2048,
+        # Los Gemini 3 razonan antes de responder y ese razonamiento cuenta
+        # dentro de max_output_tokens: nivel bajo para que el JSON no se corte
+        # y la respuesta tarde menos.
+        thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW),
+        max_output_tokens=4096,
     )
     ultimo_error = None
     for ubicacion in GEMINI_UBICACIONES:
