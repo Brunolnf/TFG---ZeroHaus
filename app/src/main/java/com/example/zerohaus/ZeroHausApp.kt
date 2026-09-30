@@ -7,8 +7,8 @@ import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.example.zerohaus.Util.SecurityUtil
 import com.example.zerohaus.Util.Diagnostico
+import com.example.zerohaus.Util.ProveedorAppCheck
 import com.google.firebase.appcheck.FirebaseAppCheck
-import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
@@ -17,8 +17,8 @@ import com.google.firebase.firestore.PersistentCacheSettings
 /**
  * Clase Application: inicialización global antes de cualquier pantalla,
  * servicio o ViewModel. Carga las preferencias en [AppEstado], crea los
- * canales de notificación, instala App Check (Play Integrity, solo en
- * release) y activa la caché persistente de Firestore.
+ * canales de notificación, instala App Check (Play Integrity en release,
+ * token de depuración en debug) y activa la caché persistente de Firestore.
  */
 class ZeroHausApp : Application() {
 
@@ -41,20 +41,13 @@ class ZeroHausApp : Application() {
         // 2. Canales de notificación.
         NotificacionesLocales.crearCanales(this)
 
-        // 3. App Check SOLO en release (Play Integrity).
-        //    En DEBUG NO se instala a propósito: el token de depuración cambia en
-        //    cada reinstalación/dispositivo y, si no está en la Consola, Firestore
-        //    BLOQUEA o CUELGA todas las queries → "se queda cargando para siempre".
-        //    Sin provider en debug, las peticiones no esperan ningún token.
-        //    (Para que en debug CARGUEN datos, ten App Check sin enforcement en la
-        //    Consola mientras desarrollas; en la publicación final lo reactivas y
-        //    el build release lo cubre con Play Integrity automáticamente.)
-        if (!BuildConfig.DEBUG) {
-            FirebaseAppCheck.getInstance()
-                .installAppCheckProviderFactory(PlayIntegrityAppCheckProviderFactory.getInstance())
-        } else {
-            Log.w(TAG, "App Check NO instalado en debug (evita cuelgues por token de depuración).")
-        }
+        // 3. App Check: Play Integrity en release y token de depuración en debug
+        //    (ver Util/ProveedorAppCheck.kt de cada build). Las Cloud Functions
+        //    con enforce_app_check (borrar usuarios del panel de admin, borrar
+        //    mi cuenta, suscripciones, IA) rechazan con UNAUTHENTICATED las
+        //    llamadas sin token, así que en debug hay que registrar el token que
+        //    sale en Logcat en Firebase Console → App Check.
+        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(ProveedorAppCheck.fabrica)
 
         // 4. Caché persistente de Firestore: las pantallas ya visitadas cargan al
         //    instante desde disco y la app sigue funcionando aunque la red falle.
