@@ -24,5 +24,11 @@ data class Vivienda(
     val fotovoltaica: String = "",
     val ocupantes: Int = 0,
     val electrodomesticos: String = "",
-    val fechaCreacion: Long = System.currentTimeMillis()
+    val fechaCreacion: Long = System.currentTimeMillis(),
+    // Última factura de la luz leída con IA (0 = sin factura). Solo se guardan
+    // estos números: la imagen de la factura no se conserva en ningún sitio.
+    val consumoLuzFacturaKwh: Double = 0.0,   // kWh/año (el periodo, anualizado)
+    val precioLuzFactura: Double = 0.0,       // €/kWh medio pagado, con potencia e impuestos
+    val potenciaContratadaKw: Double = 0.0,
+    val fechaFactura: Long = 0L               // cuándo se leyó
 )

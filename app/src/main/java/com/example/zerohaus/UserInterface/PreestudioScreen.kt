@@ -1,5 +1,9 @@
 package com.example.zerohaus.UserInterface
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -13,12 +17,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.ViewModel.PreestudioViewModel
 import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+import com.example.zerohaus.Repositorios.ErrorFactura
+import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.ViewModel.PreestudioEstado
+import java.io.File
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.TextosEnergia
 
@@ -219,6 +229,8 @@ fun PreestudioScreen(
                     }
                 }
 
+                TarjetaFactura(estado, viewModel, borde)
+
                 // Error
                 estado.error?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
@@ -261,6 +273,105 @@ fun PreestudioScreen(
                 Spacer(Modifier.height(6.dp))
             }
         }
+    }
+}
+
+/**
+ * Factura de la luz opcional: foto con la cámara o foto/PDF de la galería.
+ * La IA lee consumo y precio, y el informe usa el precio real.
+ */
+@Composable
+private fun TarjetaFactura(estado: PreestudioEstado, viewModel: PreestudioViewModel, borde: Color) {
+    val c = LocalCadenas.current
+    val ctx = LocalContext.current
+    val verde = MaterialTheme.colorScheme.primary
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    // La foto se guarda en la caché privada de la app y se borra tras enviarla
+    val archivoFoto = remember { File(ctx.cacheDir, "factura.jpg") }
+    val uriFoto = remember {
+        runCatching { FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", archivoFoto) }.getOrNull()
+    }
+    val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok && uriFoto != null) viewModel.leerFactura(ctx.applicationContext, uriFoto, archivoFoto)
+    }
+    val selector = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) viewModel.leerFactura(ctx.applicationContext, uri)
+    }
+
+    Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            CabeceraSeccion(Color(0xFFFEF9C3), Color(0xFFCA8A04), Icons.Default.Bolt, c.facTitulo)
+            Spacer(Modifier.height(8.dp))
+            val factura = estado.factura
+            when {
+                estado.leyendoFactura -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(18.dp), color = verde, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(c.facLeyendo, color = gris, fontSize = 13.sp)
+                }
+                factura != null -> {
+                    FilaFactura(c.facConsumo, Formato.formatEnergiaAnual(factura.consumoAnualKwh, 0))
+                    FilaFactura(c.facPrecio, "${Formato.formatMoneda(factura.precioMedio, 3)}/kWh")
+                    if (factura.potenciaKw > 0) FilaFactura(c.facPotencia, "${Formato.numero(factura.potenciaKw, 2)} kW")
+                    TextButton(onClick = viewModel::quitarFactura, contentPadding = PaddingValues(0.dp)) {
+                        Text(c.facQuitar, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    }
+                }
+                else -> {
+                    Text(c.facSub, color = gris, fontSize = 12.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                // Sin app de cámara (o sin FileProvider) no se puede hacer la foto
+                                val ok = uriFoto != null && runCatching { camara.launch(uriFoto) }.isSuccess
+                                if (!ok) viewModel.errorAlElegirFactura()
+                            },
+                            border = BorderStroke(1.dp, borde),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PhotoCamera, null, modifier = Modifier.size(16.dp), tint = verde)
+                            Spacer(Modifier.width(6.dp))
+                            Text(c.facFoto, fontSize = 13.sp, color = verde)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                runCatching { selector.launch(arrayOf("image/*", "application/pdf")) }
+                                    .onFailure { viewModel.errorAlElegirFactura() }
+                            },
+                            border = BorderStroke(1.dp, borde),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.UploadFile, null, modifier = Modifier.size(16.dp), tint = verde)
+                            Spacer(Modifier.width(6.dp))
+                            Text(c.facSubir, fontSize = 13.sp, color = verde)
+                        }
+                    }
+                }
+            }
+            val mensajeError = when (estado.errorFactura) {
+                ErrorFactura.NO_LEGIBLE -> c.facErrNoLegible
+                ErrorFactura.DEMASIADO_GRANDE -> c.facErrGrande
+                ErrorFactura.LIMITE_DIARIO -> c.iaErrorLimite
+                ErrorFactura.SIN_CONEXION -> c.errorRed
+                ErrorFactura.NO_DISPONIBLE -> c.facErrServicio
+                null -> null
+            }
+            if (mensajeError != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(mensajeError, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilaFactura(etiqueta: String, valor: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(etiqueta, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(valor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

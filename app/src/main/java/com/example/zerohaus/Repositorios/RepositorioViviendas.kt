@@ -38,6 +38,16 @@ class RepositorioViviendas {
             }
     }
 
+    /** Guarda solo los datos de la factura de la luz de una vivienda existente. */
+    fun actualizarFactura(vivienda: Vivienda) {
+        db.collection("viviendas").document(vivienda.id).update(mapOf(
+            "consumoLuzFacturaKwh" to vivienda.consumoLuzFacturaKwh,
+            "precioLuzFactura" to vivienda.precioLuzFactura,
+            "potenciaContratadaKw" to vivienda.potenciaContratadaKw,
+            "fechaFactura" to vivienda.fechaFactura
+        ))
+    }
+
     fun eliminarVivienda(id: String, callback: (Result<Unit>) -> Unit) {
         db.collection("viviendas").document(id).delete()
             .addOnSuccessListener { callback(Result.success(Unit)) }

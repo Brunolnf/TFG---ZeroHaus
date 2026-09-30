@@ -21,7 +21,9 @@ object AlgoritmoEnergetico {
         val consumoPorM2: Double,        // kWh/m²·año (base de la etiqueta)
         val emisiones: Double,
         val costeAnual: Double,
-        val recomendaciones: List<Recomendacion>
+        val recomendaciones: List<Recomendacion>,
+        val consumoLuzEstimado: Double,  // kWh/año de electricidad de red
+        val precioLuz: Double            // €/kWh aplicado (factura o precio medio)
     )
 
     // Zona climática de invierno por capital de provincia (CTE DB-HE).
@@ -105,10 +107,7 @@ object AlgoritmoEnergetico {
     private const val CUOTA_ACS = 0.20
     private const val CUOTA_ELECTRICA = 1.0 - CUOTA_CALEFACCION - CUOTA_ACS
 
-    // Precios medios de la energía para hogares en España (2024, IVA incl.)
-    private const val PRECIO_ELECTRICIDAD = 0.17   // €/kWh
-    private const val PRECIO_GAS = 0.08            // €/kWh (gas natural TUR)
-    private const val PRECIO_BIOMASA = 0.06        // €/kWh (pellet)
+    // Los precios de la energía están en [PreciosEnergia] (Remote Config).
 
     // Factores de emisión oficiales para la certificación energética
     // (documento reconocido RITE "Factores de emisión de CO₂ y coeficientes
@@ -134,10 +133,10 @@ object AlgoritmoEnergetico {
         else            -> Vector.ELECTRICIDAD    // Eléctrico / Aerotermia
     }
 
-    private fun precio(v: Vector) = when (v) {
-        Vector.ELECTRICIDAD -> PRECIO_ELECTRICIDAD
-        Vector.GAS          -> PRECIO_GAS
-        Vector.BIOMASA      -> PRECIO_BIOMASA
+    private fun precio(v: Vector, vivienda: Vivienda) = when (v) {
+        Vector.ELECTRICIDAD -> PreciosEnergia.electricidadPara(vivienda.precioLuzFactura)
+        Vector.GAS          -> PreciosEnergia.gas
+        Vector.BIOMASA      -> PreciosEnergia.biomasa
         Vector.SOLAR        -> 0.0
     }
 
@@ -255,7 +254,8 @@ object AlgoritmoEnergetico {
         val consumoKwh: Double,      // energía final comprada (red + combustibles)
         val intensidad: Double,      // kWh/m²·año (base de la etiqueta)
         val emisiones: Double,       // kg CO₂/año
-        val coste: Double            // €/año
+        val coste: Double,           // €/año
+        val electricidadKwh: Double  // kWh/año de electricidad de red
     )
 
     fun balance(vivienda: Vivienda): Balance {
@@ -279,9 +279,9 @@ object AlgoritmoEnergetico {
 
         val consumo = porVector.values.sum()
         val emisiones = porVector.entries.sumOf { (v, kwh) -> kwh * co2(v) }
-        val coste = porVector.entries.sumOf { (v, kwh) -> kwh * precio(v) }
+        val coste = porVector.entries.sumOf { (v, kwh) -> kwh * precio(v, vivienda) }
 
-        return Balance(consumo, consumo / superficie, emisiones, coste)
+        return Balance(consumo, consumo / superficie, emisiones, coste, porVector[Vector.ELECTRICIDAD] ?: 0.0)
     }
 
     /**
@@ -403,7 +403,9 @@ object AlgoritmoEnergetico {
             consumoPorM2 = redondear(actual.intensidad),
             emisiones = redondear(actual.emisiones),
             costeAnual = redondear(actual.coste),
-            recomendaciones = recs
+            recomendaciones = recs,
+            consumoLuzEstimado = redondear(actual.electricidadKwh),
+            precioLuz = PreciosEnergia.electricidadPara(vivienda.precioLuzFactura)
         )
     }
 }

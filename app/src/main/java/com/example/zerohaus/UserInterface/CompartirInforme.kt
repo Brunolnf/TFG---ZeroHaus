@@ -8,6 +8,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
+import com.example.zerohaus.Util.AppCadenas
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.TextosEnergia
@@ -141,6 +142,21 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     }
     y += 92f
 
+    // Factura de la luz: consumo real frente al estimado y precio aplicado
+    if (informe.consumoLuzFactura > 0) {
+        paint.color = grisClaro
+        canvas.drawRoundRect(RectF(24f, y, (pageWidth - 24).toFloat(), y + 40f), 8f, 8f, paint)
+        paint.color = negro
+        paint.textSize = 10f
+        paint.isFakeBoldText = true
+        canvas.drawText(c.infFactTitulo, 34f, y + 16f, paint)
+        paint.color = gris
+        paint.textSize = 9f
+        paint.isFakeBoldText = false
+        canvas.drawText(recortar(textoFactura(informe, c), paint, pageWidth - 68f), 34f, y + 31f, paint)
+        y += 54f
+    }
+
     if (informe.recomendaciones.isNotEmpty()) {
         paint.color = negro
         paint.textSize = 14f
@@ -207,6 +223,13 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     return file
 }
 
+/** "Consumo real (factura): … · Consumo estimado: … · Precio de la luz aplicado: …" */
+private fun textoFactura(informe: InformeEnergetico, c: AppCadenas): String = buildList {
+    add("${c.infFactReal}: ${Formato.formatEnergiaAnual(informe.consumoLuzFactura, 0)}")
+    if (informe.consumoLuzEstimado > 0) add("${c.infFactEstimado}: ${Formato.formatEnergiaAnual(informe.consumoLuzEstimado, 0)}")
+    if (informe.precioLuz > 0) add("${c.infFactPrecio}: ${Formato.formatMoneda(informe.precioLuz, 3)}/kWh")
+}.joinToString(" · ")
+
 /** Corta [texto] con «…» para que no pase de [anchoMax] puntos con [paint]. */
 private fun recortar(texto: String, paint: Paint, anchoMax: Float): String {
     if (paint.measureText(texto) <= anchoMax) return texto
@@ -238,6 +261,11 @@ private fun buildTextoInforme(informe: InformeEnergetico): String {
         if (informe.consumoPorM2 > 0) appendLine("  ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}")
         appendLine("  ${c.histEmisiones}: ${Formato.formatEmisionesAnual(informe.emisiones)}")
         appendLine("  ${c.histCoste}: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
+        if (informe.consumoLuzFactura > 0) {
+            appendLine("${c.infFactTitulo.uppercase()}:")
+            appendLine("  ${textoFactura(informe, c)}")
+            appendLine("  ${c.infFactNota}"); appendLine()
+        }
         if (informe.recomendaciones.isNotEmpty()) {
             appendLine("${c.infRecomendaciones.uppercase()}:")
             informe.recomendaciones.forEach { r ->

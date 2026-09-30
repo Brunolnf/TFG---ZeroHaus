@@ -679,6 +679,23 @@ class AppCadenas internal constructor(
     val canalGeneralDesc: String get() = t("canalGeneralDesc")
     val sinConexion: String get() = t("sinConexion")
     val verErrServicio: String get() = t("verErrServicio")
+    val facTitulo: String get() = t("facTitulo")
+    val facSub: String get() = t("facSub")
+    val facFoto: String get() = t("facFoto")
+    val facSubir: String get() = t("facSubir")
+    val facLeyendo: String get() = t("facLeyendo")
+    val facConsumo: String get() = t("facConsumo")
+    val facPrecio: String get() = t("facPrecio")
+    val facPotencia: String get() = t("facPotencia")
+    val facQuitar: String get() = t("facQuitar")
+    val facErrNoLegible: String get() = t("facErrNoLegible")
+    val facErrGrande: String get() = t("facErrGrande")
+    val facErrServicio: String get() = t("facErrServicio")
+    val infFactTitulo: String get() = t("infFactTitulo")
+    val infFactReal: String get() = t("infFactReal")
+    val infFactEstimado: String get() = t("infFactEstimado")
+    val infFactPrecio: String get() = t("infFactPrecio")
+    val infFactNota: String get() = t("infFactNota")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

@@ -1,5 +1,7 @@
 package com.example.zerohaus.ViewModel
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,8 +11,10 @@ import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.getCadenas
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
@@ -38,7 +42,13 @@ data class PreestudioEstado(
     val informeGenerado: InformeEnergetico? = null,
     val viviendas: List<Vivienda> = emptyList(),
     val viviendaSeleccionada: Vivienda? = null,   // null = formulario manual / nueva vivienda
-    val cargandoViviendas: Boolean = false
+    val cargandoViviendas: Boolean = false,
+    // Factura de la luz leída con IA (opcional): su precio real sustituye al
+    // medio en el cálculo del coste
+    val factura: DatosFactura? = null,
+    val fechaFactura: Long = 0L,
+    val leyendoFactura: Boolean = false,
+    val errorFactura: ErrorFactura? = null
 )
 
 /**
@@ -51,6 +61,7 @@ class PreestudioViewModel : ViewModel() {
 
     private val repoViviendas = RepositorioViviendas()
     private val repoInformes = RepositorioInformes()
+    private val repoFactura = RepositorioFactura()
 
     fun cambiarNombre(v: String) { estado = estado.copy(nombreVivienda = v) }
     fun cambiarSuperficie(v: String) { estado = estado.copy(superficie = v) }
@@ -112,7 +123,11 @@ class PreestudioViewModel : ViewModel() {
             refrigeracion     = estado.refrigeracion,
             fotovoltaica      = estado.fotovoltaica,
             ocupantes         = ocupantes!!,
-            electrodomesticos = estado.electrodomesticos
+            electrodomesticos = estado.electrodomesticos,
+            consumoLuzFacturaKwh = estado.factura?.consumoAnualKwh ?: 0.0,
+            precioLuzFactura     = estado.factura?.precioMedio ?: 0.0,
+            potenciaContratadaKw = estado.factura?.potenciaKw ?: 0.0,
+            fechaFactura         = if (estado.factura != null) estado.fechaFactura else 0L
         )
 
         viewModelScope.launch {
@@ -123,6 +138,13 @@ class PreestudioViewModel : ViewModel() {
             if (!idExistente.isNullOrEmpty()) {
                 // Solo usar el ID; NO escribir en Firestore (no crear ni sobrescribir)
                 viviendaConId = viviendaBase.copy(id = idExistente)
+                // Salvo la factura: si se ha añadido, cambiado o quitado, se
+                // guarda en la vivienda para los próximos informes
+                val anterior = estado.viviendaSeleccionada
+                if (anterior != null && (anterior.precioLuzFactura != viviendaConId.precioLuzFactura
+                        || anterior.consumoLuzFacturaKwh != viviendaConId.consumoLuzFacturaKwh)) {
+                    repoViviendas.actualizarFactura(viviendaConId)
+                }
             } else {
                 // Vivienda nueva → guardar en Firestore
                 val resultVivienda = suspendCancellableCoroutine { cont ->
@@ -143,6 +165,42 @@ class PreestudioViewModel : ViewModel() {
                 .onFailure { e -> estado = estado.copy(error = e.message, cargando = false) }
         }
     }
+
+    /**
+     * Lee con IA la factura de la luz elegida (foto o PDF). El archivo se
+     * prepara fuera del hilo principal (las fotos se reducen) y se envía al
+     * servidor, que devuelve solo los números. [temporal] es la foto hecha con
+     * la cámara: se borra en cuanto está preparada para no dejarla en el móvil.
+     */
+    fun leerFactura(context: Context, uri: Uri, temporal: java.io.File? = null) {
+        if (estado.leyendoFactura) return
+        estado = estado.copy(leyendoFactura = true, errorFactura = null)
+        viewModelScope.launch {
+            val archivo = try {
+                withContext(Dispatchers.IO) {
+                    try { RepositorioFactura.prepararArchivo(context, uri) } finally { temporal?.delete() }
+                }
+            } catch (e: ErrorFacturaException) {
+                estado = estado.copy(leyendoFactura = false, errorFactura = e.tipo)
+                return@launch
+            } catch (e: Exception) {
+                estado = estado.copy(leyendoFactura = false, errorFactura = ErrorFactura.NO_LEGIBLE)
+                return@launch
+            }
+            repoFactura.leer(archivo.first, archivo.second) { r ->
+                r.onSuccess {
+                    estado = estado.copy(leyendoFactura = false, factura = it, fechaFactura = System.currentTimeMillis())
+                }.onFailure {
+                    estado = estado.copy(leyendoFactura = false, errorFactura = (it as? ErrorFacturaException)?.tipo ?: ErrorFactura.NO_DISPONIBLE)
+                }
+            }
+        }
+    }
+
+    /** No hay cámara o el selector falló al abrirse. */
+    fun errorAlElegirFactura() { estado = estado.copy(errorFactura = ErrorFactura.NO_LEGIBLE) }
+
+    fun quitarFactura() { estado = estado.copy(factura = null, fechaFactura = 0L, errorFactura = null) }
 
     fun limpiarInforme() {
         estado = estado.copy(informeGenerado = null)
@@ -176,7 +234,16 @@ class PreestudioViewModel : ViewModel() {
             fotovoltaica     = vivienda.fotovoltaica.ifBlank { "Sin fotovoltaica" },
             ocupantes        = if (vivienda.ocupantes > 0) vivienda.ocupantes.toString() else "3",
             electrodomesticos = vivienda.electrodomesticos.ifBlank { "Clase B-C" },
-            error            = null
+            error            = null,
+            // Su última factura (solo quedan los datos anuales, no los del periodo)
+            factura          = if (vivienda.consumoLuzFacturaKwh > 0 && vivienda.precioLuzFactura > 0) DatosFactura(
+                consumoKwh = 0.0, dias = 0, importeTotal = 0.0,
+                potenciaKw = vivienda.potenciaContratadaKw,
+                consumoAnualKwh = vivienda.consumoLuzFacturaKwh,
+                precioMedio = vivienda.precioLuzFactura
+            ) else null,
+            fechaFactura     = vivienda.fechaFactura,
+            errorFactura     = null
         )
     }
 

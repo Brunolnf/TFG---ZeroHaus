@@ -188,6 +188,40 @@ fun InformeScreen(
                     }
                 }
 
+                // Factura de la luz: consumo real frente al estimado y precio usado
+                if (informe.consumoLuzFactura > 0) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, borde),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(c.infFactTitulo, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(10.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column {
+                                    Text(c.infFactReal, color = gris, fontSize = 12.sp)
+                                    Text(Formato.formatEnergiaAnual(informe.consumoLuzFactura, 0), fontWeight = FontWeight.Medium)
+                                }
+                                if (informe.consumoLuzEstimado > 0) {
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(c.infFactEstimado, color = gris, fontSize = 12.sp)
+                                        Text(Formato.formatEnergiaAnual(informe.consumoLuzEstimado, 0), fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                            if (informe.precioLuz > 0) {
+                                Spacer(Modifier.height(10.dp))
+                                Text(c.infFactPrecio, color = gris, fontSize = 12.sp)
+                                Text("${Formato.formatMoneda(informe.precioLuz, 3)}/kWh", fontWeight = FontWeight.Medium)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(c.infFactNota, color = gris, fontSize = 12.sp)
+                        }
+                    }
+                }
+
                 // Recomendaciones
                 if (informe.recomendaciones.isNotEmpty()) {
                     Card(

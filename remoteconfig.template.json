@@ -1,0 +1,25 @@
+{
+  "parameters": {
+    "precio_electricidad": {
+      "defaultValue": {
+        "value": "0.17"
+      },
+      "valueType": "NUMBER",
+      "description": "Precio medio de la luz para hogares (€/kWh, IVA incl.). Se usa en los informes sin factura. Válido entre 0.01 y 1.5."
+    },
+    "precio_gas": {
+      "defaultValue": {
+        "value": "0.08"
+      },
+      "valueType": "NUMBER",
+      "description": "Precio medio del gas natural TUR (€/kWh, IVA incl.). Válido entre 0.01 y 1.5."
+    },
+    "precio_biomasa": {
+      "defaultValue": {
+        "value": "0.06"
+      },
+      "valueType": "NUMBER",
+      "description": "Precio medio del pellet (€/kWh, IVA incl.). Válido entre 0.01 y 1.5."
+    }
+  }
+}

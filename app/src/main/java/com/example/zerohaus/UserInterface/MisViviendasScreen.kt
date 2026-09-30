@@ -24,6 +24,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.ViewModel.ViviendasViewModel
@@ -157,6 +158,18 @@ fun MisViviendasScreen(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Text(TextosEnergia.opcion(v.calefaccion, c), color = gris, fontSize = 12.sp)
                                 Text(TextosEnergia.opcion(v.tipoVentanas, c), color = gris, fontSize = 12.sp)
+                            }
+                            // Con factura de la luz: sus informes usan el precio real
+                            if (v.precioLuzFactura > 0) {
+                                Spacer(Modifier.height(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Bolt, null, tint = Color(0xFFCA8A04), modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        "${c.infFactTitulo} · ${Formato.formatMoneda(v.precioLuzFactura, 3)}/kWh",
+                                        color = gris, fontSize = 12.sp
+                                    )
+                                }
                             }
                         }
                     }

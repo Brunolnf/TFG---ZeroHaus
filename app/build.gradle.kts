@@ -100,6 +100,7 @@ dependencies {
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-perf")
     implementation("com.google.firebase:firebase-functions")
+    implementation("com.google.firebase:firebase-config")
 
     // Google Play Billing (suscripciones de profesionales). Play exige al
     // menos la v8 para publicar actualizaciones desde el 31/08/2026.
