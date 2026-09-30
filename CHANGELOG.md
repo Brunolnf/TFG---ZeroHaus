@@ -5,6 +5,10 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 ## [Sin publicar]
 
 ### Añadido
+- **Factura de la luz con IA**: en el preestudio se puede hacer una foto o subir el PDF de la factura; Gemini lee consumo, días, importe y potencia contratada (función `leer_factura`). El informe calcula el coste y los ahorros con el precio real que paga el usuario y muestra el consumo real frente al estimado, también en el PDF y el texto compartidos y en los consejos de la IA. El archivo no se guarda; cuenta dentro del límite diario de IA.
+- **Precios de la energía con Firebase Remote Config** (`precio_electricidad`, `precio_gas`, `precio_biomasa`): se cambian desde la consola sin publicar versión; los valores fuera de rango se ignoran.
+- La lista de viviendas indica cuáles tienen factura de la luz y su precio.
+- `herramientas/distribuir.ps1`: compila la versión release y la envía a probadores con Firebase App Distribution.
 - **Del informe al profesional**: cada mejora que hace un profesional tiene un botón que abre el directorio filtrado por su especialidad.
 - **Catálogo único de especialidades**: el profesional las elige de una lista en su perfil y se muestran traducidas en todas las pantallas; el buscador encuentra también por el nombre traducido.
 - **Distancias sin GPS**: si el usuario no da permiso de ubicación, el directorio mide desde la capital de la provincia de su vivienda, lo indica y marca las distancias como aproximadas; con un toque se puede usar el GPS.
@@ -21,12 +25,16 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
 ### Cambiado
+- **La app va más rápida**: el cambio entre pantallas dura 0,2 s en vez de 0,7 s, la pantalla de bienvenida 0,5 s en vez de 1,2 s, los números del último informe ya no se animan desde 0 cada vez que se vuelve al inicio y el directorio de profesionales solo se vuelve a filtrar cuando cambian los datos.
+- Consejos con IA: `gemini-3.5-flash` (servidor en la UE) con `gemini-3.8-flash` de respaldo; `gemini-2.0-flash` se apagó en junio de 2026 y `gemini-2.5-flash` se apaga el 20/10/2026.
+- Las compilaciones de depuración usan App Check con token de depuración (hay que registrarlo en la consola); antes no llevaban App Check y las funciones protegidas las rechazaban.
 - **Herramientas de compilación**: AGP 9 (con Kotlin integrado), Kotlin 2.4, Gradle 9.8 y compileSdk 37 (el targetSdk sigue en 36, sin cambios de comportamiento). Librerías al día: Firebase BOM 34.19, Compose BOM 2026.09, Navigation 2.10, Play Billing 9.1, Maps Compose 8.6, core 1.19, security-crypto 1.1.0 estable.
 - Las compilaciones de depuración permiten capturas de pantalla; la versión publicada las sigue bloqueando.
 - Los números siguen el idioma elegido en la app (no el del sistema) y llevan separador de miles: «12.345,6 kWh» en español, «12,345.6 kWh» en inglés.
 - `AppCadenas` pasa de una `data class` con ~580 parámetros a mapas por idioma: la JVM no admite más de 255 parámetros, por lo que la clase no se podía cargar en tests ni en las vistas previas de Compose. Si a un idioma le falta un texto, se muestra en español.
 
 ### Corregido
+- Borrar usuarios desde el panel de administración, los consejos con IA y el resto de funciones protegidas con App Check fallaban en las compilaciones de depuración («Unauthenticated»).
 - El filtro por especialidad dejaba fuera a los profesionales que la habían escrito a mano de otra forma («placas solares» en vez de «Fotovoltaica»).
 - El directorio mostraba distancias calculadas desde Madrid cuando no había ubicación real del usuario.
 - Ordenar por proximidad sin ninguna ubicación dejaba la lista en un orden arbitrario; ahora se ordena por valoración.
