@@ -49,7 +49,7 @@ fun InformeScreen(
     val borde = MaterialTheme.colorScheme.outline
     val informe = viewModel.informe
     val c = LocalCadenas.current
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
     val ctx = LocalContext.current
 
     LaunchedEffect(Unit) { if (informe == null) viewModel.cargarUltimoInforme() }

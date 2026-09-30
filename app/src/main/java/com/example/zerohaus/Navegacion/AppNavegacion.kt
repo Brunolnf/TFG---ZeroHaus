@@ -1,6 +1,9 @@
 // RUTA: Navegacion/AppNavegacion.kt
 package com.example.zerohaus.Navegacion
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +33,7 @@ import com.example.zerohaus.ViewModel.*
 import com.google.firebase.auth.FirebaseAuth
 
 private const val RUTA_VERIFICAR = "verificar_email"
+private const val TRANSICION_MS = 200
 // Patrón completo (con el argumento opcional): es el que identifica el destino,
 // así que es el que debe usarse como startDestination.
 private const val RUTA_VERIFICAR_PATRON = "$RUTA_VERIFICAR?siguiente={siguiente}"
@@ -115,7 +119,16 @@ fun AppNavegacion() {
 
     val cerrarSesion: () -> Unit = { sesionVM.logout() }
 
-    NavHost(navController = nav, startDestination = startDestination) {
+    // Fundido corto entre pantallas: el de Navigation por defecto dura 700 ms
+    // y hacía que cada cambio de pantalla se notara lento.
+    NavHost(
+        navController = nav,
+        startDestination = startDestination,
+        enterTransition = { fadeIn(tween(TRANSICION_MS)) },
+        exitTransition = { fadeOut(tween(TRANSICION_MS)) },
+        popEnterTransition = { fadeIn(tween(TRANSICION_MS)) },
+        popExitTransition = { fadeOut(tween(TRANSICION_MS)) }
+    ) {
 
         // Auth
         composable("login") {
