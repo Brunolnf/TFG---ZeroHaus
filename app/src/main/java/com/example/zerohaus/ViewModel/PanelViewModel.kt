@@ -94,6 +94,20 @@ class PanelViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Al volver al inicio: trae el último informe por si se ha generado o
+     * recalculado otro mientras tanto. Sin esqueleto de carga (los datos que
+     * ya hay se siguen viendo) y sin hacer nada durante la carga inicial.
+     */
+    fun refrescarUltimoInforme() {
+        if (estado.cargando || estado.usuario == null) return
+        repoInformes.obtenerUltimoInforme { informe ->
+            if (informe != null && informe.id != estado.ultimoInforme?.id) {
+                estado = estado.copy(ultimoInforme = informe)
+            }
+        }
+    }
+
     private fun arrancarListenerNotificaciones() {
         listenerNotifs?.remove()
         listenerNotifs = repoNotificaciones.escucharNotificaciones { notifs ->

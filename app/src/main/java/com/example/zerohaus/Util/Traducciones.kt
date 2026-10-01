@@ -651,6 +651,10 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Precio de la luz aplicado",
     "infFactNota" to "El coste y los ahorros se calculan con el precio que pagas según tu factura.",
     "infEnergiaPrimaria" to "Energía primaria (calefacción, ACS y frío)",
+    "infMetodoAnterior" to "Este informe se calculó con el método anterior, que exageraba el consumo de luz y algunos ahorros. Recalcúlalo para ver cifras actualizadas; el actual se queda en el historial.",
+    "infRecalcular" to "Recalcular con el método actual",
+    "histMetodoAnterior" to "Método de cálculo anterior",
+    "grafMetodoAnterior" to "Los informes calculados con el método anterior no entran en la comparación: sus cifras no son comparables con las actuales.",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1263,6 +1267,10 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Electricity price applied",
     "infFactNota" to "Costs and savings are calculated with the price you pay according to your bill.",
     "infEnergiaPrimaria" to "Primary energy (heating, hot water, cooling)",
+    "infMetodoAnterior" to "This report was calculated with the previous method, which overstated electricity use and some savings. Recalculate it to see updated figures; this one stays in your history.",
+    "infRecalcular" to "Recalculate with the current method",
+    "histMetodoAnterior" to "Previous calculation method",
+    "grafMetodoAnterior" to "Reports calculated with the previous method are left out of the comparison: their figures aren't comparable with the current ones.",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1875,6 +1883,10 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Preu de la llum aplicat",
     "infFactNota" to "El cost i els estalvis es calculen amb el preu que pagues segons la teva factura.",
     "infEnergiaPrimaria" to "Energia primària (calefacció, ACS i fred)",
+    "infMetodoAnterior" to "Aquest informe es va calcular amb el mètode anterior, que exagerava el consum de llum i alguns estalvis. Torna'l a calcular per veure xifres actualitzades; l'actual es queda a l'historial.",
+    "infRecalcular" to "Tornar a calcular amb el mètode actual",
+    "histMetodoAnterior" to "Mètode de càlcul anterior",
+    "grafMetodoAnterior" to "Els informes calculats amb el mètode anterior no entren a la comparació: les seves xifres no són comparables amb les actuals.",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2487,6 +2499,10 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Aplikatutako argiaren prezioa",
     "infFactNota" to "Kostua eta aurrezkiak zure fakturaren arabera ordaintzen duzun prezioarekin kalkulatzen dira.",
     "infEnergiaPrimaria" to "Lehen mailako energia (berokuntza, UBS eta hozketa)",
+    "infMetodoAnterior" to "Txosten hau aurreko metodoarekin kalkulatu zen, eta argindar-kontsumoa eta aurrezki batzuk puztu egiten zituen. Kalkulatu berriro datu eguneratuak ikusteko; hau historian geratuko da.",
+    "infRecalcular" to "Kalkulatu berriro egungo metodoarekin",
+    "histMetodoAnterior" to "Aurreko kalkulu-metodoa",
+    "grafMetodoAnterior" to "Aurreko metodoarekin kalkulatutako txostenak ez dira konparazioan sartzen: haien datuak ez dira egungoekin alderagarriak.",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3099,6 +3115,10 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Prezo da luz aplicado",
     "infFactNota" to "O custo e os aforros calcúlanse co prezo que pagas segundo a túa factura.",
     "infEnergiaPrimaria" to "Enerxía primaria (calefacción, AQS e frío)",
+    "infMetodoAnterior" to "Este informe calculouse co método anterior, que esaxeraba o consumo de luz e algúns aforros. Recalcúlao para ver cifras actualizadas; o actual queda no historial.",
+    "infRecalcular" to "Recalcular co método actual",
+    "histMetodoAnterior" to "Método de cálculo anterior",
+    "grafMetodoAnterior" to "Os informes calculados co método anterior non entran na comparación: as súas cifras non son comparables coas actuais.",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3711,6 +3731,10 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Preço da eletricidade aplicado",
     "infFactNota" to "O custo e as poupanças são calculados com o preço que paga segundo a sua fatura.",
     "infEnergiaPrimaria" to "Energia primária (aquecimento, AQS e frio)",
+    "infMetodoAnterior" to "Este relatório foi calculado com o método anterior, que exagerava o consumo de eletricidade e algumas poupanças. Recalcule-o para ver valores atualizados; o atual fica no histórico.",
+    "infRecalcular" to "Recalcular com o método atual",
+    "histMetodoAnterior" to "Método de cálculo anterior",
+    "grafMetodoAnterior" to "Os relatórios calculados com o método anterior ficam fora da comparação: os seus valores não são comparáveis com os atuais.",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4323,6 +4347,10 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Prix de l'électricité appliqué",
     "infFactNota" to "Le coût et les économies sont calculés avec le prix que vous payez d'après votre facture.",
     "infEnergiaPrimaria" to "Énergie primaire (chauffage, ECS et froid)",
+    "infMetodoAnterior" to "Ce rapport a été calculé avec l'ancienne méthode, qui surestimait la consommation d'électricité et certaines économies. Recalculez-le pour voir des chiffres à jour ; celui-ci reste dans l'historique.",
+    "infRecalcular" to "Recalculer avec la méthode actuelle",
+    "histMetodoAnterior" to "Ancienne méthode de calcul",
+    "grafMetodoAnterior" to "Les rapports calculés avec l'ancienne méthode sont exclus de la comparaison : leurs chiffres ne sont pas comparables aux actuels.",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4935,6 +4963,10 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Angewandter Strompreis",
     "infFactNota" to "Kosten und Einsparungen werden mit dem Preis berechnet, den du laut Rechnung zahlst.",
     "infEnergiaPrimaria" to "Primärenergie (Heizung, Warmwasser, Kühlung)",
+    "infMetodoAnterior" to "Dieser Bericht wurde mit der früheren Methode berechnet, die den Stromverbrauch und einige Einsparungen überschätzte. Berechne ihn neu, um aktuelle Werte zu sehen; dieser bleibt im Verlauf.",
+    "infRecalcular" to "Mit der aktuellen Methode neu berechnen",
+    "histMetodoAnterior" to "Frühere Berechnungsmethode",
+    "grafMetodoAnterior" to "Berichte, die mit der früheren Methode berechnet wurden, fließen nicht in den Vergleich ein: Ihre Werte sind mit den aktuellen nicht vergleichbar.",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5547,6 +5579,10 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Prezzo della luce applicato",
     "infFactNota" to "Costo e risparmi sono calcolati con il prezzo che paghi secondo la tua bolletta.",
     "infEnergiaPrimaria" to "Energia primaria (riscaldamento, ACS e raffrescamento)",
+    "infMetodoAnterior" to "Questo report è stato calcolato con il metodo precedente, che sovrastimava il consumo di luce e alcuni risparmi. Ricalcolalo per vedere cifre aggiornate; quello attuale resta nella cronologia.",
+    "infRecalcular" to "Ricalcola con il metodo attuale",
+    "histMetodoAnterior" to "Metodo di calcolo precedente",
+    "grafMetodoAnterior" to "I report calcolati con il metodo precedente restano fuori dal confronto: le loro cifre non sono confrontabili con quelle attuali.",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6159,6 +6195,10 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "سعر الكهرباء المطبَّق",
     "infFactNota" to "تُحسب التكلفة والتوفير بالسعر الذي تدفعه وفقًا لفاتورتك.",
     "infEnergiaPrimaria" to "الطاقة الأولية (التدفئة والمياه الساخنة والتبريد)",
+    "infMetodoAnterior" to "تم حساب هذا التقرير بالطريقة السابقة التي كانت تبالغ في استهلاك الكهرباء وبعض التوفيرات. أعد حسابه لرؤية أرقام محدّثة؛ وسيبقى هذا التقرير في السجل.",
+    "infRecalcular" to "إعادة الحساب بالطريقة الحالية",
+    "histMetodoAnterior" to "طريقة الحساب السابقة",
+    "grafMetodoAnterior" to "لا تدخل التقارير المحسوبة بالطريقة السابقة في المقارنة: أرقامها غير قابلة للمقارنة مع الأرقام الحالية.",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6771,6 +6811,10 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "采用的电价",
     "infFactNota" to "费用和节省金额按你账单上的实际电价计算。",
     "infEnergiaPrimaria" to "一次能源（供暖、热水和制冷）",
+    "infMetodoAnterior" to "此报告使用旧方法计算，该方法高估了用电量和部分节省金额。重新计算即可查看最新数据；当前报告会保留在历史记录中。",
+    "infRecalcular" to "用当前方法重新计算",
+    "histMetodoAnterior" to "旧计算方法",
+    "grafMetodoAnterior" to "使用旧方法计算的报告不参与比较：其数据与当前数据不可比。",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7383,6 +7427,10 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Prețul energiei aplicat",
     "infFactNota" to "Costul și economiile se calculează cu prețul pe care îl plătești conform facturii.",
     "infEnergiaPrimaria" to "Energie primară (încălzire, ACM și răcire)",
+    "infMetodoAnterior" to "Acest raport a fost calculat cu metoda anterioară, care supraestima consumul de energie electrică și unele economii. Recalculează-l pentru cifre actualizate; acesta rămâne în istoric.",
+    "infRecalcular" to "Recalculează cu metoda actuală",
+    "histMetodoAnterior" to "Metodă de calcul anterioară",
+    "grafMetodoAnterior" to "Rapoartele calculate cu metoda anterioară nu intră în comparație: cifrele lor nu sunt comparabile cu cele actuale.",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7995,6 +8043,10 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Toegepaste stroomprijs",
     "infFactNota" to "Kosten en besparingen worden berekend met de prijs die je volgens je rekening betaalt.",
     "infEnergiaPrimaria" to "Primaire energie (verwarming, warm water en koeling)",
+    "infMetodoAnterior" to "Dit rapport is berekend met de vorige methode, die het stroomverbruik en sommige besparingen overschatte. Bereken het opnieuw voor actuele cijfers; dit rapport blijft in je geschiedenis.",
+    "infRecalcular" to "Opnieuw berekenen met de huidige methode",
+    "histMetodoAnterior" to "Vorige berekeningsmethode",
+    "grafMetodoAnterior" to "Rapporten die met de vorige methode zijn berekend, tellen niet mee in de vergelijking: hun cijfers zijn niet vergelijkbaar met de huidige.",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8607,4 +8659,8 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactPrecio" to "Zastosowana cena prądu",
     "infFactNota" to "Koszt i oszczędności są liczone według ceny, którą płacisz zgodnie z rachunkiem.",
     "infEnergiaPrimaria" to "Energia pierwotna (ogrzewanie, CWU i chłodzenie)",
+    "infMetodoAnterior" to "Ten raport obliczono poprzednią metodą, która zawyżała zużycie prądu i niektóre oszczędności. Przelicz go, aby zobaczyć aktualne dane; obecny zostanie w historii.",
+    "infRecalcular" to "Przelicz obecną metodą",
+    "histMetodoAnterior" to "Poprzednia metoda obliczeń",
+    "grafMetodoAnterior" to "Raporty obliczone poprzednią metodą nie są uwzględniane w porównaniu: ich dane nie są porównywalne z obecnymi.",
 ), respaldo = espanol) }
