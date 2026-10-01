@@ -95,8 +95,13 @@ class RepositorioFactura {
             if (limites.outWidth <= 0 || limites.outHeight <= 0) throw ErrorFacturaException(ErrorFactura.NO_LEGIBLE)
             var muestreo = 1
             while (maxOf(limites.outWidth, limites.outHeight) / (muestreo * 2) >= LADO_MAX) muestreo *= 2
+            // RGB_565 ocupa la mitad que ARGB_8888 y para leer texto sobra: en el
+            // peor caso (lado de casi 4096 px) la foto queda en unos 25 MB
             val bitmap = resolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = muestreo })
+                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
+                    inSampleSize = muestreo
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                })
             } ?: throw ErrorFacturaException(ErrorFactura.NO_LEGIBLE)
             val escala = LADO_MAX.toFloat() / maxOf(bitmap.width, bitmap.height)
             val final = if (escala < 1f)
