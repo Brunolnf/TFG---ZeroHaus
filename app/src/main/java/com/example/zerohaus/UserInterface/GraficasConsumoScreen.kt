@@ -120,7 +120,12 @@ fun GraficasConsumoScreen(
             return@Scaffold
         }
 
-        val datos = estado.informes.takeLast(5)
+        // No se mezclan informes del método de cálculo anterior con los del
+        // actual: la diferencia parecería una mejora de la vivienda que no es real
+        val metodoActual = estado.informes.last().energiaPrimariaM2 > 0
+        val comparables = if (metodoActual) estado.informes.filter { it.energiaPrimariaM2 > 0 } else estado.informes
+        val excluidos = estado.informes.size - comparables.size
+        val datos = comparables.takeLast(5)
 
         Column(
             modifier = Modifier
@@ -156,6 +161,10 @@ fun GraficasConsumoScreen(
                         else
                             "${c.grafAumento} ${Formato.formatEnergia(-mejora)} ${c.grafRespectoPrimero}"
                         Text(mejoraTexto, color = mejoraColor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                    if (excluidos > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(c.grafMetodoAnterior, color = gris, fontSize = 12.sp)
                     }
                 }
             }

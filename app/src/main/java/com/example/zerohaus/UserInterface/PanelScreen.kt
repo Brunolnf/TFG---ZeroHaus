@@ -56,7 +56,11 @@ fun PanelScreen(
     val estado = panelViewModel.estado
     var mostrarNotif by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
-    LaunchedEffect(Unit) { panelViewModel.cargarDatos() }
+    LaunchedEffect(Unit) {
+        panelViewModel.cargarDatos()
+        // Al volver de generar o recalcular un informe, que se vea el nuevo
+        panelViewModel.refrescarUltimoInforme()
+    }
     // Momento feliz: usuario con un informe ya cargado → pedimos valoración
     // (una vez, tras varias interacciones; Google además lo limita).
     LaunchedEffect(estado.cargando, estado.ultimoInforme) {
@@ -137,7 +141,9 @@ fun PanelScreen(
                             Text(c.panelVivienda, color = Color.White.copy(0.85f), fontSize = 14.sp)
                             Spacer(Modifier.height(6.dp))
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(vivienda?.nombre ?: c.panelSinVivienda, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                                // El nombre de la vivienda del informe que se muestra (si no,
+                                // podía salir otra vivienda junto a la etiqueta de esta)
+                                Text(informe?.nombreVivienda?.ifBlank { null } ?: vivienda?.nombre ?: c.panelSinVivienda, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                                 if (informe != null) {
                                     Box(Modifier.size(50.dp).clip(RoundedCornerShape(14.dp)).background(fondoEtiqueta(informe.etiqueta)), contentAlignment = Alignment.Center) {
                                         Text(informe.etiqueta, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = colorEtiqueta(informe.etiqueta))

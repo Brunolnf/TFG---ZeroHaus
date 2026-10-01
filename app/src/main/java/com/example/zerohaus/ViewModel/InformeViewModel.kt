@@ -94,6 +94,31 @@ class InformeViewModel : ViewModel() {
         }
     }
 
+    var recalculando by mutableStateOf(false)
+        private set
+
+    /**
+     * Genera un informe nuevo de la misma vivienda con el método de cálculo
+     * actual (para informes hechos con el anterior). El antiguo se queda en
+     * el historial.
+     */
+    fun recalcular() {
+        val v = vivienda ?: return
+        if (recalculando) return
+        recalculando = true
+        repo.generarInforme(v) { r ->
+            recalculando = false
+            r.onSuccess { nuevo ->
+                informe = nuevo
+                seleccionadas = emptySet()
+                // Los consejos de IA eran del informe anterior
+                sugerencias = null
+                errorIA = null
+                cacheIAConsultada = null
+            }
+        }
+    }
+
     fun alternarMejora(titulo: String) {
         seleccionadas = if (titulo in seleccionadas) seleccionadas - titulo else seleccionadas + titulo
     }

@@ -124,6 +124,33 @@ fun InformeScreen(
                     }
                 }
 
+                // Informe hecho con el método anterior (etiqueta por consumo total):
+                // se puede recalcular si la vivienda sigue existiendo
+                if (informe.energiaPrimariaM2 <= 0 && viewModel.vivienda != null) {
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(c.infMetodoAnterior, color = Color(0xFF92400E), fontSize = 13.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = viewModel::recalcular,
+                                enabled = !viewModel.recalculando,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (viewModel.recalculando) {
+                                    CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text(c.infRecalcular, color = Color.White)
+                            }
+                        }
+                    }
+                }
+
                 // Calificación
                 Card(
                     shape = RoundedCornerShape(16.dp),

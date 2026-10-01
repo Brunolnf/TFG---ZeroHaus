@@ -261,6 +261,10 @@ fun HistorialInformesScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(informe.nombreVivienda, fontWeight = FontWeight.SemiBold)
                                     Text(sdf.format(Date(informe.fechaGeneracion)), color = gris, fontSize = 12.sp)
+                                    // Hecho con el cálculo anterior: sus cifras no son comparables
+                                    if (informe.energiaPrimariaM2 <= 0) {
+                                        Text(c.histMetodoAnterior, color = Color(0xFFB45309), fontSize = 11.sp)
+                                    }
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (seleccionado) {
