@@ -186,6 +186,10 @@ class PreestudioViewModel : ViewModel() {
             } catch (e: Exception) {
                 estado = estado.copy(leyendoFactura = false, errorFactura = ErrorFactura.NO_LEGIBLE)
                 return@launch
+            } catch (e: OutOfMemoryError) {
+                // Foto enorme en un móvil con poca memoria: mejor un aviso que cerrar la app
+                estado = estado.copy(leyendoFactura = false, errorFactura = ErrorFactura.DEMASIADO_GRANDE)
+                return@launch
             }
             repoFactura.leer(archivo.first, archivo.second) { r ->
                 r.onSuccess {
