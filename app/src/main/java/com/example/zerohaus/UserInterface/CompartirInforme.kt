@@ -107,9 +107,14 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     paint.isFakeBoldText = false
     paint.color = gris
     // La etiqueta se decide por kWh/m²·año: se muestra el dato que la justifica
-    val subtitulo = if (informe.consumoPorM2 > 0)
-        "${c.infCalificacion} · ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}"
-    else c.infCalificacion
+    val subtitulo = when {
+        informe.energiaPrimariaM2 > 0 ->
+            "${c.infCalificacion} · ${c.infEnergiaPrimaria}: ${Formato.formatIntensidad(informe.energiaPrimariaM2)}"
+        // Informes anteriores al modelo por usos: la letra salía del consumo por m²
+        informe.consumoPorM2 > 0 ->
+            "${c.infCalificacion} · ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}"
+        else -> c.infCalificacion
+    }
     canvas.drawText(recortar(subtitulo, paint, pageWidth - 114f), 90f, y + 40f, paint)
     y += 72f
 
@@ -259,6 +264,7 @@ private fun buildTextoInforme(informe: InformeEnergetico): String {
         appendLine("${c.infIndicadores.uppercase()}:")
         appendLine("  ${c.histConsumo}: ${Formato.formatEnergiaAnual(informe.consumoEstimado)}")
         if (informe.consumoPorM2 > 0) appendLine("  ${c.infPorM2}: ${Formato.formatIntensidad(informe.consumoPorM2)}")
+        if (informe.energiaPrimariaM2 > 0) appendLine("  ${c.infEnergiaPrimaria}: ${Formato.formatIntensidad(informe.energiaPrimariaM2)}")
         appendLine("  ${c.histEmisiones}: ${Formato.formatEmisionesAnual(informe.emisiones)}")
         appendLine("  ${c.histCoste}: ${Formato.formatMonedaAnual(informe.costeAnual)}"); appendLine()
         if (informe.consumoLuzFactura > 0) {

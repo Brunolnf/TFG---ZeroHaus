@@ -12,7 +12,11 @@ data class InformeEnergetico(
     val etiqueta: String = "",           // A, B, C, D, E, F, G
     val estadoEficiencia: String = "",
     val consumoEstimado: Double = 0.0,   // kWh/año
-    val consumoPorM2: Double = 0.0,      // kWh/m²·año (0 en informes antiguos)
+    val consumoPorM2: Double = 0.0,      // kWh/m²·año de energía final (0 en informes antiguos)
+    // Energía primaria no renovable de calefacción, refrigeración y ACS
+    // (kWh/m²·año): es lo que decide la etiqueta. 0 en informes anteriores al
+    // modelo por usos, cuya etiqueta salía del consumo total por m².
+    val energiaPrimariaM2: Double = 0.0,
     val emisiones: Double = 0.0,         // kg CO₂/año
     val costeAnual: Double = 0.0,        // €/año
     val recomendaciones: List<Recomendacion> = emptyList(),

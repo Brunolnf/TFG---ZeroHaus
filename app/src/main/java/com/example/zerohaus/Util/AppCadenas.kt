@@ -696,6 +696,7 @@ class AppCadenas internal constructor(
     val infFactEstimado: String get() = t("infFactEstimado")
     val infFactPrecio: String get() = t("infFactPrecio")
     val infFactNota: String get() = t("infFactNota")
+    val infEnergiaPrimaria: String get() = t("infEnergiaPrimaria")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

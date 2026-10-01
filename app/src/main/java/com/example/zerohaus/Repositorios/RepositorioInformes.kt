@@ -34,6 +34,7 @@ class RepositorioInformes {
             estadoEficiencia = resultado.estadoEficiencia,
             consumoEstimado = resultado.consumoEstimado,
             consumoPorM2 = resultado.consumoPorM2,
+            energiaPrimariaM2 = resultado.energiaPrimariaM2,
             emisiones = resultado.emisiones,
             costeAnual = resultado.costeAnual,
             recomendaciones = resultado.recomendaciones,

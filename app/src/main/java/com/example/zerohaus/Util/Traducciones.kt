@@ -650,6 +650,7 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consumo estimado",
     "infFactPrecio" to "Precio de la luz aplicado",
     "infFactNota" to "El coste y los ahorros se calculan con el precio que pagas según tu factura.",
+    "infEnergiaPrimaria" to "Energía primaria (calefacción, ACS y frío)",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1261,6 +1262,7 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Estimated use",
     "infFactPrecio" to "Electricity price applied",
     "infFactNota" to "Costs and savings are calculated with the price you pay according to your bill.",
+    "infEnergiaPrimaria" to "Primary energy (heating, hot water, cooling)",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1872,6 +1874,7 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consum estimat",
     "infFactPrecio" to "Preu de la llum aplicat",
     "infFactNota" to "El cost i els estalvis es calculen amb el preu que pagues segons la teva factura.",
+    "infEnergiaPrimaria" to "Energia primària (calefacció, ACS i fred)",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2483,6 +2486,7 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Kontsumo estimatua",
     "infFactPrecio" to "Aplikatutako argiaren prezioa",
     "infFactNota" to "Kostua eta aurrezkiak zure fakturaren arabera ordaintzen duzun prezioarekin kalkulatzen dira.",
+    "infEnergiaPrimaria" to "Lehen mailako energia (berokuntza, UBS eta hozketa)",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3094,6 +3098,7 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consumo estimado",
     "infFactPrecio" to "Prezo da luz aplicado",
     "infFactNota" to "O custo e os aforros calcúlanse co prezo que pagas segundo a túa factura.",
+    "infEnergiaPrimaria" to "Enerxía primaria (calefacción, AQS e frío)",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3705,6 +3710,7 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consumo estimado",
     "infFactPrecio" to "Preço da eletricidade aplicado",
     "infFactNota" to "O custo e as poupanças são calculados com o preço que paga segundo a sua fatura.",
+    "infEnergiaPrimaria" to "Energia primária (aquecimento, AQS e frio)",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4316,6 +4322,7 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consommation estimée",
     "infFactPrecio" to "Prix de l'électricité appliqué",
     "infFactNota" to "Le coût et les économies sont calculés avec le prix que vous payez d'après votre facture.",
+    "infEnergiaPrimaria" to "Énergie primaire (chauffage, ECS et froid)",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4927,6 +4934,7 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Geschätzter Verbrauch",
     "infFactPrecio" to "Angewandter Strompreis",
     "infFactNota" to "Kosten und Einsparungen werden mit dem Preis berechnet, den du laut Rechnung zahlst.",
+    "infEnergiaPrimaria" to "Primärenergie (Heizung, Warmwasser, Kühlung)",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5538,6 +5546,7 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consumo stimato",
     "infFactPrecio" to "Prezzo della luce applicato",
     "infFactNota" to "Costo e risparmi sono calcolati con il prezzo che paghi secondo la tua bolletta.",
+    "infEnergiaPrimaria" to "Energia primaria (riscaldamento, ACS e raffrescamento)",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6149,6 +6158,7 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "الاستهلاك المقدَّر",
     "infFactPrecio" to "سعر الكهرباء المطبَّق",
     "infFactNota" to "تُحسب التكلفة والتوفير بالسعر الذي تدفعه وفقًا لفاتورتك.",
+    "infEnergiaPrimaria" to "الطاقة الأولية (التدفئة والمياه الساخنة والتبريد)",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6760,6 +6770,7 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "估算用电量",
     "infFactPrecio" to "采用的电价",
     "infFactNota" to "费用和节省金额按你账单上的实际电价计算。",
+    "infEnergiaPrimaria" to "一次能源（供暖、热水和制冷）",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7371,6 +7382,7 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Consum estimat",
     "infFactPrecio" to "Prețul energiei aplicat",
     "infFactNota" to "Costul și economiile se calculează cu prețul pe care îl plătești conform facturii.",
+    "infEnergiaPrimaria" to "Energie primară (încălzire, ACM și răcire)",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7982,6 +7994,7 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Geschat verbruik",
     "infFactPrecio" to "Toegepaste stroomprijs",
     "infFactNota" to "Kosten en besparingen worden berekend met de prijs die je volgens je rekening betaalt.",
+    "infEnergiaPrimaria" to "Primaire energie (verwarming, warm water en koeling)",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8593,4 +8606,5 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "infFactEstimado" to "Szacowane zużycie",
     "infFactPrecio" to "Zastosowana cena prądu",
     "infFactNota" to "Koszt i oszczędności są liczone według ceny, którą płacisz zgodnie z rachunkiem.",
+    "infEnergiaPrimaria" to "Energia pierwotna (ogrzewanie, CWU i chłodzenie)",
 ), respaldo = espanol) }

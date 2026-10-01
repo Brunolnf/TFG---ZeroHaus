@@ -50,7 +50,7 @@ ZeroHaus es una app Android que ayuda a los propietarios a **entender y mejorar 
 | Área | Qué ofrece |
 |---|---|
 | **Preestudio energético** | Formulario con 14 variables de la vivienda (superficie, año, zona climática CTE por provincia, envolvente, sistemas, fotovoltaica, ocupantes…). |
-| **Informe** | Etiqueta A–G por kWh/m²·año, consumo, emisiones (factores RITE) y coste por fuente de energía; recomendaciones con su ahorro real en €/año. |
+| **Informe** | Consumo calculado por usos (calefacción, ACS, refrigeración y usos eléctricos, cada uno con sus propios factores), emisiones (factores RITE) y coste por fuente de energía. Etiqueta A–G por energía primaria no renovable de calefacción, refrigeración y ACS por m², como el certificado del RD 390/2021. Recomendaciones con su ahorro real en €/año. |
 | **Simulador «¿qué pasa si…?»** | Combina mejoras y muestra la nueva etiqueta, el ahorro anual, la inversión orientativa y los años de amortización. |
 | **Consejos con IA** | Recomendaciones personalizadas con Gemini (Vertex AI) sin enviar datos personales. |
 | **Historial y gráficas** | Comparación entre informes, evolución de consumo, emisiones y coste; exportación a PDF. |
