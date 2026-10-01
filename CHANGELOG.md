@@ -26,6 +26,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Material de la ficha de Google Play versionado (gráficos, logos originales y textos de la 2.2).
 
 ### Cambiado
+- **Algoritmo energético por usos**: calefacción, ACS, refrigeración y usos eléctricos se calculan por separado y cada factor afecta solo al suyo (la envolvente y el clima a la calefacción, el equipo de ACS al agua caliente, la iluminación y los electrodomésticos a la luz). Los sistemas usan su rendimiento real (caldera de gas 0,92, aerotermia SCOP 3, etc.) y el ACS depende de las personas. La **etiqueta** pasa a calcularse, como el certificado del RD 390/2021, con la energía primaria no renovable de calefacción, refrigeración y ACS por m² (coeficientes RITE), con una ocupación estándar para que no dependa del tamaño; el informe la muestra. Solo afecta a los informes nuevos.
 - **La app va más rápida**: el cambio entre pantallas dura 0,2 s en vez de 0,7 s, la pantalla de bienvenida 0,5 s en vez de 1,2 s, los números del último informe ya no se animan desde 0 cada vez que se vuelve al inicio y el directorio de profesionales solo se vuelve a filtrar cuando cambian los datos.
 - Consejos con IA: `gemini-3.5-flash` (servidor en la UE) con `gemini-3.8-flash` de respaldo; `gemini-2.0-flash` se apagó en junio de 2026 y `gemini-2.5-flash` se apaga el 20/10/2026.
 - Las compilaciones de depuración usan App Check con token de depuración (hay que registrarlo en la consola); antes no llevaban App Check y las funciones protegidas las rechazaban.
@@ -35,6 +36,8 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - `AppCadenas` pasa de una `data class` con ~580 parámetros a mapas por idioma: la JVM no admite más de 255 parámetros, por lo que la clase no se podía cargar en tests ni en las vistas previas de Compose. Si a un idioma le falta un texto, se muestra en español.
 
 ### Corregido
+- El cálculo inflaba la luz y algunos ahorros porque cada factor se multiplicaba sobre todo el consumo: un piso de gas salía con ~8.500 kWh/año de electricidad (la media española ronda los 3.500) y la solar térmica para el ACS «ahorraba» un 45 % de la factura (ahora un 3–15 %, según el sistema que sustituye). Lo destapó la comparación con la factura real.
+- La foto de la factura podía cerrar la app por falta de memoria en móviles con poca RAM.
 - Borrar usuarios desde el panel de administración, los consejos con IA y el resto de funciones protegidas con App Check fallaban en las compilaciones de depuración («Unauthenticated»).
 - El filtro por especialidad dejaba fuera a los profesionales que la habían escrito a mano de otra forma («placas solares» en vez de «Fotovoltaica»).
 - El directorio mostraba distancias calculadas desde Madrid cuando no había ubicación real del usuario.

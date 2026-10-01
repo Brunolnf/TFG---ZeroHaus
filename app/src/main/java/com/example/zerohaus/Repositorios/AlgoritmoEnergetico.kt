@@ -23,7 +23,8 @@ object AlgoritmoEnergetico {
         val costeAnual: Double,
         val recomendaciones: List<Recomendacion>,
         val consumoLuzEstimado: Double,  // kWh/año de electricidad de red
-        val precioLuz: Double            // €/kWh aplicado (factura o precio medio)
+        val precioLuz: Double,           // €/kWh aplicado (factura o precio medio)
+        val energiaPrimariaM2: Double    // kWh/m²·año, base de la etiqueta
     )
 
     // Zona climática de invierno por capital de provincia (CTE DB-HE).
@@ -94,18 +95,38 @@ object AlgoritmoEnergetico {
         "Clase D o antiguos"
     )
 
-    // ── Parámetros de referencia ─────────────────────────────────────────
-    // Intensidad de la vivienda de referencia (todos los factores = 1.0):
-    // ~120 kWh/m²·año de energía final, en línea con el consumo medio de
-    // los hogares españoles (IDAE, estudio SPAHOUSEC).
-    private const val INTENSIDAD_BASE = 120.0
+    // ── Modelo por usos ──────────────────────────────────────────────────
+    // Cada uso de la energía se calcula por separado y cada factor afecta
+    // solo al suyo: la envolvente y el clima a la calefacción, el equipo de
+    // ACS al agua caliente, la iluminación a la luz, etc. Vivienda de
+    // referencia (100 m², 3 personas, gas, todos los factores = 1):
+    // ~11.000 kWh/año, de ellos ~3.000 de electricidad, en línea con un
+    // hogar español medio (IDAE, estudio SPAHOUSEC).
 
-    // Reparto del consumo por usos (IDAE, SPAHOUSEC): calefacción y ACS son
-    // las dos grandes partidas térmicas; el resto (iluminación, cocina,
-    // electrodomésticos, refrigeración, standby) es siempre eléctrico.
-    private const val CUOTA_CALEFACCION = 0.45
-    private const val CUOTA_ACS = 0.20
-    private const val CUOTA_ELECTRICA = 1.0 - CUOTA_CALEFACCION - CUOTA_ACS
+    // Demanda útil de calefacción de referencia (kWh/m²·año), que luego
+    // ajustan la envolvente, la orientación, el clima y el tipo de vivienda.
+    private const val CALEFACCION_UTIL_M2 = 50.0
+
+    // ACS: 28 L/persona·día a 60 °C (CTE DB-HE4) ≈ 570 kWh/año útiles, más
+    // pérdidas de acumulación y distribución.
+    private const val ACS_UTIL_PERSONA = 700.0
+    // Para la etiqueta se usa una ocupación estándar ligada a la superficie
+    // (3 personas en 100 m²), como en la certificación oficial: así la letra
+    // no depende de cuántas personas vivan en la casa.
+    private const val ACS_UTIL_M2_ETIQUETA = 21.0
+    private const val OCUPANTES_POR_DEFECTO = 3
+
+    // Demanda útil de refrigeración (kWh/m²·año) si hay equipo.
+    private const val REFRIGERACION_UTIL_M2 = 15.0
+
+    // Usos siempre eléctricos (frigorífico, cocina, lavadora, iluminación,
+    // standby…): una parte fija por hogar y otra que crece con la superficie.
+    private const val ELECTRICO_FIJO = 1_500.0
+    private const val ELECTRICO_M2 = 15.0
+
+    // La solar térmica cubre ~65 % del ACS; el resto lo aporta un apoyo eléctrico.
+    private const val APOYO_SOLAR_TERMICA = 0.35
+    private const val RENDIMIENTO_APOYO_SOLAR = 0.95
 
     // Los precios de la energía están en [PreciosEnergia] (Remote Config).
 
@@ -116,35 +137,53 @@ object AlgoritmoEnergetico {
     private const val CO2_GAS = 0.252
     private const val CO2_BIOMASA = 0.018
 
-    // La solar térmica cubre ~65 % del ACS; el resto lo aporta un apoyo eléctrico.
-    private const val APOYO_SOLAR_TERMICA = 0.35
+    // Coeficientes de paso a energía primaria NO renovable del mismo documento
+    // (electricidad peninsular, gas natural, biomasa densificada).
+    private const val PRIMARIA_ELECTRICIDAD = 1.954
+    private const val PRIMARIA_GAS = 1.190
+    private const val PRIMARIA_BIOMASA = 0.085
 
-    private enum class Vector { ELECTRICIDAD, GAS, BIOMASA, SOLAR }
+    private enum class Vector { ELECTRICIDAD, GAS, BIOMASA }
 
-    private fun vectorCalefaccion(c: String) = when (c) {
-        "Caldera de gas" -> Vector.GAS
-        "Biomasa"        -> Vector.BIOMASA
-        else             -> Vector.ELECTRICIDAD   // Eléctrica / Aerotermia
+    /** Vector y rendimiento estacional (energía útil / final) de la calefacción. */
+    private fun sistemaCalefaccion(c: String): Pair<Vector, Double> = when (c) {
+        "Caldera de gas" -> Vector.GAS to 0.92
+        "Biomasa"        -> Vector.BIOMASA to 0.85
+        "Aerotermia"     -> Vector.ELECTRICIDAD to 3.0    // SCOP típico de bomba de calor
+        else             -> Vector.ELECTRICIDAD to 1.0    // radiadores eléctricos (efecto Joule)
     }
 
-    private fun vectorAcs(a: String) = when (a) {
-        "Gas"           -> Vector.GAS
-        "Solar térmica" -> Vector.SOLAR
-        else            -> Vector.ELECTRICIDAD    // Eléctrico / Aerotermia
+    /** Vector y rendimiento del ACS (la solar térmica va aparte, ver [demandaAcs]). */
+    private fun sistemaAcs(a: String): Pair<Vector, Double> = when (a) {
+        "Gas"        -> Vector.GAS to 0.90
+        "Aerotermia" -> Vector.ELECTRICIDAD to 2.8
+        else         -> Vector.ELECTRICIDAD to 0.95       // termo eléctrico
+    }
+
+    /** Eficiencia estacional (SEER) del equipo de frío; null si no hay. */
+    private fun seer(r: String): Double? = when (r) {
+        "Aerotermia"                 -> 4.0
+        "A/A inverter eficiente"     -> 5.0
+        "A/A convencional o antiguo" -> 2.5
+        else                         -> null               // sin refrigeración
     }
 
     private fun precio(v: Vector, vivienda: Vivienda) = when (v) {
         Vector.ELECTRICIDAD -> PreciosEnergia.electricidadPara(vivienda.precioLuzFactura)
         Vector.GAS          -> PreciosEnergia.gas
         Vector.BIOMASA      -> PreciosEnergia.biomasa
-        Vector.SOLAR        -> 0.0
     }
 
     private fun co2(v: Vector) = when (v) {
         Vector.ELECTRICIDAD -> CO2_ELECTRICIDAD
         Vector.GAS          -> CO2_GAS
         Vector.BIOMASA      -> CO2_BIOMASA
-        Vector.SOLAR        -> 0.0
+    }
+
+    private fun primaria(v: Vector) = when (v) {
+        Vector.ELECTRICIDAD -> PRIMARIA_ELECTRICIDAD
+        Vector.GAS          -> PRIMARIA_GAS
+        Vector.BIOMASA      -> PRIMARIA_BIOMASA
     }
 
     // Fracción del consumo ELÉCTRICO cubierta por autoconsumo fotovoltaico
@@ -156,49 +195,41 @@ object AlgoritmoEnergetico {
         else                             -> 0.0
     }
 
-    /** Intensidad de energía final demandada (kWh/m²·año), antes de fotovoltaica. */
-    private fun intensidadDemanda(vivienda: Vivienda): Double {
-        val factorVentanas = when (vivienda.tipoVentanas) {
-            "Vidrio simple"          -> 1.4
-            "Doble acristalamiento"  -> 1.0
-            "Triple"                 -> 0.8
-            else                     -> 1.2
-        }
-        val factorAislamiento = when (vivienda.aislamiento) {
-            "Sin aislamiento"        -> 1.5
-            "Aislamiento parcial"    -> 1.15
-            "Aislamiento completo"   -> 0.8
-            else                     -> 1.2
-        }
-        val factorCalefaccion = when (vivienda.calefaccion) {
-            "Caldera de gas"         -> 1.2
-            "Eléctrica"              -> 1.4
-            "Aerotermia"             -> 0.7
-            "Biomasa"                -> 0.9
-            else                     -> 1.1
-        }
-        val factorAcs = when (vivienda.acs) {
-            "Gas"                    -> 1.1
-            "Eléctrico"              -> 1.3
-            "Solar térmica"          -> 0.6
-            "Aerotermia"             -> 0.7
-            else                     -> 1.0
-        }
+    private fun factorVentanas(v: Vivienda) = when (v.tipoVentanas) {
+        "Vidrio simple"          -> 1.4
+        "Doble acristalamiento"  -> 1.0
+        "Triple"                 -> 0.8
+        else                     -> 1.2
+    }
+
+    private fun factorAislamiento(v: Vivienda) = when (v.aislamiento) {
+        "Sin aislamiento"        -> 1.5
+        "Aislamiento parcial"    -> 1.15
+        "Aislamiento completo"   -> 0.8
+        else                     -> 1.2
+    }
+
+    /**
+     * Cuánto se aleja la demanda de calefacción de la de referencia por la
+     * envolvente (ventanas, aislamiento, normativa del año de construcción),
+     * la orientación, el clima y la forma de la vivienda.
+     */
+    private fun factorEnvolvente(v: Vivienda): Double {
         val factorAnio = when {
-            vivienda.anioConstruccion >= 2020 -> 0.8
-            vivienda.anioConstruccion >= 2006 -> 0.95   // entrada en vigor del CTE
-            vivienda.anioConstruccion >= 1980 -> 1.1    // NBE-CT-79
-            else                              -> 1.3
+            v.anioConstruccion >= 2020 -> 0.8
+            v.anioConstruccion >= 2006 -> 0.95   // entrada en vigor del CTE
+            v.anioConstruccion >= 1980 -> 1.1    // NBE-CT-79
+            else                       -> 1.3
         }
         // Orientación sur maximiza captación solar pasiva (CTE DB HE1)
-        val factorOrientacion = when (vivienda.orientacion) {
+        val factorOrientacion = when (v.orientacion) {
             "Sur"            -> 0.92
             "Este", "Oeste"  -> 1.0
             "Norte"          -> 1.08
             else             -> 1.0
         }
         // Severidad climática de invierno (CTE DB-HE). Provincia no mapeada → neutro.
-        val factorZona = when (zonaClimaticaPorProvincia[vivienda.provincia]) {
+        val factorZona = when (zonaClimaticaPorProvincia[v.provincia]) {
             "α"  -> 0.75
             "A"  -> 0.85
             "B"  -> 0.95
@@ -207,96 +238,112 @@ object AlgoritmoEnergetico {
             "E"  -> 1.35
             else -> 1.0
         }
-        // Iluminación: ~10-15 % del consumo eléctrico; LED ahorra ~75 % de esa partida.
-        val factorIluminacion = when (vivienda.iluminacion) {
-            "Mayoría LED"                        -> 0.95
-            "Mayoría halógenas o incandescentes" -> 1.10
-            else                                 -> 1.0
-        }
         // Factor de forma: a más caras de la envolvente expuestas, más demanda por m².
-        val factorTipoVivienda = when (vivienda.tipoVivienda) {
+        val factorTipoVivienda = when (v.tipoVivienda) {
             "Piso interior"          -> 0.85
             "Piso esquina o ático"   -> 0.95
             "Adosado o pareado"      -> 1.05
             "Unifamiliar aislado"    -> 1.20
             else                     -> 1.0
         }
-        val factorRefrigeracion = when (vivienda.refrigeracion) {
-            "Sin refrigeración"            -> 0.93
-            "Aerotermia"                   -> 0.95
-            "A/A inverter eficiente"       -> 1.00
-            "A/A convencional o antiguo"   -> 1.10
-            else                           -> 1.0
-        }
-        // ACS, cocina y electrodomésticos escalan con personas. Referencia: 3-4.
+        return factorVentanas(v) * factorAislamiento(v) * factorAnio * factorOrientacion * factorZona * factorTipoVivienda
+    }
+
+    /** Usos siempre eléctricos (kWh/año): dependen de personas, iluminación y aparatos. */
+    private fun demandaElectrica(v: Vivienda, superficie: Double): Double {
         val factorOcupantes = when {
-            vivienda.ocupantes <= 0    -> 1.0
-            vivienda.ocupantes == 1    -> 0.85
-            vivienda.ocupantes == 2    -> 0.95
-            vivienda.ocupantes in 3..4 -> 1.00
-            else                       -> 1.10
+            v.ocupantes <= 0    -> 1.0           // desconocido: hogar de referencia
+            v.ocupantes == 1    -> 0.70
+            v.ocupantes == 2    -> 0.85
+            v.ocupantes in 3..4 -> 1.00
+            else                -> 1.15
         }
-        val factorElectrodomesticos = when (vivienda.electrodomesticos) {
+        // Iluminación: ~10-15 % de estos usos; el LED ahorra ~75 % de esa partida.
+        val factorIluminacion = when (v.iluminacion) {
+            "Mayoría LED"                        -> 0.95
+            "Mayoría halógenas o incandescentes" -> 1.10
+            else                                 -> 1.0
+        }
+        val factorElectrodomesticos = when (v.electrodomesticos) {
             "Mayoría clase A o superior" -> 0.95
             "Clase B-C"                  -> 1.00
             "Clase D o antiguos"         -> 1.08
             else                         -> 1.0
         }
-
-        return INTENSIDAD_BASE * factorVentanas * factorAislamiento *
-                factorCalefaccion * factorAcs * factorAnio * factorOrientacion *
-                factorZona * factorIluminacion * factorTipoVivienda *
-                factorRefrigeracion * factorOcupantes * factorElectrodomesticos
+        return (ELECTRICO_FIJO + ELECTRICO_M2 * superficie) * factorOcupantes * factorIluminacion * factorElectrodomesticos
     }
+
+    /** Energía final de ACS por vector para una demanda útil dada. */
+    private fun demandaAcs(v: Vivienda, util: Double): Map<Vector, Double> =
+        if (v.acs == "Solar térmica") {
+            mapOf(Vector.ELECTRICIDAD to util * APOYO_SOLAR_TERMICA / RENDIMIENTO_APOYO_SOLAR)
+        } else {
+            val (vector, rendimiento) = sistemaAcs(v.acs)
+            mapOf(vector to util / rendimiento)
+        }
 
     /** Resultado numérico sin recomendaciones (se reutiliza para simular mejoras). */
     data class Balance(
-        val consumoKwh: Double,      // energía final comprada (red + combustibles)
-        val intensidad: Double,      // kWh/m²·año (base de la etiqueta)
-        val emisiones: Double,       // kg CO₂/año
-        val coste: Double,           // €/año
-        val electricidadKwh: Double  // kWh/año de electricidad de red
+        val consumoKwh: Double,         // energía final comprada (red + combustibles)
+        val intensidad: Double,         // kWh/m²·año de energía final
+        val emisiones: Double,          // kg CO₂/año
+        val coste: Double,              // €/año
+        val electricidadKwh: Double,    // kWh/año de electricidad de red
+        val energiaPrimariaM2: Double   // kWh/m²·año, base de la etiqueta
     )
 
     fun balance(vivienda: Vivienda): Balance {
         val superficie = vivienda.superficie.coerceAtLeast(1).toDouble()
-        val demandaTotal = intensidadDemanda(vivienda) * superficie
+        val ocupantes = if (vivienda.ocupantes > 0) vivienda.ocupantes else OCUPANTES_POR_DEFECTO
 
-        val porVector = mutableMapOf<Vector, Double>()
-        fun sumar(v: Vector, kwh: Double) { porVector[v] = (porVector[v] ?: 0.0) + kwh }
-
-        sumar(vectorCalefaccion(vivienda.calefaccion), demandaTotal * CUOTA_CALEFACCION)
-        val acs = demandaTotal * CUOTA_ACS
-        when (val vAcs = vectorAcs(vivienda.acs)) {
-            Vector.SOLAR -> sumar(Vector.ELECTRICIDAD, acs * APOYO_SOLAR_TERMICA)
-            else         -> sumar(vAcs, acs)
+        // Usos térmicos: calefacción, ACS y refrigeración
+        val (vCalefaccion, rCalefaccion) = sistemaCalefaccion(vivienda.calefaccion)
+        val calefaccion = superficie * CALEFACCION_UTIL_M2 * factorEnvolvente(vivienda) / rCalefaccion
+        val refrigeracion = seer(vivienda.refrigeracion)?.let {
+            superficie * REFRIGERACION_UTIL_M2 * factorVentanas(vivienda) * factorAislamiento(vivienda) / it
+        } ?: 0.0
+        fun termico(acsUtil: Double): MutableMap<Vector, Double> {
+            val r = mutableMapOf(vCalefaccion to calefaccion)
+            demandaAcs(vivienda, acsUtil).forEach { (k, kwh) -> r[k] = (r[k] ?: 0.0) + kwh }
+            r[Vector.ELECTRICIDAD] = (r[Vector.ELECTRICIDAD] ?: 0.0) + refrigeracion
+            return r
         }
-        sumar(Vector.ELECTRICIDAD, demandaTotal * CUOTA_ELECTRICA)
 
         // El autoconsumo fotovoltaico solo descuenta electricidad de red
-        val cobertura = coberturaFotovoltaica(vivienda.fotovoltaica)
-        porVector[Vector.ELECTRICIDAD] = (porVector[Vector.ELECTRICIDAD] ?: 0.0) * (1.0 - cobertura)
+        val restoRed = 1.0 - coberturaFotovoltaica(vivienda.fotovoltaica)
+
+        // Consumo real: ACS con las personas que viven y usos eléctricos
+        val porVector = termico(ACS_UTIL_PERSONA * ocupantes)
+        porVector[Vector.ELECTRICIDAD] = (porVector.getValue(Vector.ELECTRICIDAD) + demandaElectrica(vivienda, superficie)) * restoRed
+
+        // Etiqueta: como en el certificado oficial, solo calefacción,
+        // refrigeración y ACS (con ocupación estándar), en energía primaria
+        // no renovable por m²
+        val etiquetaVector = termico(ACS_UTIL_M2_ETIQUETA * superficie)
+        etiquetaVector[Vector.ELECTRICIDAD] = etiquetaVector.getValue(Vector.ELECTRICIDAD) * restoRed
+        val primariaM2 = etiquetaVector.entries.sumOf { (v, kwh) -> kwh * primaria(v) } / superficie
 
         val consumo = porVector.values.sum()
         val emisiones = porVector.entries.sumOf { (v, kwh) -> kwh * co2(v) }
         val coste = porVector.entries.sumOf { (v, kwh) -> kwh * precio(v, vivienda) }
 
-        return Balance(consumo, consumo / superficie, emisiones, coste, porVector[Vector.ELECTRICIDAD] ?: 0.0)
+        return Balance(consumo, consumo / superficie, emisiones, coste, porVector[Vector.ELECTRICIDAD] ?: 0.0, primariaM2)
     }
 
     /**
-     * Escala A–G sobre intensidad de energía final (kWh/m²·año). Al trabajar
-     * por m², la letra NO depende del tamaño: un chalet eficiente y un estudio
-     * eficiente obtienen la misma calificación.
+     * Escala A–G sobre energía primaria no renovable de calefacción,
+     * refrigeración y ACS (kWh/m²·año), como el certificado del RD 390/2021.
+     * Al trabajar por m² y con ocupación estándar, la letra NO depende del
+     * tamaño: un chalet eficiente y un estudio eficiente obtienen la misma.
      */
-    fun etiquetaPara(intensidad: Double): String = when {
-        intensidad < 50  -> "A"
-        intensidad < 90  -> "B"
-        intensidad < 140 -> "C"
-        intensidad < 200 -> "D"
-        intensidad < 280 -> "E"
-        intensidad < 380 -> "F"
-        else             -> "G"
+    fun etiquetaPara(energiaPrimariaM2: Double): String = when {
+        energiaPrimariaM2 < 40  -> "A"
+        energiaPrimariaM2 < 65  -> "B"
+        energiaPrimariaM2 < 100 -> "C"
+        energiaPrimariaM2 < 150 -> "D"
+        energiaPrimariaM2 < 225 -> "E"
+        energiaPrimariaM2 < 320 -> "F"
+        else                    -> "G"
     }
 
     private fun estadoPara(etiqueta: String) = when (etiqueta) {
@@ -363,8 +410,8 @@ object AlgoritmoEnergetico {
         val ahorro = actual.coste - nueva.coste
         val inversion = seleccion.sumOf { it.inversion }
         return Simulacion(
-            etiquetaActual = etiquetaPara(actual.intensidad),
-            etiquetaNueva = etiquetaPara(nueva.intensidad),
+            etiquetaActual = etiquetaPara(actual.energiaPrimariaM2),
+            etiquetaNueva = etiquetaPara(nueva.energiaPrimariaM2),
             costeActual = redondear(actual.coste),
             costeNuevo = redondear(nueva.coste),
             ahorroEuros = redondear(ahorro),
@@ -379,7 +426,7 @@ object AlgoritmoEnergetico {
 
     fun calcular(vivienda: Vivienda): ResultadoCalculo {
         val actual = balance(vivienda)
-        val etiqueta = etiquetaPara(actual.intensidad)
+        val etiqueta = etiquetaPara(actual.energiaPrimariaM2)
 
         val recs = mejorasAplicables(vivienda).mapNotNull { mejora ->
             val titulo = mejora.titulo
@@ -405,7 +452,8 @@ object AlgoritmoEnergetico {
             costeAnual = redondear(actual.coste),
             recomendaciones = recs,
             consumoLuzEstimado = redondear(actual.electricidadKwh),
-            precioLuz = PreciosEnergia.electricidadPara(vivienda.precioLuzFactura)
+            precioLuz = PreciosEnergia.electricidadPara(vivienda.precioLuzFactura),
+            energiaPrimariaM2 = redondear(actual.energiaPrimariaM2)
         )
     }
 }

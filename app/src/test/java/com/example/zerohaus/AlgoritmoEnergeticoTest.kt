@@ -40,9 +40,11 @@ class AlgoritmoEnergeticoTest {
     }
 
     @Test
-    fun `vivienda media obtiene etiqueta D o E`() {
+    fun `vivienda media obtiene etiqueta C o D`() {
+        // Piso de 2010 (ya con el CTE), gas y aislamiento parcial, sin provincia
+        // (clima neutro): queda en la frontera C/D de la escala de energía primaria
         val resultado = AlgoritmoEnergetico.calcular(viviendaBase())
-        assertTrue(resultado.etiqueta in listOf("D", "E"))
+        assertTrue(resultado.etiqueta, resultado.etiqueta in listOf("C", "D"))
     }
 
     @Test
@@ -67,10 +69,13 @@ class AlgoritmoEnergeticoTest {
     }
 
     @Test
-    fun `consumo escala linealmente con superficie`() {
+    fun `consumo crece con la superficie pero menos que proporcionalmente`() {
+        // La calefacción va por m², pero el ACS y los aparatos dependen de las
+        // personas: el doble de superficie no es el doble de consumo
         val v50  = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 50))
         val v100 = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 100))
-        assertEquals(v100.consumoEstimado, v50.consumoEstimado * 2, 0.5)
+        assertTrue(v100.consumoEstimado > v50.consumoEstimado)
+        assertTrue(v100.consumoEstimado < v50.consumoEstimado * 2)
     }
 
     @Test
@@ -85,7 +90,48 @@ class AlgoritmoEnergeticoTest {
         val pequenya = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 40))
         val grande   = AlgoritmoEnergetico.calcular(viviendaBase().copy(superficie = 300))
         assertEquals(pequenya.etiqueta, grande.etiqueta)
-        assertEquals(pequenya.consumoPorM2, grande.consumoPorM2, 0.2)
+        assertEquals(pequenya.energiaPrimariaM2, grande.energiaPrimariaM2, 0.2)
+    }
+
+    // ── Cada factor afecta solo a su uso ─────────────────────────────────
+
+    @Test
+    fun `la envolvente no cambia el consumo de luz de una casa de gas`() {
+        val mala  = AlgoritmoEnergetico.calcular(viviendaBase().copy(tipoVentanas = "Vidrio simple", aislamiento = "Sin aislamiento"))
+        val buena = AlgoritmoEnergetico.calcular(viviendaBase().copy(tipoVentanas = "Triple", aislamiento = "Aislamiento completo"))
+        assertEquals(mala.consumoLuzEstimado, buena.consumoLuzEstimado, 0.1)
+        assertTrue(mala.consumoEstimado > buena.consumoEstimado)
+    }
+
+    @Test
+    fun `un hogar medio de gas gasta en luz lo de un hogar espanol`() {
+        // ~3.000-4.000 kWh/año de electricidad (IDAE, SPAHOUSEC)
+        val r = AlgoritmoEnergetico.calcular(viviendaBase().copy(provincia = "Madrid", ocupantes = 3))
+        assertTrue("luz ${r.consumoLuzEstimado}", r.consumoLuzEstimado in 2_500.0..4_500.0)
+    }
+
+    @Test
+    fun `la solar termica solo ahorra en el agua caliente`() {
+        // Antes los factores se multiplicaban sobre todo el consumo y la solar
+        // térmica aparecía ahorrando un 45 % de la factura; el ACS es ~20 %
+        val r = AlgoritmoEnergetico.calcular(viviendaBase().copy(acs = "Eléctrico"))
+        val solar = r.recomendaciones.first { "solar" in it.titulo.lowercase() }
+        assertTrue("ahorro ${solar.ahorroEstimado} %", solar.ahorroEstimado < 25)
+    }
+
+    @Test
+    fun `la aerotermia ahorra frente a una caldera de gas`() {
+        val r = AlgoritmoEnergetico.calcular(viviendaBase().copy(calefaccion = "Caldera de gas"))
+        assertTrue(r.recomendaciones.any { "aerotermia" in it.titulo.lowercase() })
+    }
+
+    @Test
+    fun `los radiadores electricos tienen peor etiqueta que el gas`() {
+        // La etiqueta va en energía primaria: 1 kWh de luz pesa más que 1 de gas
+        val gas = AlgoritmoEnergetico.calcular(viviendaBase().copy(calefaccion = "Caldera de gas"))
+        val joule = AlgoritmoEnergetico.calcular(viviendaBase().copy(calefaccion = "Eléctrica"))
+        assertTrue(joule.energiaPrimariaM2 > gas.energiaPrimariaM2)
+        assertTrue(joule.etiqueta >= gas.etiqueta)
     }
 
     @Test

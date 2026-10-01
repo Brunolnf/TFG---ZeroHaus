@@ -149,6 +149,12 @@ fun InformeScreen(
                                 Text(TextosEnergia.estado(informe.etiqueta, c), fontWeight = FontWeight.Medium)
                             }
                         }
+                        // El dato que decide la letra (informes con el modelo por usos)
+                        if (informe.energiaPrimariaM2 > 0) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(c.infEnergiaPrimaria, color = gris, fontSize = 12.sp)
+                            Text(Formato.formatIntensidad(informe.energiaPrimariaM2), fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
 
