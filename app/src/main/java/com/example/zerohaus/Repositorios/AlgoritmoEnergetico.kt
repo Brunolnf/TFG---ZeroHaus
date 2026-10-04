@@ -289,7 +289,10 @@ object AlgoritmoEnergetico {
         val emisiones: Double,          // kg CO₂/año
         val coste: Double,              // €/año
         val electricidadKwh: Double,    // kWh/año de electricidad de red
-        val energiaPrimariaM2: Double   // kWh/m²·año, base de la etiqueta
+        val energiaPrimariaM2: Double,  // kWh/m²·año, base de la etiqueta
+        // Demanda útil de calefacción + refrigeración (kWh/año), haya o no
+        // equipo de frío: es la que mide la deducción del 20 % del IRPF
+        val demandaClimatizacion: Double
     )
 
     fun balance(vivienda: Vivienda): Balance {
@@ -298,10 +301,10 @@ object AlgoritmoEnergetico {
 
         // Usos térmicos: calefacción, ACS y refrigeración
         val (vCalefaccion, rCalefaccion) = sistemaCalefaccion(vivienda.calefaccion)
-        val calefaccion = superficie * CALEFACCION_UTIL_M2 * factorEnvolvente(vivienda) / rCalefaccion
-        val refrigeracion = seer(vivienda.refrigeracion)?.let {
-            superficie * REFRIGERACION_UTIL_M2 * factorVentanas(vivienda) * factorAislamiento(vivienda) / it
-        } ?: 0.0
+        val calefaccionUtil = superficie * CALEFACCION_UTIL_M2 * factorEnvolvente(vivienda)
+        val refrigeracionUtil = superficie * REFRIGERACION_UTIL_M2 * factorVentanas(vivienda) * factorAislamiento(vivienda)
+        val calefaccion = calefaccionUtil / rCalefaccion
+        val refrigeracion = seer(vivienda.refrigeracion)?.let { refrigeracionUtil / it } ?: 0.0
         fun termico(acsUtil: Double): MutableMap<Vector, Double> {
             val r = mutableMapOf(vCalefaccion to calefaccion)
             demandaAcs(vivienda, acsUtil).forEach { (k, kwh) -> r[k] = (r[k] ?: 0.0) + kwh }
@@ -327,7 +330,10 @@ object AlgoritmoEnergetico {
         val emisiones = porVector.entries.sumOf { (v, kwh) -> kwh * co2(v) }
         val coste = porVector.entries.sumOf { (v, kwh) -> kwh * precio(v, vivienda) }
 
-        return Balance(consumo, consumo / superficie, emisiones, coste, porVector[Vector.ELECTRICIDAD] ?: 0.0, primariaM2)
+        return Balance(
+            consumo, consumo / superficie, emisiones, coste,
+            porVector[Vector.ELECTRICIDAD] ?: 0.0, primariaM2, calefaccionUtil + refrigeracionUtil
+        )
     }
 
     /**
@@ -401,7 +407,9 @@ object AlgoritmoEnergetico {
         val ahorroKwh: Double,       // kWh/año
         val ahorroCo2: Double,       // kg CO₂/año
         val inversion: Double,       // €
-        val amortizacionAnios: Double? // null si no hay ahorro
+        val amortizacionAnios: Double?, // null si no hay ahorro
+        // Deducción del IRPF a la que podría dar derecho (null si no llega)
+        val deduccion: DeduccionIrpf.Resultado?
     )
 
     fun simular(vivienda: Vivienda, seleccion: List<Mejora>): Simulacion {
@@ -418,8 +426,58 @@ object AlgoritmoEnergetico {
             ahorroKwh = redondear(actual.consumoKwh - nueva.consumoKwh),
             ahorroCo2 = redondear(actual.emisiones - nueva.emisiones),
             inversion = inversion,
-            amortizacionAnios = if (ahorro > 0 && inversion > 0) redondear(inversion / ahorro) else null
+            amortizacionAnios = if (ahorro > 0 && inversion > 0) redondear(inversion / ahorro) else null,
+            deduccion = DeduccionIrpf.calcular(actual, nueva, inversion)
         )
+    }
+
+    /** Un paso del plan de reforma: la mejora y cómo queda la vivienda tras ella. */
+    data class Etapa(
+        val mejora: Mejora,
+        val ahorroEuros: Double,          // €/año que añade este paso
+        val amortizacionAnios: Double,    // de este paso por sí solo
+        val etiqueta: String,             // etiqueta tras el paso
+        val inversionAcumulada: Double,   // € desde el primer paso
+        val ahorroAcumulado: Double,      // €/año desde el primer paso
+        // Deducción del IRPF que darían todos los pasos hasta este (o null)
+        val deduccionAcumulada: DeduccionIrpf.Resultado?
+    )
+
+    /**
+     * Plan de reforma por etapas (en la línea del pasaporte de renovación de
+     * la directiva europea de edificios): en cada paso se elige, sobre cómo ha
+     * quedado la vivienda tras los anteriores, la mejora que antes se
+     * amortiza. Se descartan las que ya no ahorran.
+     */
+    fun planPorEtapas(vivienda: Vivienda): List<Etapa> {
+        val inicial = balance(vivienda)
+        var actual = vivienda
+        var restantes = mejorasAplicables(vivienda)
+        var inversionAcumulada = 0.0
+        val etapas = mutableListOf<Etapa>()
+        while (restantes.isNotEmpty()) {
+            val base = balance(actual)
+            val mejor = restantes
+                .map { m -> Triple(m, m.aplicar(actual), base.coste - balance(m.aplicar(actual)).coste) }
+                .filter { (_, _, ahorro) -> ahorro > 0 }
+                .minByOrNull { (m, _, ahorro) -> m.inversion / ahorro }
+                ?: break
+            val (mejora, siguiente, ahorro) = mejor
+            actual = siguiente
+            restantes = restantes - mejora
+            inversionAcumulada += mejora.inversion
+            val tras = balance(actual)
+            etapas += Etapa(
+                mejora = mejora,
+                ahorroEuros = redondear(ahorro),
+                amortizacionAnios = redondear(mejora.inversion / ahorro),
+                etiqueta = etiquetaPara(tras.energiaPrimariaM2),
+                inversionAcumulada = inversionAcumulada,
+                ahorroAcumulado = redondear(inicial.coste - tras.coste),
+                deduccionAcumulada = DeduccionIrpf.calcular(inicial, tras, inversionAcumulada)
+            )
+        }
+        return etapas
     }
 
     private fun redondear(x: Double) = Math.round(x * 10.0) / 10.0
