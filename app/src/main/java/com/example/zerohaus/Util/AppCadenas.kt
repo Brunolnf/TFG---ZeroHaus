@@ -701,6 +701,22 @@ class AppCadenas internal constructor(
     val infRecalcular: String get() = t("infRecalcular")
     val histMetodoAnterior: String get() = t("histMetodoAnterior")
     val grafMetodoAnterior: String get() = t("grafMetodoAnterior")
+    val irpfTitulo: String get() = t("irpfTitulo")
+    val irpfMotivoPrimaria: String get() = t("irpfMotivoPrimaria")
+    val irpfMotivoEtiqueta: String get() = t("irpfMotivoEtiqueta")
+    val irpfMotivoDemanda: String get() = t("irpfMotivoDemanda")
+    val irpfInversionNeta: String get() = t("irpfInversionNeta")
+    val irpfAmortizacionNeta: String get() = t("irpfAmortizacionNeta")
+    val irpfAviso: String get() = t("irpfAviso")
+    val irpfObrasHasta: String get() = t("irpfObrasHasta")
+    val planTitulo: String get() = t("planTitulo")
+    val planSub: String get() = t("planSub")
+    val planPaso: String get() = t("planPaso")
+    val planAhorra: String get() = t("planAhorra")
+    val planSeAmortiza: String get() = t("planSeAmortiza")
+    val planTotal: String get() = t("planTotal")
+    val planCompartir: String get() = t("planCompartir")
+    val planDeduccion: String get() = t("planDeduccion")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

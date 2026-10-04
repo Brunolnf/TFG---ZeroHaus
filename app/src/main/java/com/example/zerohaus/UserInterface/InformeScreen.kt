@@ -23,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Especialidades
+import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
+import com.example.zerohaus.Repositorios.DeduccionIrpf
 import com.example.zerohaus.Repositorios.ErrorIA
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
@@ -302,6 +305,11 @@ fun InformeScreen(
                     SimuladorMejorasCard(viewModel, verde, gris, borde)
                 }
 
+                // Plan de reforma por etapas (pasaporte de renovación)
+                viewModel.vivienda?.let { v ->
+                    PlanEtapasCard(v, informe.nombreVivienda, verde, gris, borde)
+                }
+
                 // Botones
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -427,6 +435,11 @@ private fun SimuladorMejorasCard(
                     )
                     DatoSimulacion(c.simCo2Evitado, Formato.formatEmisionesAnual(sim.ahorroCo2, 0), gris, null, Alignment.End)
                 }
+                val deduccion = sim.deduccion
+                if (deduccion != null && DeduccionIrpf.vigente()) {
+                    Spacer(Modifier.height(12.dp))
+                    DeduccionIrpfBloque(deduccion, sim.inversion, sim.ahorroEuros, verde, gris)
+                }
                 Spacer(Modifier.height(10.dp))
                 Text(c.simAviso, color = gris, fontSize = 11.sp)
             }
@@ -546,6 +559,152 @@ private fun DatoSimulacion(
             fontWeight = FontWeight.SemiBold,
             color = colorValor ?: MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+/** Deducción del IRPF que darían las mejoras marcadas en el simulador. */
+@Composable
+private fun DeduccionIrpfBloque(
+    d: DeduccionIrpf.Resultado,
+    inversion: Double,
+    ahorroAnual: Double,
+    verde: Color,
+    gris: Color
+) {
+    val c = LocalCadenas.current
+    val neta = inversion - d.importe
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(verde.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(c.irpfTitulo, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            Text("${porcentaje(d.porcentaje)} · ${Formato.formatMoneda(d.importe, 0)}", fontWeight = FontWeight.Bold, color = verde)
+        }
+        Text(
+            when (d.motivo) {
+                DeduccionIrpf.Motivo.ENERGIA_PRIMARIA -> "${c.irpfMotivoPrimaria} ${porcentaje(d.reduccionPct)}"
+                DeduccionIrpf.Motivo.ETIQUETA -> c.irpfMotivoEtiqueta
+                DeduccionIrpf.Motivo.DEMANDA -> "${c.irpfMotivoDemanda} ${porcentaje(d.reduccionPct)}"
+            },
+            color = gris, fontSize = 12.sp
+        )
+        Spacer(Modifier.height(8.dp))
+        // Una fila por dato: en paralelo, las etiquetas largas se pisaban
+        FilaValor(c.irpfInversionNeta, Formato.formatMoneda(neta, 0), gris)
+        if (ahorroAnual > 0) {
+            FilaValor(c.irpfAmortizacionNeta, "${Formato.numero(neta / ahorroAnual)} ${c.simAnios}", gris)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("${c.irpfAviso} ${c.irpfObrasHasta} ${fechaCorta(DeduccionIrpf.fechaLimite)}.", color = gris, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun FilaValor(etiqueta: String, valor: String, gris: Color) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(etiqueta, color = gris, fontSize = 12.sp, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        Text(valor, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+    }
+}
+
+/** "30 %" con espacio irrompible, para que el % no salte solo a la línea siguiente. */
+private fun porcentaje(valor: Int) = "$valor %"
+
+private fun fechaCorta(fecha: java.time.LocalDate): String =
+    "%02d/%02d/%d".format(fecha.dayOfMonth, fecha.monthValue, fecha.year)
+
+/**
+ * Plan de reforma por etapas: en cada paso, la mejora que antes se amortiza
+ * sobre cómo ha quedado la vivienda. Se puede compartir en PDF.
+ */
+@Composable
+private fun PlanEtapasCard(vivienda: Vivienda, nombreVivienda: String, verde: Color, gris: Color, borde: Color) {
+    val c = LocalCadenas.current
+    val ctx = LocalContext.current
+    val etapas = remember(vivienda) { AlgoritmoEnergetico.planPorEtapas(vivienda) }
+    if (etapas.isEmpty()) return
+    val etiquetaInicial = remember(vivienda) {
+        AlgoritmoEnergetico.etiquetaPara(AlgoritmoEnergetico.balance(vivienda).energiaPrimariaM2)
+    }
+    val deduccionVigente = DeduccionIrpf.vigente()
+    // Paso a partir del cual se llega a cada porcentaje de deducción
+    val primerPasoConDeduccion = etapas.indices
+        .mapNotNull { i -> etapas[i].deduccionAcumulada?.porcentaje?.let { it to i } }
+        .groupBy({ it.first }, { it.second })
+        .mapValues { (_, pasos) -> pasos.min() }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, borde),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Route, null, tint = verde, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(c.planTitulo, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(c.planSub, color = gris, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+
+            etapas.forEachIndexed { i, e ->
+                Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 6.dp)) {
+                    Box(
+                        Modifier.size(26.dp).background(verde.copy(alpha = 0.15f), RoundedCornerShape(13.dp)),
+                        contentAlignment = Alignment.Center
+                    ) { Text("${i + 1}", color = verde, fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(TextosEnergia.recomendacion(e.mejora.titulo, c), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "~${Formato.formatMoneda(e.mejora.inversion, 0)} · ${c.planAhorra} ${Formato.formatMonedaAnual(e.ahorroEuros, 0)} · " +
+                                "${c.planSeAmortiza} ${Formato.numero(e.amortizacionAnios)} ${c.simAnios}",
+                            color = gris, fontSize = 12.sp
+                        )
+                        if (deduccionVigente) {
+                            primerPasoConDeduccion.filterValues { it == i }.keys.maxOrNull()?.let { pct ->
+                                Text("${c.planDeduccion} ${porcentaje(pct)}", color = verde, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    EtiquetaBadge(e.etiqueta)
+                }
+            }
+
+            HorizontalDivider(Modifier.padding(vertical = 10.dp), color = borde)
+            val final = etapas.last()
+            Text(c.planTotal, color = gris, fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("${c.simInversion}: ${Formato.formatMoneda(final.inversionAcumulada, 0)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Text("${c.simAhorroAnual}: ${Formato.formatMonedaAnual(final.ahorroAcumulado, 0)}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = verde)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    EtiquetaBadge(etiquetaInicial)
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = gris, modifier = Modifier.padding(horizontal = 6.dp).size(18.dp))
+                    EtiquetaBadge(final.etiqueta)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = { compartirPlan(ctx, nombreVivienda, etiquetaInicial, etapas) },
+                border = BorderStroke(1.dp, verde),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Share, null, tint = verde, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(c.planCompartir, color = verde)
+            }
+        }
     }
 }
 

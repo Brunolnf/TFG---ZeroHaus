@@ -20,6 +20,13 @@
       },
       "valueType": "NUMBER",
       "description": "Precio medio del pellet (€/kWh, IVA incl.). Válido entre 0.01 y 1.5."
+    },
+    "deduccion_irpf_hasta": {
+      "defaultValue": {
+        "value": "2026-12-31"
+      },
+      "valueType": "STRING",
+      "description": "Último día de obras con deducción IRPF por eficiencia energética (AAAA-MM-DD). Si se prorroga, cámbialo y la app la seguirá mostrando."
     }
   }
 }
