@@ -20,9 +20,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Resena
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ResenasRecibidasViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -140,7 +141,7 @@ fun ResenasRecibidasScreen(
 private fun ResenaCard(r: Resena) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val sdf = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("dd MMM yyyy") }
 
     Card(
         shape = RoundedCornerShape(14.dp),

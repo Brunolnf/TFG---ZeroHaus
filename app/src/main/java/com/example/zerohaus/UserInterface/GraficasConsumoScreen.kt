@@ -31,7 +31,6 @@ import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.GraficasViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -53,7 +52,7 @@ fun GraficasConsumoScreen(
 
     val estado = viewModel.estado
     val c = LocalCadenas.current
-    val sdf = remember { SimpleDateFormat("MMM yy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("MMM yy") }
 
     LaunchedEffect(Unit) { viewModel.cargarDatos() }
 

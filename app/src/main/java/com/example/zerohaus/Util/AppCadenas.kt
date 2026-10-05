@@ -711,7 +711,6 @@ class AppCadenas internal constructor(
     val irpfObrasHasta: String get() = t("irpfObrasHasta")
     val planTitulo: String get() = t("planTitulo")
     val planSub: String get() = t("planSub")
-    val planPaso: String get() = t("planPaso")
     val planAhorra: String get() = t("planAhorra")
     val planSeAmortiza: String get() = t("planSeAmortiza")
     val planTotal: String get() = t("planTotal")

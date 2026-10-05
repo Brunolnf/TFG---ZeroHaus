@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esEmpresa
@@ -37,7 +38,6 @@ import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.ViewModel.PerfilTecnicoViewModel
 import com.example.zerohaus.Util.TextosEnergia
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -62,7 +62,7 @@ fun PerfilTecnicoScreen(
     val morado = Color(0xFF7C3AED)
     val dorado = Color(0xFFF59E0B)
     val estado = viewModel.estado
-    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("dd/MM/yyyy") }
 
     var mostrarFormResena by remember { mutableStateOf(false) }
     var puntuacion by remember { mutableIntStateOf(5) }
@@ -88,7 +88,7 @@ fun PerfilTecnicoScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         if (estado.tecnico != null) {
-                            Text(estado.tecnico!!.nombre, color = gris, fontSize = 12.sp)
+                            Text(estado.tecnico.nombre, color = gris, fontSize = 12.sp)
                         }
                     }
                 },
@@ -107,7 +107,7 @@ fun PerfilTecnicoScreen(
                 Text(c.perfNoEncontrado, color = gris)
             }
         } else {
-            val t = estado.tecnico!!
+            val t = estado.tecnico
             LazyColumn(
                 modifier = Modifier
                     .padding(pv)

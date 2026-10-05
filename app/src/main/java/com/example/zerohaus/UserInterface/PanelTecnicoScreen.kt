@@ -23,13 +23,12 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Planes
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esVerificado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.ViewModel.PanelTecnicoViewModel
 import com.example.zerohaus.ViewModel.PanelViewModel
 import com.example.zerohaus.Util.LocalCadenas
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 /**
  * Inicio del profesional: resumen de su perfil y actividad, accesos rápidos y notificaciones.
@@ -318,8 +317,8 @@ private fun ResumenCard(
 private fun formatTimestampTec(ts: Long, hoyTxt: String, ayerTxt: String): String {
     val hoy = Calendar.getInstance()
     val msg = Calendar.getInstance().apply { timeInMillis = ts }
-    val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val sdfFecha = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val sdfHora = Formato.fechas("HH:mm")
+    val sdfFecha = Formato.fechas("dd MMM yyyy")
     return when {
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR) ->

@@ -3,6 +3,7 @@ package com.example.zerohaus
 import com.example.zerohaus.Modelos.Vivienda
 import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
 import com.example.zerohaus.Repositorios.DeduccionIrpf
+import com.example.zerohaus.UserInterface.deduccionPorPaso
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -122,6 +123,20 @@ class DeduccionYPlanTest {
         assertEquals(sim.ahorroEuros, plan.last().ahorroAcumulado, 0.2)
         assertEquals(sim.inversion, plan.last().inversionAcumulada, 0.01)
         assertEquals(sim.etiquetaNueva, plan.last().etiqueta)
+    }
+
+    @Test
+    fun `cada porcentaje de deduccion se marca solo en el primer paso que lo alcanza`() {
+        val plan = AlgoritmoEnergetico.planPorEtapas(piso())
+        val marcas = deduccionPorPaso(plan, vigente = true)
+        assertEquals(plan.size, marcas.size)
+        // El piso de prueba llega primero al 20 % y después al 40 %, una vez cada uno
+        assertEquals(listOf(20, 40), marcas.filter { it > 0 })
+        val paso20 = marcas.indexOf(20)
+        assertEquals(20, plan[paso20].deduccionAcumulada?.porcentaje)
+        assertTrue(plan.take(paso20).all { it.deduccionAcumulada == null })
+        // Fuera de plazo no se marca ninguno
+        assertTrue(deduccionPorPaso(plan, vigente = false).all { it == 0 })
     }
 
     @Test

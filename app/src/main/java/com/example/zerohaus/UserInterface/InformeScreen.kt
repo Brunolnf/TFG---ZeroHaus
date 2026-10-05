@@ -32,7 +32,6 @@ import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.ViewModel.InformeViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -52,7 +51,7 @@ fun InformeScreen(
     val borde = MaterialTheme.colorScheme.outline
     val informe = viewModel.informe
     val c = LocalCadenas.current
-    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("dd/MM/yyyy") }
     val ctx = LocalContext.current
 
     LaunchedEffect(Unit) { if (informe == null) viewModel.cargarUltimoInforme() }
@@ -316,7 +315,7 @@ fun InformeScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                 ) {
                     OutlinedButton(
-                        onClick = { informe?.let { compartirInforme(ctx, it) } },
+                        onClick = { compartirInforme(ctx, informe) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, verde)
@@ -615,8 +614,9 @@ private fun FilaValor(etiqueta: String, valor: String, gris: Color) {
 /** "30 %" con espacio irrompible, para que el % no salte solo a la línea siguiente. */
 private fun porcentaje(valor: Int) = "$valor %"
 
+/** "31/12/2026", siempre con cifras latinas (como el resto de números de la app). */
 private fun fechaCorta(fecha: java.time.LocalDate): String =
-    "%02d/%02d/%d".format(fecha.dayOfMonth, fecha.monthValue, fecha.year)
+    java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy").format(fecha)
 
 /**
  * Plan de reforma por etapas: en cada paso, la mejora que antes se amortiza
@@ -631,12 +631,8 @@ private fun PlanEtapasCard(vivienda: Vivienda, nombreVivienda: String, verde: Co
     val etiquetaInicial = remember(vivienda) {
         AlgoritmoEnergetico.etiquetaPara(AlgoritmoEnergetico.balance(vivienda).energiaPrimariaM2)
     }
-    val deduccionVigente = DeduccionIrpf.vigente()
-    // Paso a partir del cual se llega a cada porcentaje de deducción
-    val primerPasoConDeduccion = etapas.indices
-        .mapNotNull { i -> etapas[i].deduccionAcumulada?.porcentaje?.let { it to i } }
-        .groupBy({ it.first }, { it.second })
-        .mapValues { (_, pasos) -> pasos.min() }
+    // Paso a partir del cual se llega a cada porcentaje de deducción (igual que en el PDF)
+    val deducciones = remember(etapas) { deduccionPorPaso(etapas) }
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -668,10 +664,8 @@ private fun PlanEtapasCard(vivienda: Vivienda, nombreVivienda: String, verde: Co
                                 "${c.planSeAmortiza} ${Formato.numero(e.amortizacionAnios)} ${c.simAnios}",
                             color = gris, fontSize = 12.sp
                         )
-                        if (deduccionVigente) {
-                            primerPasoConDeduccion.filterValues { it == i }.keys.maxOrNull()?.let { pct ->
-                                Text("${c.planDeduccion} ${porcentaje(pct)}", color = verde, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            }
+                        if (deducciones[i] > 0) {
+                            Text("${c.planDeduccion} ${porcentaje(deducciones[i])}", color = verde, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                     Spacer(Modifier.width(8.dp))
@@ -683,7 +677,8 @@ private fun PlanEtapasCard(vivienda: Vivienda, nombreVivienda: String, verde: Co
             val final = etapas.last()
             Text(c.planTotal, color = gris, fontSize = 12.sp)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
+                // Con peso: en idiomas largos el texto salta de línea en vez de aplastar las etiquetas
+                Column(Modifier.weight(1f)) {
                     Text("${c.simInversion}: ${Formato.formatMoneda(final.inversionAcumulada, 0)}", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     Text("${c.simAhorroAnual}: ${Formato.formatMonedaAnual(final.ahorroAcumulado, 0)}", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = verde)
                 }
