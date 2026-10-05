@@ -113,102 +113,105 @@ fun MapaTecnicosScreen(
                     uiSettings = MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = false)
                 ) {
                     tecnicosConPos.forEach { (tecnico, posicion) ->
-                        val esSeleccionado = tecnicoSeleccionado?.id == tecnico.id
-                        MarkerComposable(
-                            keys = arrayOf<Any>(tecnico.id, esSeleccionado),
-                            state = MarkerState(position = posicion),
-                            title = tecnico.nombre,
-                            snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull()?.let { TextosEnergia.especialidad(it, c) } ?: ""}",
-                            onClick = {
-                                tecnicoSeleccionado = if (esSeleccionado) null else tecnico
-                                true // consume el click para no mostrar InfoWindow nativo
-                            }
-                        ) {
-                            val burbuja  = if (esSeleccionado) MaterialTheme.colorScheme.primary
-                                           else MaterialTheme.colorScheme.surface
-                            val txtColor = if (esSeleccionado) Color.White
-                                           else MaterialTheme.colorScheme.onSurface
-                            val pinColor = if (esSeleccionado) MaterialTheme.colorScheme.primary
-                                           else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                        // Con key, cada marcador conserva su estado aunque la lista cambie al filtrar
+                        key(tecnico.id) {
+                            val esSeleccionado = tecnicoSeleccionado?.id == tecnico.id
+                            MarkerComposable(
+                                keys = arrayOf<Any>(tecnico.id, esSeleccionado),
+                                state = rememberUpdatedMarkerState(position = posicion),
+                                title = tecnico.nombre,
+                                snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull()?.let { TextosEnergia.especialidad(it, c) } ?: ""}",
+                                onClick = {
+                                    tecnicoSeleccionado = if (esSeleccionado) null else tecnico
+                                    true // consume el click para no mostrar InfoWindow nativo
+                                }
                             ) {
-                                // Pill con icono, nombre y rating
-                                Surface(
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = burbuja,
-                                    shadowElevation = if (esSeleccionado) 8.dp else 4.dp,
-                                    border = if (!esSeleccionado)
-                                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                                    else null
+                                val burbuja  = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                               else MaterialTheme.colorScheme.surface
+                                val txtColor = if (esSeleccionado) Color.White
+                                               else MaterialTheme.colorScheme.onSurface
+                                val pinColor = if (esSeleccionado) MaterialTheme.colorScheme.primary
+                                               else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(0.dp)
                                 ) {
-                                    Row(
-                                        Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    // Pill con icono, nombre y rating
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = burbuja,
+                                        shadowElevation = if (esSeleccionado) 8.dp else 4.dp,
+                                        border = if (!esSeleccionado)
+                                            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                                        else null
                                     ) {
-                                        Icon(
-                                            Icons.Default.Build, null,
-                                            modifier = Modifier.size(11.dp),
-                                            tint = if (esSeleccionado) Color.White
-                                                   else MaterialTheme.colorScheme.primary
-                                        )
-                                        Text(
-                                            tecnico.nombre.split(" ").take(2).joinToString(" "),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = txtColor,
-                                            maxLines = 1
-                                        )
-                                        if (tecnico.rating > 0f) {
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = if (esSeleccionado) Color.White.copy(alpha = 0.18f)
-                                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                            ) {
-                                                Row(
-                                                    Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                        Row(
+                                            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Build, null,
+                                                modifier = Modifier.size(11.dp),
+                                                tint = if (esSeleccionado) Color.White
+                                                       else MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                tecnico.nombre.split(" ").take(2).joinToString(" "),
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = txtColor,
+                                                maxLines = 1
+                                            )
+                                            if (tecnico.rating > 0f) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = if (esSeleccionado) Color.White.copy(alpha = 0.18f)
+                                                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                                 ) {
-                                                    Icon(
-                                                        Icons.Default.Star, null,
-                                                        modifier = Modifier.size(9.dp),
-                                                        tint = if (esSeleccionado) Color(0xFFFFD700)
-                                                               else Color(0xFFF59E0B)
-                                                    )
-                                                    Text(
-                                                        Formato.numero(tecnico.rating),
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = if (esSeleccionado) Color.White
-                                                                else MaterialTheme.colorScheme.primary
-                                                    )
+                                                    Row(
+                                                        Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Star, null,
+                                                            modifier = Modifier.size(9.dp),
+                                                            tint = if (esSeleccionado) Color(0xFFFFD700)
+                                                                   else Color(0xFFF59E0B)
+                                                        )
+                                                        Text(
+                                                            Formato.numero(tecnico.rating),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = if (esSeleccionado) Color.White
+                                                                    else MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
+                                    // Triángulo puntero dibujado con Canvas
+                                    Canvas(Modifier.size(width = 14.dp, height = 7.dp)) {
+                                        drawPath(
+                                            path = Path().apply {
+                                                moveTo(0f, 0f)
+                                                lineTo(size.width, 0f)
+                                                lineTo(size.width / 2f, size.height)
+                                                close()
+                                            },
+                                            color = burbuja
+                                        )
+                                    }
+                                    // Punto de anclaje
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = pinColor,
+                                        modifier = Modifier.size(7.dp)
+                                    ) {}
                                 }
-                                // Triángulo puntero dibujado con Canvas
-                                Canvas(Modifier.size(width = 14.dp, height = 7.dp)) {
-                                    drawPath(
-                                        path = Path().apply {
-                                            moveTo(0f, 0f)
-                                            lineTo(size.width, 0f)
-                                            lineTo(size.width / 2f, size.height)
-                                            close()
-                                        },
-                                        color = burbuja
-                                    )
-                                }
-                                // Punto de anclaje
-                                Surface(
-                                    shape = CircleShape,
-                                    color = pinColor,
-                                    modifier = Modifier.size(7.dp)
-                                ) {}
                             }
                         }
                     }
