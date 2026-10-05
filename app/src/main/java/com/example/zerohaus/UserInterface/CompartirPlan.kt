@@ -6,35 +6,94 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import android.text.Layout
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Repositorios.AlgoritmoEnergetico
 import com.example.zerohaus.Repositorios.DeduccionIrpf
+import com.example.zerohaus.Util.AppCadenas
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.Util.getCadenas
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
 /**
- * Comparte en PDF el plan de reforma por etapas (estilo pasaporte de
- * renovación): pasos en orden, con inversión, ahorro, amortización y la
- * etiqueta que se alcanza en cada uno.
+ * Comparte el plan de reforma por etapas (estilo pasaporte de renovación):
+ * pasos en orden, con inversión, ahorro, amortización y la etiqueta que se
+ * alcanza en cada uno. Va en PDF y también en texto, para las apps que
+ * muestran el mensaje; si el PDF falla, se comparte solo el texto.
  */
 fun compartirPlan(context: Context, nombreVivienda: String, etiquetaInicial: String, etapas: List<AlgoritmoEnergetico.Etapa>) {
+    if (etapas.isEmpty()) return
     val c = getCadenas(AppEstado.idioma)
-    val pdf = runCatching { generarPdfPlan(context, nombreVivienda, etiquetaInicial, etapas) }.getOrNull() ?: return
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdf)
+    val pdf = runCatching { generarPdfPlan(context, nombreVivienda, etiquetaInicial, etapas) }.getOrNull()
     val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
         putExtra(Intent.EXTRA_SUBJECT, "${c.planTitulo} — $nombreVivienda")
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        putExtra(Intent.EXTRA_TEXT, textoPlan(nombreVivienda, etiquetaInicial, etapas, c))
+        if (pdf != null) {
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_STREAM, FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", pdf))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } else {
+            type = "text/plain"
+        }
     }
     context.startActivity(Intent.createChooser(intent, c.histCompartirTitulo))
+}
+
+/** Línea de un paso: "~5.500 € · Ahorra 306 €/año · se amortiza en 18 años". */
+private fun detallePaso(e: AlgoritmoEnergetico.Etapa, c: AppCadenas) =
+    "~${Formato.formatMoneda(e.mejora.inversion, 0)} · ${c.planAhorra} ${Formato.formatMonedaAnual(e.ahorroEuros, 0)} · " +
+        "${c.planSeAmortiza} ${Formato.numero(e.amortizacionAnios)} ${c.simAnios}"
+
+private fun resumenPlan(final: AlgoritmoEnergetico.Etapa, etiquetaInicial: String, c: AppCadenas) =
+    "${c.simInversion}: ${Formato.formatMoneda(final.inversionAcumulada, 0)} · " +
+        "${c.simAhorroAnual}: ${Formato.formatMonedaAnual(final.ahorroAcumulado, 0)} · " +
+        "${c.histEtiqueta}: $etiquetaInicial → ${final.etiqueta}"
+
+/**
+ * Porcentaje de deducción que se alcanza en cada paso (solo en el primero
+ * que llega a él), o 0. Todo 0 si la deducción ya no está vigente.
+ */
+internal fun deduccionPorPaso(
+    etapas: List<AlgoritmoEnergetico.Etapa>,
+    vigente: Boolean = DeduccionIrpf.vigente()
+): List<Int> {
+    if (!vigente) return etapas.map { 0 }
+    var maximo = 0
+    return etapas.map { e ->
+        val pct = e.deduccionAcumulada?.porcentaje ?: 0
+        if (pct > maximo) pct.also { maximo = it } else 0
+    }
+}
+
+private fun textoPlan(
+    nombreVivienda: String,
+    etiquetaInicial: String,
+    etapas: List<AlgoritmoEnergetico.Etapa>,
+    c: AppCadenas
+): String = buildString {
+    appendLine("=== ${c.planTitulo.uppercase()} · ZEROHAUS ==="); appendLine()
+    appendLine("${c.infVivienda}: $nombreVivienda")
+    appendLine(c.planSub); appendLine()
+    val deducciones = deduccionPorPaso(etapas)
+    etapas.forEachIndexed { i, e ->
+        appendLine("${i + 1}. ${TextosEnergia.recomendacion(e.mejora.titulo, c)} (${c.histEtiqueta}: ${e.etiqueta})")
+        appendLine("   ${detallePaso(e, c)}")
+        if (deducciones[i] > 0) appendLine("   ${c.planDeduccion} ${deducciones[i]} %")
+    }
+    appendLine()
+    val final = etapas.last()
+    appendLine("${c.planTotal.uppercase()}:")
+    appendLine("  ${resumenPlan(final, etiquetaInicial, c)}")
+    final.deduccionAcumulada?.takeIf { DeduccionIrpf.vigente() }?.let { d ->
+        appendLine("  ${c.irpfTitulo}: ${d.porcentaje} % · ${Formato.formatMoneda(d.importe, 0)}")
+    }
+    appendLine()
+    appendLine(c.simAviso)
+    appendLine(c.pdfGenerado)
 }
 
 private fun generarPdfPlan(
@@ -54,6 +113,8 @@ private fun generarPdfPlan(
     val verdeFondo = Color.parseColor("#DCFCE7")
     val gris = Color.parseColor("#6B7280")
     val grisClaro = Color.parseColor("#F3F4F6")
+    // Ancho del texto de cada paso: del círculo con el número a la etiqueta
+    val anchoPaso = ancho - 142f
 
     // Cabecera
     paint.color = verde
@@ -67,19 +128,17 @@ private fun generarPdfPlan(
     canvas.drawText(c.planTitulo.uppercase(), 24f, 54f, paint)
     paint.textAlign = Paint.Align.RIGHT
     paint.textSize = 10f
-    canvas.drawText(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()), (ancho - 24).toFloat(), 34f, paint)
-    canvas.drawText(nombreVivienda.take(45), (ancho - 24).toFloat(), 54f, paint)
+    canvas.drawText(Formato.fechas("dd/MM/yyyy").format(Date()), (ancho - 24).toFloat(), 34f, paint)
+    canvas.drawText(recortar(nombreVivienda, paint, ancho / 2f), (ancho - 24).toFloat(), 54f, paint)
     paint.textAlign = Paint.Align.LEFT
 
-    var y = 108f
+    // Subtítulo: en algunos idiomas no cabe en una línea
     paint.color = gris
     paint.textSize = 10f
-    canvas.drawText(c.planSub.take(110), 24f, y, paint)
-    y += 22f
+    var y = 98f + parrafo(c.planSub, paint, ancho - 48).dibujarEn(canvas, 24f, 98f) + 20f
 
     // Pasos
-    val deduccionVigente = DeduccionIrpf.vigente()
-    var ultimoPctMostrado = 0
+    val deducciones = deduccionPorPaso(etapas)
     etapas.forEachIndexed { i, e ->
         if (y > alto - 140f) return@forEachIndexed
         paint.color = grisClaro
@@ -95,24 +154,18 @@ private fun generarPdfPlan(
 
         paint.color = Color.BLACK
         paint.textSize = 11f
-        canvas.drawText(TextosEnergia.recomendacion(e.mejora.titulo, c).take(60), 70f, y + 20f, paint)
+        canvas.drawText(recortar(TextosEnergia.recomendacion(e.mejora.titulo, c), paint, anchoPaso), 70f, y + 20f, paint)
         paint.isFakeBoldText = false
         paint.color = gris
         paint.textSize = 9f
-        canvas.drawText(
-            "~${Formato.formatMoneda(e.mejora.inversion, 0)} · ${c.planAhorra} ${Formato.formatMonedaAnual(e.ahorroEuros, 0)} · " +
-                "${c.planSeAmortiza} ${Formato.numero(e.amortizacionAnios)} ${c.simAnios}",
-            70f, y + 34f, paint
-        )
-        val pct = e.deduccionAcumulada?.porcentaje ?: 0
-        if (deduccionVigente && pct > ultimoPctMostrado) {
+        canvas.drawText(recortar(detallePaso(e, c), paint, anchoPaso), 70f, y + 34f, paint)
+        if (deducciones[i] > 0) {
             paint.color = verde
-            canvas.drawText("${c.planDeduccion} $pct %", 70f, y + 47f, paint)
-            ultimoPctMostrado = pct
+            canvas.drawText(recortar("${c.planDeduccion} ${deducciones[i]} %", paint, anchoPaso), 70f, y + 47f, paint)
         }
 
         // Etiqueta tras el paso
-        paint.color = etiquetaColorPlan(e.etiqueta)
+        paint.color = etiquetaColorPdf(e.etiqueta)
         canvas.drawRoundRect(RectF((ancho - 64).toFloat(), y + 12f, (ancho - 34).toFloat(), y + 42f), 6f, 6f, paint)
         paint.color = Color.WHITE
         paint.textSize = 14f
@@ -126,31 +179,31 @@ private fun generarPdfPlan(
 
     // Resumen
     val final = etapas.last()
+    val anchoResumen = ancho - 72f
     y += 6f
     paint.color = verdeFondo
     canvas.drawRoundRect(RectF(24f, y, (ancho - 24).toFloat(), y + 58f), 8f, 8f, paint)
     paint.color = Color.BLACK
     paint.textSize = 11f
     paint.isFakeBoldText = true
-    canvas.drawText(c.planTotal, 36f, y + 20f, paint)
+    canvas.drawText(recortar(c.planTotal, paint, anchoResumen), 36f, y + 20f, paint)
     paint.isFakeBoldText = false
     paint.textSize = 10f
-    canvas.drawText(
-        "${c.simInversion}: ${Formato.formatMoneda(final.inversionAcumulada, 0)} · " +
-            "${c.simAhorroAnual}: ${Formato.formatMonedaAnual(final.ahorroAcumulado, 0)} · " +
-            "${c.histEtiqueta}: $etiquetaInicial → ${final.etiqueta}",
-        36f, y + 38f, paint
-    )
-    final.deduccionAcumulada?.takeIf { deduccionVigente }?.let { d ->
+    canvas.drawText(recortar(resumenPlan(final, etiquetaInicial, c), paint, anchoResumen), 36f, y + 38f, paint)
+    final.deduccionAcumulada?.takeIf { DeduccionIrpf.vigente() }?.let { d ->
         paint.color = verde
-        canvas.drawText("${c.irpfTitulo}: ${d.porcentaje} % · ${Formato.formatMoneda(d.importe, 0)}", 36f, y + 52f, paint)
+        canvas.drawText(
+            recortar("${c.irpfTitulo}: ${d.porcentaje} % · ${Formato.formatMoneda(d.importe, 0)}", paint, anchoResumen),
+            36f, y + 52f, paint
+        )
     }
 
-    // Pie
+    // Pie: el aviso, entero aunque ocupe dos líneas, encima de la firma
     paint.color = gris
     paint.textSize = 8f
+    val aviso = parrafo(c.simAviso, paint, ancho - 48, alineacion = Layout.Alignment.ALIGN_CENTER)
+    aviso.dibujarEn(canvas, 24f, alto - 22f - aviso.height)
     paint.textAlign = Paint.Align.CENTER
-    canvas.drawText(c.simAviso.take(140), ancho / 2f, (alto - 22).toFloat(), paint)
     canvas.drawText(c.pdfGenerado, ancho / 2f, (alto - 10).toFloat(), paint)
 
     doc.finishPage(pagina)
@@ -160,14 +213,4 @@ private fun generarPdfPlan(
     FileOutputStream(archivo).use { doc.writeTo(it) }
     doc.close()
     return archivo
-}
-
-private fun etiquetaColorPlan(etiqueta: String): Int = when (etiqueta) {
-    "A" -> Color.parseColor("#15803D")
-    "B" -> Color.parseColor("#22C55E")
-    "C" -> Color.parseColor("#84CC16")
-    "D" -> Color.parseColor("#EAB308")
-    "E" -> Color.parseColor("#F97316")
-    "F" -> Color.parseColor("#EF4444")
-    else -> Color.parseColor("#991B1B")
 }

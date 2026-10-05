@@ -1,6 +1,7 @@
 package com.example.zerohaus.Util
 
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
@@ -19,17 +20,26 @@ object Formato {
     private const val EUR_A_GBP = 0.85
 
     /**
-     * Número con los separadores del idioma de la app, no del sistema
-     * ("12.345,6" en español, "12,345.6" en inglés). Siempre con cifras
-     * latinas, también en árabe, para que coincidan con las gráficas.
+     * Locale del idioma de la app, no del sistema, siempre con cifras
+     * latinas (también en árabe, para que coincidan con las gráficas).
      */
-    fun numero(valor: Double, decimales: Int = 1): String {
-        val locale = Locale.forLanguageTag("${codigoIdioma(AppEstado.idioma)}-u-nu-latn")
-        return NumberFormat.getNumberInstance(locale).apply {
+    fun locale(): Locale = Locale.forLanguageTag("${codigoIdioma(AppEstado.idioma)}-u-nu-latn")
+
+    /**
+     * Número con los separadores del idioma de la app
+     * ("12.345,6" en español, "12,345.6" en inglés).
+     */
+    fun numero(valor: Double, decimales: Int = 1): String =
+        NumberFormat.getNumberInstance(locale()).apply {
             minimumFractionDigits = decimales
             maximumFractionDigits = decimales
         }.format(valor)
-    }
+
+    /**
+     * Formateador de fechas en el idioma de la app: los meses salen en ese
+     * idioma («5 oct 2026», «5 Oct 2026») aunque el móvil esté en otro.
+     */
+    fun fechas(patron: String): SimpleDateFormat = SimpleDateFormat(patron, locale())
 
     fun formatEnergia(kwh: Double, decimales: Int = 1): String {
         val unidad = AppEstado.unidadEnergia

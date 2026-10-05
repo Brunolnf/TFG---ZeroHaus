@@ -25,11 +25,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Repositorios.RepositorioChat
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
 import com.example.zerohaus.ViewModel.HistorialInformesViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -51,7 +51,7 @@ fun HistorialInformesScreen(
     val estado = viewModel.estado
     val c = LocalCadenas.current
     val ctx = LocalContext.current
-    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("dd/MM/yyyy") }
 
     // Estado para el diálogo de compartir
     var informeACompartir by remember { mutableStateOf<InformeEnergetico?>(null) }
@@ -105,7 +105,7 @@ fun HistorialInformesScreen(
                     Spacer(Modifier.height(12.dp))
                     Text(c.histError, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
-                    Text(estado.error!!, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    Text(estado.error, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { viewModel.cargarInformes(forzar = true) },
@@ -170,8 +170,8 @@ fun HistorialInformesScreen(
                 // Panel de comparación
                 if (estado.informeSeleccionado != null && estado.informeComparar != null) {
                     item {
-                        val a = estado.informeSeleccionado!!
-                        val b = estado.informeComparar!!
+                        val a = estado.informeSeleccionado
+                        val b = estado.informeComparar
                         Card(
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

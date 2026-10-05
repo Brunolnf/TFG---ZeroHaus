@@ -5,7 +5,10 @@ import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.codigoIdioma
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.GregorianCalendar
 
 class FormatoTest {
 
@@ -30,6 +33,18 @@ class FormatoTest {
         AppEstado.idioma = "العربية"
         // isDigit() también es cierto para ١٢٣: solo pasa si son 0-9
         assertEquals("1234", Formato.numero(123.4).filter { it.isDigit() })
+    }
+
+    @Test
+    fun `las fechas siguen el idioma de la app y no el del sistema`() {
+        val fecha = GregorianCalendar(2026, Calendar.OCTOBER, 5).time
+        AppEstado.idioma = "English"
+        assertEquals("05 Oct 2026", Formato.fechas("dd MMM yyyy").format(fecha))
+        AppEstado.idioma = "Español"
+        assertTrue(Formato.fechas("dd MMM yyyy").format(fecha).startsWith("05 oct"))
+        // En árabe, también con cifras latinas
+        AppEstado.idioma = "العربية"
+        assertEquals("05/10/2026", Formato.fechas("dd/MM/yyyy").format(fecha))
     }
 
     @Test

@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Util.LocalCadenas
@@ -69,7 +70,7 @@ fun ChatScreen(
     val estado = viewModel.chatEstado
     val cad = LocalCadenas.current
     val miUid = FirebaseAuth.getInstance().currentUser?.uid ?: ""
-    val sdf = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("HH:mm") }
     val context = LocalContext.current
     val listState = rememberLazyListState()
     var errorLocal by remember { mutableStateOf<String?>(null) }
@@ -250,7 +251,7 @@ fun ChatScreen(
 
                     if (estado.imagenPendiente != null) {
                         BarraPreviewImagen(
-                            uri = estado.imagenPendiente!!,
+                            uri = estado.imagenPendiente,
                             caption = estado.captionImagen,
                             onCaptionChange = { viewModel.cambiarCaptionImagen(it) },
                             onEnviar = { viewModel.enviarImagenPendiente(chatId) },

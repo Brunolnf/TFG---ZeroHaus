@@ -21,17 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
 import com.google.firebase.auth.FirebaseAuth
-import java.text.SimpleDateFormat
 import java.util.*
 
 private fun formatTimestampChat(ts: Long, hoyTxt: String, ayerTxt: String): String {
     val hoy = Calendar.getInstance()
     val msg = Calendar.getInstance().apply { timeInMillis = ts }
-    val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val sdfFecha = SimpleDateFormat("dd MMM", Locale.getDefault())
+    val sdfHora = Formato.fechas("HH:mm")
+    val sdfFecha = Formato.fechas("dd MMM")
     return when {
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR) ->

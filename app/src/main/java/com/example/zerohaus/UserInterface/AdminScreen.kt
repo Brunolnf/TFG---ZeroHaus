@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.ViewModel.AdminViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 private val VERDE = Color(0xFF16A34A)

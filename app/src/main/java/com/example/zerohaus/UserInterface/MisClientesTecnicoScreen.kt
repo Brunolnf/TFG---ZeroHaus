@@ -21,10 +21,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ClienteResumen
 import com.example.zerohaus.ViewModel.MisClientesTecnicoViewModel
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -112,7 +113,7 @@ fun MisClientesTecnicoScreen(
 private fun ClienteCard(c: ClienteResumen, onAbrirChat: () -> Unit) {
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val sdf = remember(AppEstado.idioma) { Formato.fechas("dd/MM/yyyy") }
 
     Card(
         shape = RoundedCornerShape(14.dp),

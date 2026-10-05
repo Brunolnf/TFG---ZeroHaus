@@ -32,7 +32,6 @@ import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.ResenaApp
-import java.text.SimpleDateFormat
 import java.util.*
 
 /**
@@ -154,7 +153,7 @@ fun PanelScreen(
                             if (informe != null) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Column { Text(c.panelConsumo, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatEnergia(informe.consumoEstimado), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
-                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); Text("${informe.emisiones.toDouble().toInt()} kg CO₂", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
+                                    Column(horizontalAlignment = Alignment.End) { Text(c.panelEmisiones, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatEmisiones(informe.emisiones, 0), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                                     Column(horizontalAlignment = Alignment.End) { Text(c.panelCoste, color = Color.White.copy(0.8f), fontSize = 13.sp); Text(Formato.formatMonedaAnual(informe.costeAnual), color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold) }
                                 }
                             } else {
@@ -264,8 +263,8 @@ private fun TarjetaAccion(icono: ImageVector, bgI: Color, cI: Color, titulo: Str
 private fun formatTimestampPanel(ts: Long, hoyTxt: String, ayerTxt: String): String {
     val hoy = Calendar.getInstance()
     val msg = Calendar.getInstance().apply { timeInMillis = ts }
-    val sdfHora = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val sdfFecha = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val sdfHora = Formato.fechas("HH:mm")
+    val sdfFecha = Formato.fechas("dd MMM yyyy")
     return when {
         hoy.get(Calendar.YEAR) == msg.get(Calendar.YEAR) &&
         hoy.get(Calendar.DAY_OF_YEAR) == msg.get(Calendar.DAY_OF_YEAR) ->

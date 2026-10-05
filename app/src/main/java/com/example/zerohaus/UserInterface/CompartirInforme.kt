@@ -2,10 +2,15 @@ package com.example.zerohaus.UserInterface
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import androidx.core.content.FileProvider
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Util.AppCadenas
@@ -15,7 +20,6 @@ import com.example.zerohaus.Util.TextosEnergia
 import com.example.zerohaus.Util.getCadenas
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
 import java.util.*
 
 /** Genera el PDF y lo guarda en [destino] sin abrir ningún intent. */
@@ -51,7 +55,7 @@ fun compartirInforme(context: Context, informe: InformeEnergetico) {
 
 private fun generarPdf(context: Context, informe: InformeEnergetico): File {
     val c = getCadenas(AppEstado.idioma)
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val sdf = Formato.fechas("dd/MM/yyyy")
     val fechaStr = sdf.format(Date(informe.fechaGeneracion))
 
     val pageWidth = 595
@@ -236,13 +240,42 @@ private fun textoFactura(informe: InformeEnergetico, c: AppCadenas): String = bu
 }.joinToString(" · ")
 
 /** Corta [texto] con «…» para que no pase de [anchoMax] puntos con [paint]. */
-private fun recortar(texto: String, paint: Paint, anchoMax: Float): String {
+internal fun recortar(texto: String, paint: Paint, anchoMax: Float): String {
     if (paint.measureText(texto) <= anchoMax) return texto
     val caben = paint.breakText(texto, true, anchoMax - paint.measureText("…"), null)
     return texto.take(caben).trimEnd() + "…"
 }
 
-private fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
+/**
+ * [texto] partido en líneas de [ancho] puntos (como mucho [maxLineas], la
+ * última con «…»). Parte por palabras y respeta el árabe (RTL).
+ */
+internal fun parrafo(
+    texto: String,
+    paint: Paint,
+    ancho: Int,
+    maxLineas: Int = 2,
+    alineacion: Layout.Alignment = Layout.Alignment.ALIGN_NORMAL
+): StaticLayout {
+    // StaticLayout coloca cada línea según [alineacion]: el Paint debe ir a la izquierda
+    val tp = TextPaint(paint).apply { textAlign = Paint.Align.LEFT }
+    return StaticLayout.Builder.obtain(texto, 0, texto.length, tp, ancho)
+        .setAlignment(alineacion)
+        .setMaxLines(maxLineas)
+        .setEllipsize(TextUtils.TruncateAt.END)
+        .build()
+}
+
+/** Dibuja el párrafo con su esquina superior izquierda en ([x], [y]) y devuelve su altura. */
+internal fun StaticLayout.dibujarEn(canvas: Canvas, x: Float, y: Float): Float {
+    canvas.save()
+    canvas.translate(x, y)
+    draw(canvas)
+    canvas.restore()
+    return height.toFloat()
+}
+
+internal fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
     "A" -> Color.parseColor("#15803D")
     "B" -> Color.parseColor("#16A34A")
     "C" -> Color.parseColor("#84CC16")
@@ -254,7 +287,7 @@ private fun etiquetaColorPdf(etiqueta: String): Int = when (etiqueta) {
 }
 
 private fun buildTextoInforme(informe: InformeEnergetico): String {
-    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val sdf = Formato.fechas("dd/MM/yyyy")
     val c = getCadenas(AppEstado.idioma)
     return buildString {
         appendLine("=== ${c.infTitulo.uppercase()} · ZEROHAUS ==="); appendLine()
