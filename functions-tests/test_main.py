@@ -105,6 +105,25 @@ class LimpiarRespuestaIATest(unittest.TestCase):
         self.assertEqual(main._limpiar_respuesta_ia({}), {"resumen": "", "consejos": [], "habitos": []})
 
 
+class ResumenMensajeTest(unittest.TestCase):
+
+    def test_texto_tal_cual(self):
+        self.assertEqual(main._resumen_mensaje({"tipo": "texto", "texto": "Hola"}, "Español"), "Hola")
+
+    def test_adjuntos_en_el_idioma_de_quien_lo_recibe(self):
+        self.assertEqual(main._resumen_mensaje({"tipo": "imagen"}, "English"), "📷 Photo")
+        self.assertEqual(main._resumen_mensaje({"tipo": "imagen", "texto": "La caldera"}, "Deutsch"), "📷 La caldera")
+        self.assertEqual(main._resumen_mensaje({"tipo": "archivo", "mediaNombre": "presupuesto.pdf"}, "Polski"), "📎 presupuesto.pdf")
+        self.assertEqual(main._resumen_mensaje({"tipo": "archivo"}, "Français"), "📎 Fichier")
+
+    def test_idioma_desconocido_usa_espanol(self):
+        self.assertEqual(main._resumen_mensaje({"tipo": "imagen"}, "Klingon"), "📷 Foto")
+
+    def test_los_textos_traducidos_cubren_los_14_idiomas(self):
+        for tabla in (main._ADJUNTOS, main._TEXTOS_SUSCRIPCION, main._AVISOS_EMAIL):
+            self.assertEqual(set(tabla), set(main._TEXTOS_EMAIL))
+
+
 class ConfiguracionTest(unittest.TestCase):
 
     def test_ningun_modelo_por_defecto_esta_retirado(self):
