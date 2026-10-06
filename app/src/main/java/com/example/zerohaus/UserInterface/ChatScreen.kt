@@ -1,5 +1,6 @@
 package com.example.zerohaus.UserInterface
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -121,10 +122,12 @@ fun ChatScreen(
     Scaffold(
         containerColor = fondo,
         snackbarHost = {
+            // Errores de la pantalla y del envío (antes los del envío no se
+            // mostraban: un mensaje que no salía desaparecía sin avisar)
             ZeroToast(
-                mensaje   = errorLocal,
-                tipo      = if (toastExito) ToastTipo.EXITO else ToastTipo.ERROR,
-                alOcultar = { errorLocal = null; toastExito = false }
+                mensaje   = errorLocal ?: estado.error,
+                tipo      = if (toastExito && errorLocal != null) ToastTipo.EXITO else ToastTipo.ERROR,
+                alOcultar = { errorLocal = null; toastExito = false; viewModel.limpiarError() }
             )
         },
         topBar = {
@@ -505,7 +508,11 @@ fun ChatScreen(
                         Button(
                             onClick = {
                                 archivoAmpliado = null
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
+                                } catch (_: ActivityNotFoundException) {
+                                    errorLocal = cad.sinAppParaAbrir
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = verde),
                             shape = RoundedCornerShape(12.dp),
