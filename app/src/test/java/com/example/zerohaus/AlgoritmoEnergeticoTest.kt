@@ -238,4 +238,15 @@ class AlgoritmoEnergeticoTest {
         val r = AlgoritmoEnergetico.calcular(viviendaBase())
         assertTrue(r.etiqueta in listOf("A", "B", "C", "D", "E", "F", "G"))
     }
+
+    @Test
+    fun `zonas climaticas de las capitales segun la tabla del CTE DB-HE`() {
+        val zonas = AlgoritmoEnergetico.zonaClimaticaPorProvincia
+        assertEquals(52, zonas.size)
+        // Las que estaban mal antes de comprobarlas con la tabla a-Anejo B
+        mapOf(
+            "Asturias" to "D", "Badajoz" to "C", "Barcelona" to "C", "Ceuta" to "B",
+            "Córdoba" to "B", "Gipuzkoa" to "D", "Lugo" to "D", "Palencia" to "D"
+        ).forEach { (provincia, zona) -> assertEquals(provincia, zona, zonas[provincia]) }
+    }
 }
