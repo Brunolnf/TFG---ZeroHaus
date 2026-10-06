@@ -5,6 +5,7 @@ import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Usuario
+import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.AppEstado
@@ -28,7 +29,16 @@ class SesionViewModel : ViewModel() {
     // muestra un botón "Reintentar" en vez de un spinner eterno.
     var cargaFallida = mutableStateOf(false)
 
+    // Cualquier cierre de sesión (botón, cierre automático tras 5 min en
+    // segundo plano, cuenta borrada) pasa por aquí. Sin esto, si la sesión se
+    // cerraba fuera de logout(), la app seguía "dentro" sin usuario y todo
+    // fallaba por permisos.
+    private val authListener = FirebaseAuth.AuthStateListener { fa ->
+        if (fa.currentUser == null && logueado.value) limpiarSesion()
+    }
+
     init {
+        auth.addAuthStateListener(authListener)
         if (auth.currentUser != null) {
             cargarUsuario()
             // Sesión persistente: refresca el claim sin forzar (toma el token
@@ -106,9 +116,17 @@ class SesionViewModel : ViewModel() {
         refrescarClaims(forzar = true)
     }
 
+    /** Cierre de sesión pedido por el usuario. */
     fun logout() {
-        handler.removeCallbacksAndMessages(null)
+        // Antes de salir: que este móvil deje de recibir los avisos de la cuenta
+        ServicioNotificaciones.olvidarToken()
         auth.signOut()
+        limpiarSesion()
+    }
+
+    /** Deja la app como recién instalada para la siguiente cuenta. */
+    private fun limpiarSesion() {
+        handler.removeCallbacksAndMessages(null)
         AppEstado.setViviendaSeleccionadaId("")
         AppEstado.limpiarTipoUsuario()
         AppEstado.guardarEsAdmin(false)
@@ -121,6 +139,7 @@ class SesionViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        auth.removeAuthStateListener(authListener)
         handler.removeCallbacksAndMessages(null)
     }
 }

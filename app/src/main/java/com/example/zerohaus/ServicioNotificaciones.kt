@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
@@ -82,6 +83,23 @@ class ServicioNotificaciones : FirebaseMessagingService() {
                 .addOnFailureListener { e ->
                     Log.e(TAG, "Fallo obteniendo token FCM: ${e.message}")
                 }
+        }
+
+        /**
+         * Al cerrar sesión: quita el token de `/ajustes` de la cuenta que sale e
+         * invalida el del dispositivo. Si no, el móvil seguía recibiendo los
+         * avisos (nombre y texto de los mensajes) de esa cuenta, y con otra
+         * cuenta iniciada recibía los de las dos. Al volver a entrar,
+         * [registrarToken] guarda un token nuevo.
+         */
+        fun olvidarToken() {
+            FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+                FirebaseFirestore.getInstance()
+                    .collection("ajustes").document(uid)
+                    .update("tokenFCM", FieldValue.delete())
+            }
+            FirebaseMessaging.getInstance().deleteToken()
+                .addOnFailureListener { e -> Log.w(TAG, "No se pudo invalidar el token FCM: ${e.message}") }
         }
     }
 }
