@@ -21,7 +21,6 @@ Triggers de Firestore
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
   revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones.
-  backup_firestore_diario      Exportación diaria de Firestore a Cloud Storage.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
   firebase functions:secrets:set SMTP_USUARIO
@@ -53,7 +52,6 @@ from google.auth.transport.requests import AuthorizedSession
 initialize_app()
 
 PROJECT_ID = "zerohaus-2a865"
-BACKUP_BUCKET = "gs://zerohaus-2a865-backups/firestore"
 PACKAGE_NAME = "es.zerohaus.app"
 
 # ══ Suscripciones (profesionales pagan para ser Verificado/Destacado) ══
@@ -1551,34 +1549,6 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[NOTIFICACIONES] No se pudieron purgar: {e}")
 
 
-# ════════════════════════════════════════════════════════════════════════
-# Backup diario automático de Firestore (Cloud Scheduler)
-# ════════════════════════════════════════════════════════════════════════
-
-@scheduler_fn.on_schedule(
-    schedule="every day 04:00",
-    timezone=scheduler_fn.Timezone("Europe/Madrid"),
-    region=REGION,
-)
-def backup_firestore_diario(event: scheduler_fn.ScheduledEvent) -> None:
-    """Exporta toda la base de datos a Cloud Storage cada madrugada (04:00, Madrid)."""
-    creds, _ = default_creds(scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    sess = AuthorizedSession(creds)
-
-    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-    output_prefix = f"{BACKUP_BUCKET}/{ts}"
-
-    url = (
-        f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}"
-        f"/databases/(default):exportDocuments"
-    )
-    body = {
-        "outputUriPrefix": output_prefix,
-        "collectionIds": [],
-    }
-    r = sess.post(url, json=body, timeout=60)
-    if r.status_code >= 300:
-        print(f"[BACKUP] ERROR HTTP {r.status_code}: {r.text}")
-        raise RuntimeError(f"Backup falló: {r.text}")
-    op = r.json().get("name", "(sin nombre)")
-    print(f"[BACKUP] Iniciado export a {output_prefix} (op: {op})")
+# Copias de seguridad: las hace Firestore (copias gestionadas, diaria 7 días y
+# semanal 4 semanas). La antigua función backup_firestore_diario fallaba a
+# diario con 403 por falta de permisos y nunca llegó a guardar nada.
