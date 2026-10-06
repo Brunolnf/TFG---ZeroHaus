@@ -413,11 +413,7 @@ def on_message_created(event) -> None:
     msg = event.data.to_dict() or {}
     emisor_uid = msg.get("emisorUid", "")
     emisor_nombre = msg.get("emisorNombre", "Alguien")
-    texto = msg.get("texto", "")
-    tipo_msg = msg.get("tipo", "texto")
     chat_id = event.params["chatId"]
-
-    cuerpo = texto if (tipo_msg == "texto" and texto) else "Adjunto"
 
     db = firestore.client()
     chat_snap = db.collection("chats").document(chat_id).get()
@@ -429,6 +425,7 @@ def on_message_created(event) -> None:
     for uid in destinatarios:
         pref = _preferencias(db, uid)
         textos = _AVISOS_EMAIL.get(pref["idioma"], _AVISOS_EMAIL["Español"])
+        cuerpo = _resumen_mensaje(msg, pref["idioma"])
         _crear_notificacion_in_app(
             db, uid,
             titulo=textos[0].format(nombre=emisor_nombre),
@@ -450,6 +447,30 @@ def on_message_created(event) -> None:
                 db, uid, pref["idioma"], "mensaje", clave_limite=f"chat_{chat_id}",
                 nombre=emisor_nombre, texto=cuerpo[:300],
             )
+
+
+# Nombre de los adjuntos sin texto (foto, archivo) en los 14 idiomas
+_ADJUNTOS = {
+    "Español": ("Foto", "Archivo"), "English": ("Photo", "File"), "Català": ("Foto", "Fitxer"),
+    "Euskara": ("Argazkia", "Fitxategia"), "Galego": ("Foto", "Ficheiro"), "Português": ("Foto", "Ficheiro"),
+    "Français": ("Photo", "Fichier"), "Deutsch": ("Foto", "Datei"), "Italiano": ("Foto", "File"),
+    "العربية": ("صورة", "ملف"), "中文": ("照片", "文件"), "Română": ("Fotografie", "Fișier"),
+    "Nederlands": ("Foto", "Bestand"), "Polski": ("Zdjęcie", "Plik"),
+}
+
+
+def _resumen_mensaje(msg: dict, idioma: str) -> str:
+    """Texto del aviso de un mensaje: el texto, o '📷 Foto' / '📎 nombre.pdf'
+    para los adjuntos, en el idioma de quien lo recibe (antes ponía 'Adjunto'
+    en español para todos)."""
+    texto = str(msg.get("texto") or "").strip()
+    tipo = msg.get("tipo", "texto")
+    foto, archivo = _ADJUNTOS.get(idioma, _ADJUNTOS["Español"])
+    if tipo == "imagen":
+        return f"📷 {texto or foto}"
+    if tipo == "archivo":
+        return f"📎 {str(msg.get('mediaNombre') or '').strip() or archivo}"
+    return texto or "…"
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1231,17 +1252,20 @@ def _validar_token_suscripcion(product_id: str, token: str, uid: str):
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 "Esta suscripción pertenece a otra cuenta de ZeroHaus.",
+                {"motivo": "otra_cuenta"},
             )
         expiry_ms = _expiry_de(data, product_id)
         if not expiry_ms:
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
                 "La compra no corresponde a ese plan.",
+                {"motivo": "plan_incorrecto"},
             )
         if data.get("subscriptionState") not in ESTADOS_VIGENTES or expiry_ms <= _ahora_ms():
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
                 "La suscripción no está activa en Google Play.",
+                {"motivo": "no_activa"},
             )
         if data.get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_PENDING":
             _acknowledge_play(product_id, token)
@@ -1251,6 +1275,7 @@ def _validar_token_suscripcion(product_id: str, token: str, uid: str):
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "Google Play no reconoce esta compra.",
+            {"motivo": "no_reconocida"},
         )
     # Play no respondió: la app lo reintenta (procesarPendientes al volver)
     raise https_fn.HttpsError(
@@ -1335,6 +1360,7 @@ def activar_suscripcion(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
             "No tienes perfil profesional.",
+            {"motivo": "sin_perfil"},
         )
 
     origen, expiry_play_ms, datos_play = _validar_token_suscripcion(plan_id, token, uid)
@@ -1355,6 +1381,7 @@ def activar_suscripcion(req: https_fn.CallableRequest) -> dict:
             raise https_fn.HttpsError(
                 https_fn.FunctionsErrorCode.PERMISSION_DENIED,
                 "Esta suscripción pertenece a otra cuenta de ZeroHaus.",
+                {"motivo": "otra_cuenta"},
             )
         if snap.exists and previo.get("activa") and fecha_fin <= int(previo.get("fechaFin") or 0):
             return "ya_activada"
@@ -1374,16 +1401,32 @@ def activar_suscripcion(req: https_fn.CallableRequest) -> dict:
 
     try:
         if resultado == "activada":
-            _crear_notificacion_in_app(
-                db, uid,
-                titulo="¡Suscripción activada!",
-                detalle=f"Tu plan {plan_nombre.replace('_', ' ').title()} está activo. Ya apareces destacado en el directorio.",
-                tipo="suscripcion",
-            )
+            titulo, detalle = _TEXTOS_SUSCRIPCION.get(
+                _preferencias(db, uid)["idioma"], _TEXTOS_SUSCRIPCION["Español"])
+            _crear_notificacion_in_app(db, uid, titulo=titulo, detalle=detalle, tipo="suscripcion")
     except Exception as e:
         print(f"[SUSCRIPCION] Error notificando: {e}")
 
     return {"ok": True, "resultado": resultado, "plan": plan_final, "hastaMs": hasta}
+
+
+# Aviso "suscripción activada" (título, detalle) en los 14 idiomas
+_TEXTOS_SUSCRIPCION = {
+    "Español": ("¡Suscripción activada!", "Tu suscripción de ZeroHaus ya está activa."),
+    "English": ("Subscription activated!", "Your ZeroHaus subscription is now active."),
+    "Català": ("Subscripció activada!", "La teva subscripció de ZeroHaus ja és activa."),
+    "Euskara": ("Harpidetza aktibatuta!", "Zure ZeroHaus harpidetza aktibo dago jada."),
+    "Galego": ("Subscrición activada!", "A túa subscrición de ZeroHaus xa está activa."),
+    "Português": ("Subscrição ativada!", "A sua subscrição ZeroHaus já está ativa."),
+    "Français": ("Abonnement activé !", "Votre abonnement ZeroHaus est maintenant actif."),
+    "Deutsch": ("Abo aktiviert!", "Dein ZeroHaus-Abo ist jetzt aktiv."),
+    "Italiano": ("Abbonamento attivato!", "Il tuo abbonamento ZeroHaus è ora attivo."),
+    "العربية": ("تم تفعيل الاشتراك!", "اشتراكك في ZeroHaus نشط الآن."),
+    "中文": ("订阅已激活！", "您的 ZeroHaus 订阅现已生效。"),
+    "Română": ("Abonament activat!", "Abonamentul tău ZeroHaus este acum activ."),
+    "Nederlands": ("Abonnement geactiveerd!", "Je ZeroHaus-abonnement is nu actief."),
+    "Polski": ("Subskrypcja aktywowana!", "Twoja subskrypcja ZeroHaus jest już aktywna."),
+}
 
 
 def _sincronizar_token(db, token: str) -> None:
