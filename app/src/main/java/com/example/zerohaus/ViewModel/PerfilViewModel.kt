@@ -1,6 +1,7 @@
 package com.example.zerohaus.ViewModel
 
 import android.net.Uri
+import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -11,7 +12,9 @@ import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Telefono
+import com.example.zerohaus.Util.getCadenas
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 
@@ -89,7 +92,7 @@ class PerfilViewModel : ViewModel() {
                     estado = estado.copy(cargando = false)
                 }
             } else {
-                estado = estado.copy(cargando = false, error = "No se pudo cargar el perfil")
+                estado = estado.copy(cargando = false, error = getCadenas(AppEstado.idioma).perfilErrorCargar)
             }
         }
     }
@@ -110,45 +113,64 @@ class PerfilViewModel : ViewModel() {
 
     fun guardarPerfil() {
         val usuario = estado.usuario ?: return
+        val c = getCadenas(AppEstado.idioma)
+        val telefono = Telefono.normalizar(estado.telefono)
+        val emailContacto = estado.emailContacto.trim()
+        if (estado.esProfesional) {
+            if (telefono.length != 9) {
+                estado = estado.copy(error = c.perfilTelefonoInvalido); return
+            }
+            if (!Patterns.EMAIL_ADDRESS.matcher(emailContacto).matches()) {
+                estado = estado.copy(error = c.emailError); return
+            }
+        }
         estado = estado.copy(guardando = true, error = null, exito = false)
-        val actualizado = usuario.copy(nombre = estado.nombre, fotoPerfil = estado.fotoPerfil)
+        // "Guardado" solo si Firestore ha aceptado los cambios
+        val terminar: (Result<Unit>) -> Unit = { r ->
+            estado = if (r.isSuccess) estado.copy(guardando = false, exito = true)
+                     else estado.copy(guardando = false, error = c.perfilErrorGuardar)
+        }
+        val actualizado = usuario.copy(nombre = estado.nombre.trim(), fotoPerfil = estado.fotoPerfil)
         repo.actualizarUsuario(actualizado) { result ->
-            result
-                .onSuccess {
-                    estado = estado.copy(usuario = actualizado)
-                    if (estado.esProfesional) {
-                        // Siempre en el orden del catálogo
-                        val especialidadesLista = Especialidades.TODAS.filter { it in estado.especialidades }
+            if (result.isFailure || !estado.esProfesional) {
+                if (result.isSuccess) estado = estado.copy(usuario = actualizado)
+                terminar(result)
+                return@actualizarUsuario
+            }
+            estado = estado.copy(usuario = actualizado)
+            // Siempre en el orden del catálogo
+            val especialidadesLista = Especialidades.TODAS.filter { it in estado.especialidades }
 
-                        // Si ya existe documento, hacemos UPDATE parcial (preserva rating, opiniones, etc.)
-                        // Si no, hacemos SET completo.
-                        if (estado.tecnicoDocId.isNotEmpty()) {
-                            repoTecnicos.actualizarPerfilTecnico(
-                                tecnicoId = estado.tecnicoDocId,
-                                nombre = estado.nombre,
-                                ciudad = estado.ciudad,
-                                descripcion = estado.descripcion,
-                                especialidades = especialidadesLista
-                            ) { _ -> estado = estado.copy(guardando = false, exito = true) }
-                        } else {
-                            val tecnico = Tecnico(
-                                uid = usuario.uid,
-                                nombre = estado.nombre,
-                                ciudad = estado.ciudad,
-                                especialidades = especialidadesLista,
-                                descripcion = estado.descripcion,
-                                tipoProfesional = if (usuario.tipoUsuario == "Empresa") Tecnico.TIPO_EMPRESA
-                                                  else Tecnico.TIPO_TECNICO
-                            )
-                            repoTecnicos.registrarTecnico(tecnico) { _ ->
-                                estado = estado.copy(guardando = false, exito = true)
-                            }
-                        }
-                    } else {
-                        estado = estado.copy(guardando = false, exito = true)
-                    }
+            // Si ya existe documento, UPDATE parcial (conserva valoración, plan…);
+            // si no, se crea.
+            if (estado.tecnicoDocId.isNotEmpty()) {
+                repoTecnicos.actualizarPerfilTecnico(
+                    tecnicoId = estado.tecnicoDocId,
+                    nombre = actualizado.nombre,
+                    ciudad = estado.ciudad.trim(),
+                    descripcion = estado.descripcion.trim(),
+                    telefono = telefono,
+                    emailContacto = emailContacto,
+                    especialidades = especialidadesLista,
+                    callback = terminar
+                )
+            } else {
+                val tecnico = Tecnico(
+                    uid = usuario.uid,
+                    nombre = actualizado.nombre,
+                    ciudad = estado.ciudad.trim(),
+                    especialidades = especialidadesLista,
+                    descripcion = estado.descripcion.trim(),
+                    telefono = telefono,
+                    emailContacto = emailContacto,
+                    tipoProfesional = if (usuario.tipoUsuario == "Empresa") Tecnico.TIPO_EMPRESA
+                                      else Tecnico.TIPO_TECNICO
+                )
+                repoTecnicos.registrarTecnico(tecnico) { r ->
+                    if (r.isSuccess) estado = estado.copy(tecnicoDocId = usuario.uid)
+                    terminar(r)
                 }
-                .onFailure { estado = estado.copy(guardando = false, error = it.message) }
+            }
         }
     }
 
