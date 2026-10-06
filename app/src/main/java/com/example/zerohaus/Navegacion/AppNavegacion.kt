@@ -29,6 +29,7 @@ import com.example.zerohaus.ServicioNotificaciones
 import com.example.zerohaus.UserInterface.*
 import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.*
 import com.google.firebase.auth.FirebaseAuth
 
@@ -110,6 +111,9 @@ fun AppNavegacion() {
     LaunchedEffect(logueado) {
         if (!logueado) {
             loginVM.resetear()   // limpia el loginCorrecto viejo ANTES de mostrar el login
+            // Viven lo que la Activity: que la siguiente cuenta no vea el
+            // informe de esta (el chat y el directorio ya se limpian solos)
+            informeVM.limpiar()
             nav.navigate("login") {
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
@@ -224,13 +228,11 @@ fun AppNavegacion() {
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.padding(32.dp)
                         ) {
-                            Text(
-                                "No se pudieron cargar tus datos. Comprueba tu conexión.",
-                                textAlign = TextAlign.Center
-                            )
+                            val c = LocalCadenas.current
+                            Text(c.sesionErrorCarga, textAlign = TextAlign.Center)
                             Spacer(Modifier.height(16.dp))
                             Button(onClick = { sesionVM.cargarUsuario() }) {
-                                Text("Reintentar")
+                                Text(c.comReintentar)
                             }
                         }
                     } else {
@@ -273,7 +275,13 @@ fun AppNavegacion() {
                     onNuevoPreestudio   = { nav.navigate("preestudio") },
                     onBuscarTecnicos    = { nav.navigate("tecnicos") },
                     onRankings          = { nav.navigate("rankings") },
-                    onVerUltimoInforme  = { nav.navigate("informe") },
+                    onVerUltimoInforme  = {
+                        // El del inicio es el último de verdad; el del ViewModel
+                        // puede ser uno antiguo abierto desde el historial
+                        panelVM.estado.ultimoInforme?.let { informeVM.cargarInforme(it) }
+                            ?: informeVM.cargarUltimoInforme()
+                        nav.navigate("informe")
+                    },
                     onPerfil            = { nav.navigate("perfil") },
                     onHistorialInformes = { nav.navigate("historial_informes") },
                     onMisViviendas      = { nav.navigate("mis_viviendas") },

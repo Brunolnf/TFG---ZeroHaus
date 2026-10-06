@@ -119,6 +119,20 @@ class InformeViewModel : ViewModel() {
         }
     }
 
+    /** Al cerrar sesión: nada del informe de esta cuenta debe verse con la siguiente. */
+    fun limpiar() {
+        informe = null
+        cargando = false
+        vivienda = null
+        mejoras = emptyList()
+        seleccionadas = emptySet()
+        sugerencias = null
+        generandoIA = false
+        errorIA = null
+        cacheIAConsultada = null
+        recalculando = false
+    }
+
     fun alternarMejora(titulo: String) {
         seleccionadas = if (titulo in seleccionadas) seleccionadas - titulo else seleccionadas + titulo
     }

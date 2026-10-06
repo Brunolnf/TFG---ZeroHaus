@@ -49,8 +49,10 @@ class MainActivity : ComponentActivity() {
             if (backgroundTimestamp > 0L) {
                 val elapsed = System.currentTimeMillis() - backgroundTimestamp
                 if (elapsed > SESSION_TIMEOUT_MS) {
+                    // SesionViewModel lo detecta, limpia la sesión y vuelve al
+                    // login. (Antes se recreaba la Activity, pero los ViewModel
+                    // sobreviven a recreate() y la app seguía "dentro" sin usuario.)
                     FirebaseAuth.getInstance().signOut()
-                    recreate()
                 }
                 backgroundTimestamp = 0L
             }
