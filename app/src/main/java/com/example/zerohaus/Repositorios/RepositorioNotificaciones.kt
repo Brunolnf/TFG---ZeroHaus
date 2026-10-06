@@ -1,9 +1,11 @@
 package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.Notificacion
+import com.google.android.gms.tasks.Tasks
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 
 /**
  * Historial de notificaciones dentro de la app (`/notificaciones`): escucha
@@ -16,9 +18,16 @@ class RepositorioNotificaciones {
 
     private fun uid() = auth.currentUser?.uid ?: ""
 
+    /**
+     * Las [LIMITE] más recientes (índice uid + fecha). Antes se escuchaban
+     * todas, y cada mensaje de chat crea una: con el uso la lista crecía sin fin
+     * y se descargaba entera en cada cambio.
+     */
     fun escucharNotificaciones(callback: (List<Notificacion>) -> Unit): ListenerRegistration {
         return db.collection("notificaciones")
             .whereEqualTo("uid", uid())
+            .orderBy("fecha", Query.Direction.DESCENDING)
+            .limit(LIMITE)
             .addSnapshotListener { snap, _ ->
                 val todas = snap?.documents
                     ?.mapNotNull { it.toObject(Notificacion::class.java) }
@@ -54,13 +63,16 @@ class RepositorioNotificaciones {
     fun marcarTodasLeidas(callback: (Result<Unit>) -> Unit) {
         db.collection("notificaciones")
             .whereEqualTo("uid", uid())
+            .whereEqualTo("leida", false)
             .get()
             .addOnSuccessListener { snap ->
-                val noLeidas = snap.documents.filter { it.getBoolean("leida") == false }
+                val noLeidas = snap.documents
                 if (noLeidas.isEmpty()) { callback(Result.success(Unit)); return@addOnSuccessListener }
-                val batch = db.batch()
-                noLeidas.forEach { doc -> batch.update(doc.reference, "leida", true) }
-                batch.commit()
+                // Un lote admite 500 escrituras: con más no leídas fallaba entero
+                val lotes = noLeidas.chunked(LOTE).map { trozo ->
+                    db.batch().apply { trozo.forEach { update(it.reference, "leida", true) } }.commit()
+                }
+                Tasks.whenAll(lotes)
                     .addOnSuccessListener { callback(Result.success(Unit)) }
                     .addOnFailureListener { e -> callback(Result.failure(Exception(e.message))) }
             }
@@ -85,6 +97,9 @@ class RepositorioNotificaciones {
     companion object {
         /** Ventana para considerar dos notificaciones idénticas como la misma duplicada. */
         private const val VENTANA_DEDUP_MS = 30_000L
+        /** Notificaciones que se muestran (las más recientes). */
+        private const val LIMITE = 50L
+        private const val LOTE = 450
 
         /**
          * Crea una notificación con campos básicos para [uid]. Helper compartido
