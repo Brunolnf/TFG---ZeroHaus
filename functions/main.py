@@ -20,7 +20,7 @@ Triggers de Firestore
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
-  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos.
+  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones.
   backup_firestore_diario      Exportación diaria de Firestore a Cloud Storage.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -342,9 +342,13 @@ def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str 
         print(f"[EMAIL] No se pudo enviar el aviso '{tipo}' a {uid}: {e}")
 
 
-def _crear_notificacion_in_app(db, uid: str, titulo: str, detalle: str, tipo: str) -> None:
-    """Añade una entrada al historial de notificaciones del usuario (/notificaciones)."""
-    ref = db.collection("notificaciones").document()
+def _crear_notificacion_in_app(db, uid: str, titulo: str, detalle: str, tipo: str, doc_id: str = "") -> None:
+    """Añade una entrada al historial de notificaciones del usuario (/notificaciones).
+
+    Con `doc_id` (id del evento + destinatario) es idempotente: si Firestore
+    entrega el mismo evento dos veces, se sobrescribe en vez de duplicarse."""
+    coleccion = db.collection("notificaciones")
+    ref = coleccion.document(doc_id) if doc_id else coleccion.document()
     ref.set({
         "id": ref.id,
         "uid": uid,
@@ -431,6 +435,7 @@ def on_message_created(event) -> None:
             titulo=textos[0].format(nombre=emisor_nombre),
             detalle=cuerpo[:200],
             tipo="chat",
+            doc_id=f"{event.id}_{uid}",
         )
         if not pref["mensajes"]:
             continue
@@ -517,6 +522,7 @@ def on_resena_changed(event) -> None:
                 titulo=textos[2],
                 detalle=f"{textos[3].format(nombre=nombre_usuario, n=puntuacion)} ({estrellas})",
                 tipo="valoracion",
+                doc_id=f"{event.id}_{tecnico_id}",
             )
             if pref["valoraciones"]:
                 if pref["push"]:
@@ -1135,6 +1141,17 @@ def on_evento_perfil(event) -> None:
     }, merge=True)
 
 
+NOTIFICACIONES_DIAS = 90
+
+
+def _purgar_notificaciones_antiguas(db) -> int:
+    """Borra las notificaciones de más de NOTIFICACIONES_DIAS días: cada mensaje
+    de chat crea una y, si no, crecerían sin fin."""
+    limite = _ahora_ms() - NOTIFICACIONES_DIAS * 24 * 60 * 60 * 1000
+    q = db.collection("notificaciones").where(filter=FieldFilter("fecha", "<", limite))
+    return _borrar_query(db, q)
+
+
 def _purgar_eventos_antiguos(db) -> int:
     """Borra los eventos individuales anteriores a ayer (UTC)."""
     ayer = time.gmtime(time.time() - 24 * 60 * 60)
@@ -1499,7 +1516,8 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
     region=REGION,
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
-    """Red de seguridad por si falla o no está configurado RTDN."""
+    """Red de seguridad por si falla o no está configurado RTDN, y limpieza
+    diaria (eventos de estadísticas y notificaciones antiguas)."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1525,6 +1543,12 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[ESTADISTICAS] Eventos antiguos borrados: {_purgar_eventos_antiguos(db)}")
     except Exception as e:
         print(f"[ESTADISTICAS] No se pudieron purgar eventos: {e}")
+
+    # 4) Notificaciones antiguas (el historial de la app muestra las últimas)
+    try:
+        print(f"[NOTIFICACIONES] Antiguas borradas: {_purgar_notificaciones_antiguas(db)}")
+    except Exception as e:
+        print(f"[NOTIFICACIONES] No se pudieron purgar: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════
