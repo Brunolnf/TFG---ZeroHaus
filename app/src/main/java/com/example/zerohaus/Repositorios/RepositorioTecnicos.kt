@@ -343,20 +343,24 @@ class RepositorioTecnicos {
         nombre: String,
         ciudad: String,
         descripcion: String,
+        telefono: String,
+        emailContacto: String,
         especialidades: List<String>,
         callback: (Result<Unit>) -> Unit
     ) {
-        val coords = coordenadasDeCiudad(ciudad)
-        val datos = mutableMapOf<String, Any>(
+        // Ciudad no reconocida: sin coordenadas (0 = desconocida), para no
+        // dejarle en el mapa en la ciudad que tenía antes
+        val (latitud, longitud) = coordenadasDeCiudad(ciudad) ?: (0.0 to 0.0)
+        val datos = mapOf(
             "nombre" to nombre,
             "ciudad" to ciudad,
             "descripcion" to descripcion,
-            "especialidades" to especialidades
+            "telefono" to telefono,
+            "emailContacto" to emailContacto,
+            "especialidades" to especialidades,
+            "latitud" to latitud,
+            "longitud" to longitud
         )
-        if (coords != null) {
-            datos["latitud"] = coords.first
-            datos["longitud"] = coords.second
-        }
         db.collection("tecnicos").document(tecnicoId).update(datos)
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
@@ -364,14 +368,13 @@ class RepositorioTecnicos {
             }
     }
 
+    /** Crea el perfil profesional del usuario actual (las reglas exigen id del documento = uid). */
     fun registrarTecnico(tecnico: Tecnico, callback: (Result<Unit>) -> Unit) {
-        val ref = if (tecnico.id.isNotEmpty()) {
-            db.collection("tecnicos").document(tecnico.id)
-        } else {
-            db.collection("tecnicos").document()
-        }
-        val t = tecnico.copy(id = ref.id, uid = uid())
-        ref.set(t)
+        val uid = uid()
+        if (uid.isEmpty()) { callback(Result.failure(Exception("Sin sesión"))); return }
+        val (latitud, longitud) = coordenadasDeCiudad(tecnico.ciudad) ?: (0.0 to 0.0)
+        val t = tecnico.copy(id = uid, uid = uid, latitud = latitud, longitud = longitud)
+        db.collection("tecnicos").document(uid).set(t)
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
                 callback(Result.failure(Exception(e.message ?: "Error registrando técnico")))
