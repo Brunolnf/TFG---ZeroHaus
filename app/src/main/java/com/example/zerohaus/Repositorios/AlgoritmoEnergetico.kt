@@ -27,29 +27,29 @@ object AlgoritmoEnergetico {
         val energiaPrimariaM2: Double    // kWh/m²·año, base de la etiqueta
     )
 
-    // Zona climática de invierno por capital de provincia (CTE DB-HE).
+    // Zona climática de invierno de la capital de cada provincia, según la
+    // tabla a-Anejo B del CTE DB-HE 2019 (provincia + altitud de la capital).
     // α = invierno casi nulo; A→E severidad creciente. En zonas frías la
     // calefacción pesa más en el consumo total, por lo que aislar ahorra
     // más kWh/año en absoluto (se refleja al multiplicar por el factor).
     val zonaClimaticaPorProvincia: Map<String, String> = mapOf(
         "Las Palmas" to "α", "Santa Cruz de Tenerife" to "α",
         "Almería" to "A", "Cádiz" to "A", "Huelva" to "A", "Málaga" to "A",
-        "Ceuta" to "A", "Melilla" to "A",
-        "Alicante" to "B", "Illes Balears" to "B", "Barcelona" to "B",
-        "Castellón" to "B", "Murcia" to "B", "Sevilla" to "B",
+        "Melilla" to "A",
+        "Alicante" to "B", "Illes Balears" to "B", "Castellón" to "B",
+        "Ceuta" to "B", "Córdoba" to "B", "Murcia" to "B", "Sevilla" to "B",
         "Tarragona" to "B", "Valencia" to "B",
-        "A Coruña" to "C", "Asturias" to "C", "Bizkaia" to "C",
-        "Cantabria" to "C", "Cáceres" to "C", "Córdoba" to "C",
-        "Girona" to "C", "Granada" to "C", "Gipuzkoa" to "C",
-        "Jaén" to "C", "Lugo" to "C", "Ourense" to "C", "Pontevedra" to "C",
-        "Albacete" to "D", "Álava" to "D", "Badajoz" to "D",
-        "Ciudad Real" to "D", "Cuenca" to "D", "Guadalajara" to "D",
-        "Huesca" to "D", "La Rioja" to "D", "Lleida" to "D", "Madrid" to "D",
-        "Navarra" to "D", "Salamanca" to "D", "Segovia" to "D",
+        "A Coruña" to "C", "Badajoz" to "C", "Barcelona" to "C", "Bizkaia" to "C",
+        "Cantabria" to "C", "Cáceres" to "C",
+        "Girona" to "C", "Granada" to "C",
+        "Jaén" to "C", "Ourense" to "C", "Pontevedra" to "C",
+        "Albacete" to "D", "Álava" to "D", "Asturias" to "D",
+        "Ciudad Real" to "D", "Cuenca" to "D", "Gipuzkoa" to "D", "Guadalajara" to "D",
+        "Huesca" to "D", "La Rioja" to "D", "Lleida" to "D", "Lugo" to "D", "Madrid" to "D",
+        "Navarra" to "D", "Palencia" to "D", "Salamanca" to "D", "Segovia" to "D",
         "Teruel" to "D", "Toledo" to "D", "Valladolid" to "D",
         "Zamora" to "D", "Zaragoza" to "D",
-        "Ávila" to "E", "Burgos" to "E", "León" to "E",
-        "Palencia" to "E", "Soria" to "E"
+        "Ávila" to "E", "Burgos" to "E", "León" to "E", "Soria" to "E"
     )
 
     val provinciasOrdenadas: List<String> = zonaClimaticaPorProvincia.keys.sorted()
