@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Estados.LoginEstado
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 /**
  * Validación del formulario de login, inicio de sesión y recuperación de contraseña.
@@ -43,7 +44,7 @@ class LoginViewModel : ViewModel() {
 
     fun iniciarSesion() {
         if (!estado.formularioValido) {
-            estado = estado.copy(error = "Datos incorrectos")
+            estado = estado.copy(error = getCadenas(AppEstado.idioma).formularioIncorrecto)
             return
         }
         estado = estado.copy(cargando = true, error = null)

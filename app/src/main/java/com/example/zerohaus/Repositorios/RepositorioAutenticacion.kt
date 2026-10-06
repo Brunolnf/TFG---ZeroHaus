@@ -4,11 +4,19 @@ import android.os.Handler
 import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.codigoIdioma
 import com.example.zerohaus.Util.Diagnostico
-import com.google.firebase.auth.ActionCodeSettings
+import com.example.zerohaus.Util.esFalloDeRed
+import com.example.zerohaus.Util.getCadenas
+import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
@@ -58,15 +66,15 @@ class RepositorioAutenticacion {
                             // aunque la cáscara de Auth siga viva.
                             !doc.exists() -> {
                                 auth.signOut()
-                                callback(Result.failure(Exception("Esta cuenta no existe o ha sido eliminada.")))
+                                callback(Result.failure(Exception(textos().authErrCuentaNoExiste)))
                             }
                             u?.eliminado == true -> {
                                 auth.signOut()
-                                callback(Result.failure(Exception("Esta cuenta ha sido eliminada por el administrador.")))
+                                callback(Result.failure(Exception(textos().authErrCuentaEliminada)))
                             }
                             u?.bloqueado == true -> {
                                 auth.signOut()
-                                callback(Result.failure(Exception("Tu cuenta está bloqueada. Contacta con el administrador.")))
+                                callback(Result.failure(Exception(textos().authErrCuentaBloqueada)))
                             }
                             else -> callback(Result.success(Unit))
                         }
@@ -80,7 +88,7 @@ class RepositorioAutenticacion {
                     }
             }
             .addOnFailureListener { e ->
-                callback(Result.failure(Exception(traducirError(e.message))))
+                callback(Result.failure(Exception(mensajeDeError(e))))
             }
     }
 
@@ -95,7 +103,7 @@ class RepositorioAutenticacion {
             .addOnSuccessListener { result ->
                 val uid = result.user?.uid
                 if (uid == null) {
-                    callback(Result.failure(Exception("No se pudo obtener el usuario")))
+                    callback(Result.failure(Exception(textos().authErrGenerico)))
                     return@addOnSuccessListener
                 }
                 // El email se verifica después con un código de 6 dígitos
@@ -105,6 +113,8 @@ class RepositorioAutenticacion {
                     .addOnSuccessListener {
                         if (tipo == "Técnico" || tipo == "Empresa") {
                             // Crear perfil profesional para que aparezca en búsquedas.
+                            // Si falla, la cuenta ya es válida: el panel del
+                            // profesional lo crea al entrar.
                             val tecnico = Tecnico(
                                 id = uid,
                                 uid = uid,
@@ -114,20 +124,22 @@ class RepositorioAutenticacion {
                                                   else Tecnico.TIPO_TECNICO
                             )
                             db.collection("tecnicos").document(uid).set(tecnico)
-                                .addOnSuccessListener { callback(Result.success(Unit)) }
-                                .addOnFailureListener { e ->
-                                    callback(Result.failure(Exception(e.message ?: "Error creando perfil profesional")))
-                                }
+                                .addOnCompleteListener { callback(Result.success(Unit)) }
                         } else {
                             callback(Result.success(Unit))
                         }
                     }
                     .addOnFailureListener { e ->
-                        callback(Result.failure(Exception(e.message ?: "Error guardando usuario")))
+                        // Sin /usuarios la cuenta no podría entrar nunca (el login la
+                        // trata como borrada) ni volver a registrarse con ese email:
+                        // se deshace para poder reintentar.
+                        result.user?.delete()
+                        callback(Result.failure(Exception(
+                            if (e.esFalloDeRed()) textos().errorRed else textos().authErrGenerico)))
                     }
             }
             .addOnFailureListener { e ->
-                callback(Result.failure(Exception(e.message ?: "Error en registro")))
+                callback(Result.failure(Exception(mensajeDeError(e))))
             }
     }
 
@@ -225,7 +237,7 @@ class RepositorioAutenticacion {
         val user = auth.currentUser
         val email = user?.email
         if (user == null || email.isNullOrBlank()) {
-            callback(Result.failure(Exception("No hay sesión activa.")))
+            callback(Result.failure(Exception(textos().authErrSinSesion)))
             return
         }
         val credencial = EmailAuthProvider.getCredential(email, passwordActual)
@@ -234,11 +246,14 @@ class RepositorioAutenticacion {
                 user.updatePassword(passwordNueva)
                     .addOnSuccessListener { callback(Result.success(Unit)) }
                     .addOnFailureListener { e ->
-                        callback(Result.failure(Exception(traducirError(e.message))))
+                        callback(Result.failure(Exception(mensajeDeError(e))))
                     }
             }
             .addOnFailureListener { e ->
-                callback(Result.failure(Exception(traducirError(e.message))))
+                // Aquí lo único que se comprueba es la contraseña actual
+                val msg = if (e is FirebaseAuthInvalidCredentialsException) textos().authErrPasswordActual
+                          else mensajeDeError(e)
+                callback(Result.failure(Exception(msg)))
             }
     }
 
@@ -250,7 +265,7 @@ class RepositorioAutenticacion {
      */
     fun eliminarMiCuenta(callback: (Result<Unit>) -> Unit) {
         if (auth.currentUser == null) {
-            callback(Result.failure(Exception("No hay sesión activa.")))
+            callback(Result.failure(Exception(textos().authErrSinSesion)))
             return
         }
         functions.getHttpsCallable("eliminar_mi_cuenta")
@@ -261,7 +276,8 @@ class RepositorioAutenticacion {
             }
             .addOnFailureListener { e ->
                 Diagnostico.errorDeFuncion("eliminar_mi_cuenta", e)
-                callback(Result.failure(Exception(e.message ?: "No se pudo eliminar la cuenta.")))
+                callback(Result.failure(Exception(
+                    if (e.esFalloDeRed()) textos().errorRed else textos().ajustesEliminarError)))
             }
     }
 
@@ -273,47 +289,43 @@ class RepositorioAutenticacion {
      */
     fun recuperarPassword(email: String, idiomaApp: String, callback: (Result<Unit>) -> Unit) {
         auth.setLanguageCode(codigoIdioma(idiomaApp))
-        // ActionCodeSettings sin handleCodeInApp fuerza el uso del handler estándar
-        // de Firebase (firebaseapp.com/__/auth/action), evitando Dynamic Links
-        // que fueron discontinuados en 2025 y pueden causar que el link no funcione.
-        val settings = ActionCodeSettings.newBuilder()
-            .setUrl("https://zerohaus-2a865.firebaseapp.com")
-            .setHandleCodeInApp(false)
-            .setAndroidPackageName("com.example.zerohaus", false, null)
-            .build()
-        auth.sendPasswordResetEmail(email, settings)
+        // Sin ActionCodeSettings: el enlace usa la página estándar de Firebase
+        // (firebaseapp.com/__/auth/action). Antes se le pasaba el paquete
+        // "com.example.zerohaus", que no es el de la app (es.zerohaus.app).
+        auth.sendPasswordResetEmail(email)
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
-                val m = e.message?.lowercase().orEmpty()
-                // "user-not-found" se trata como éxito silencioso (no enumeración)
-                if ("no user record" in m || "user-not-found" in m) {
+                // Cuenta inexistente = éxito silencioso (no revela qué correos existen)
+                if (e is FirebaseAuthInvalidUserException && e.errorCode == "ERROR_USER_NOT_FOUND") {
                     callback(Result.success(Unit))
                 } else {
-                    callback(Result.failure(Exception(traducirError(e.message))))
+                    callback(Result.failure(Exception(mensajeDeError(e))))
                 }
             }
     }
 
+    private fun textos() = getCadenas(AppEstado.idioma)
 
-    private fun traducirError(msg: String?): String {
-        val m = msg?.lowercase() ?: return "Error desconocido"
-        return when {
-            "badly formatted" in m || "invalid-email" in m ->
-                "El formato del correo electrónico no es válido."
-            "network" in m || "connection" in m || "unreachable" in m ->
-                "Error de conexión. Comprueba tu internet e inténtalo de nuevo."
-            "too many requests" in m || "quota" in m ->
-                "Demasiados intentos. Espera unos minutos e inténtalo de nuevo."
-            "no user record" in m || "user-not-found" in m ->
-                "No existe ninguna cuenta con ese correo."
-            "password" in m || "credential" in m || "wrong-password" in m
-                || "malformed" in m || "expired" in m ->
-                "Email o contraseña incorrectos."
-            "email already" in m || "already in use" in m ->
-                "Ya existe una cuenta con ese correo."
-            "user-disabled" in m || "disabled" in m ->
-                "Esta cuenta ha sido deshabilitada."
-            else -> "No se pudo iniciar sesión. Inténtalo de nuevo."
+    /**
+     * Mensaje para el usuario, en el idioma de la app, de un error de Firebase
+     * Auth. Se decide por el tipo de excepción y su código (antes se buscaban
+     * palabras en el mensaje en inglés, que no siempre coincidían, y en el
+     * registro llegaba sin traducir).
+     */
+    private fun mensajeDeError(e: Exception): String {
+        val c = textos()
+        return when (e) {
+            is FirebaseNetworkException -> c.errorRed
+            is FirebaseTooManyRequestsException -> c.authErrDemasiados
+            is FirebaseAuthWeakPasswordException -> c.authErrPasswordDebil
+            is FirebaseAuthUserCollisionException -> c.authErrEmailEnUso
+            is FirebaseAuthInvalidUserException ->
+                if (e.errorCode == "ERROR_USER_DISABLED") c.authErrDeshabilitada
+                else c.authErrCredenciales   // no revela si el correo existe
+            is FirebaseAuthInvalidCredentialsException ->
+                if (e.errorCode == "ERROR_INVALID_EMAIL") c.authErrEmailFormato
+                else c.authErrCredenciales
+            else -> c.authErrGenerico
         }
     }
 }
