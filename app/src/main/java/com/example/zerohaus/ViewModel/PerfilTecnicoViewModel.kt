@@ -8,6 +8,8 @@ import com.example.zerohaus.Modelos.Resena
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Repositorios.*
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 
 /**
@@ -84,7 +86,7 @@ class PerfilTecnicoViewModel : ViewModel() {
         if (estado.enviandoResena) return
         val chatId = estado.chatIdConversacion
         if (!estado.puedeValorar || chatId == null) {
-            estado = estado.copy(error = "No puedes valorar este perfil")
+            estado = estado.copy(error = getCadenas(AppEstado.idioma).perfNoPuedesValorar)
             return
         }
         estado = estado.copy(enviandoResena = true, error = null, exitoResena = false)
@@ -106,7 +108,7 @@ class PerfilTecnicoViewModel : ViewModel() {
                         )
                         cargarTecnico(tecnicoId)
                     }
-                    .onFailure { estado = estado.copy(enviandoResena = false, error = it.message) }
+                    .onFailure { estado = estado.copy(enviandoResena = false, error = getCadenas(AppEstado.idioma).authErrGenerico) }
             }
         }
     }

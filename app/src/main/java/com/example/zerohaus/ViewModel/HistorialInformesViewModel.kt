@@ -11,6 +11,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 /**
  * Estado del historial de informes y de la comparación entre dos.
@@ -51,7 +53,7 @@ class HistorialInformesViewModel : ViewModel() {
             } catch (e: Exception) {
                 estado = estado.copy(
                     cargando = false,
-                    error = "Error al cargar informes. Comprueba tu conexión e inténtalo de nuevo."
+                    error = getCadenas(AppEstado.idioma).histError
                 )
             }
         }

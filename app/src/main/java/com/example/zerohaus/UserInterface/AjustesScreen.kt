@@ -112,7 +112,7 @@ fun AjustesScreen(
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (_: ActivityNotFoundException) {
-            viewModel.mostrarError(c.ajustesEliminarError)
+            viewModel.mostrarError(c.sinAppParaAbrir)
         }
     }
 

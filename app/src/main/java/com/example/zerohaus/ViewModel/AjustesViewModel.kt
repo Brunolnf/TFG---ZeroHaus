@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.AjustesUsuario
 import com.example.zerohaus.Repositorios.RepositorioAjustes
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 /**
  * Estado de la pantalla de ajustes.
@@ -47,8 +49,8 @@ class AjustesViewModel : ViewModel() {
     fun guardar() {
         estado = estado.copy(guardando = true, error = null, mensajeToast = null)
         repo.guardarAjustes(estado.ajustes) { r ->
-            r.onSuccess { estado = estado.copy(guardando = false, mensajeToast = "Ajustes guardados correctamente") }
-             .onFailure { estado = estado.copy(guardando = false, error = it.message) }
+            r.onSuccess { estado = estado.copy(guardando = false, mensajeToast = getCadenas(AppEstado.idioma).ajustesGuardados) }
+             .onFailure { estado = estado.copy(guardando = false, error = getCadenas(AppEstado.idioma).authErrGenerico) }
         }
     }
 

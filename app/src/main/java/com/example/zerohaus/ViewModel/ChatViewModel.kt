@@ -8,6 +8,8 @@ import com.example.zerohaus.Repositorios.RepositorioChat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.getCadenas
 
 /**
  * Estado de la lista de conversaciones.
@@ -177,7 +179,7 @@ class ChatViewModel : ViewModel() {
         repo.enviarMensaje(chatId, texto) { ok ->
             chatEstado = chatEstado.copy(
                 enviando = false,
-                error = if (!ok) "Error enviando mensaje" else null
+                error = if (!ok) getCadenas(AppEstado.idioma).chatErrorEnviar else null
             )
         }
     }
@@ -199,20 +201,20 @@ class ChatViewModel : ViewModel() {
         val caption = chatEstado.captionImagen.trim()
         chatEstado = chatEstado.copy(subiendoMedia = true, imagenPendiente = null, captionImagen = "")
         repo.enviarImagen(chatId, uri, caption) { ok ->
-            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) "Error enviando imagen" else null)
+            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) getCadenas(AppEstado.idioma).chatErrorImagen else null)
         }
     }
 
     fun enviarArchivo(chatId: String, uri: android.net.Uri, nombre: String, bytes: Long) {
         chatEstado = chatEstado.copy(subiendoMedia = true)
         repo.enviarArchivo(chatId, uri, nombre, bytes) { ok ->
-            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) "Error enviando archivo" else null)
+            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) getCadenas(AppEstado.idioma).chatErrorArchivo else null)
         }
     }
 
     fun eliminarMensaje(chatId: String, mensajeId: String) {
         repo.eliminarMensaje(chatId, mensajeId) { ok ->
-            if (!ok) chatEstado = chatEstado.copy(error = "Error eliminando mensaje")
+            if (!ok) chatEstado = chatEstado.copy(error = getCadenas(AppEstado.idioma).chatErrorEliminar)
         }
     }
 
