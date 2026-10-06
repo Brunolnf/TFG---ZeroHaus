@@ -133,17 +133,20 @@ class PreestudioViewModel : ViewModel() {
         viewModelScope.launch {
             // Si el usuario eligió una vivienda existente, la reutilizamos sin crear una nueva
             val viviendaConId: Vivienda
-            val idExistente = estado.viviendaSeleccionada?.id
+            val anterior = estado.viviendaSeleccionada
 
-            if (!idExistente.isNullOrEmpty()) {
-                // Solo usar el ID; NO escribir en Firestore (no crear ni sobrescribir)
-                viviendaConId = viviendaBase.copy(id = idExistente)
-                // Salvo la factura: si se ha añadido, cambiado o quitado, se
-                // guarda en la vivienda para los próximos informes
-                val anterior = estado.viviendaSeleccionada
-                if (anterior != null && (anterior.precioLuzFactura != viviendaConId.precioLuzFactura
-                        || anterior.consumoLuzFacturaKwh != viviendaConId.consumoLuzFacturaKwh)) {
-                    repoViviendas.actualizarFactura(viviendaConId)
+            if (anterior != null && anterior.id.isNotEmpty()) {
+                viviendaConId = viviendaBase.copy(id = anterior.id, uid = anterior.uid, fechaCreacion = anterior.fechaCreacion)
+                // Si ha cambiado algún dato (o la factura), se guarda: el
+                // simulador, «Recalcular» y los consejos de IA leen la vivienda
+                // guardada y si no usarían los datos viejos. Firestore lo aplica
+                // al momento en local, así que no hace falta esperar al servidor.
+                if (viviendaConId != anterior) {
+                    repoViviendas.guardarVivienda(viviendaConId) { }
+                    estado = estado.copy(
+                        viviendaSeleccionada = viviendaConId,
+                        viviendas = estado.viviendas.map { if (it.id == viviendaConId.id) viviendaConId else it }
+                    )
                 }
             } else {
                 // Vivienda nueva → guardar en Firestore
