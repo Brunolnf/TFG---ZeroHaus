@@ -177,11 +177,18 @@ class ChatViewModel : ViewModel() {
         chatEstado = chatEstado.copy(enviando = true, texto = "")
 
         repo.enviarMensaje(chatId, texto) { ok ->
-            chatEstado = chatEstado.copy(
+            chatEstado = if (ok) chatEstado.copy(enviando = false, error = null)
+            else chatEstado.copy(
                 enviando = false,
-                error = if (!ok) getCadenas(AppEstado.idioma).chatErrorEnviar else null
+                error = getCadenas(AppEstado.idioma).chatErrorEnviar,
+                // Se le devuelve lo que había escrito para que no lo pierda
+                texto = chatEstado.texto.ifEmpty { texto }
             )
         }
+    }
+
+    fun limpiarError() {
+        chatEstado = chatEstado.copy(error = null)
     }
 
     fun seleccionarImagen(uri: android.net.Uri) {

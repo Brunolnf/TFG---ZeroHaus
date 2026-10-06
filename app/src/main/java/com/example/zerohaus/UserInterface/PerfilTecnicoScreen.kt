@@ -1,5 +1,6 @@
 package com.example.zerohaus.UserInterface
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -67,6 +68,7 @@ fun PerfilTecnicoScreen(
     var mostrarFormResena by remember { mutableStateOf(false) }
     var puntuacion by remember { mutableIntStateOf(5) }
     var comentario by remember { mutableStateOf("") }
+    var errorLocal by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(tecnicoId) { viewModel.cargarTecnico(tecnicoId) }
 
@@ -74,9 +76,9 @@ fun PerfilTecnicoScreen(
         containerColor = fondo,
         snackbarHost = {
             ZeroToast(
-                mensaje   = estado.error,
+                mensaje   = errorLocal ?: estado.error,
                 tipo      = ToastTipo.ERROR,
-                alOcultar = { viewModel.limpiarMensajes() }
+                alOcultar = { errorLocal = null; viewModel.limpiarMensajes() }
             )
         },
         topBar = {
@@ -326,7 +328,9 @@ fun PerfilTecnicoScreen(
                             onLlamar = { tel ->
                                 viewModel.registrarContacto(tecnicoId, RepositorioEstadisticas.LLAMADA)
                                 val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Telefono.formatoMarcado(tel)}"))
-                                context.startActivity(intent)
+                                // Tablets y móviles sin teléfono: no hay quien marque
+                                try { context.startActivity(intent) }
+                                catch (_: ActivityNotFoundException) { errorLocal = c.perfSinLlamadas }
                             }
                         )
                     }
