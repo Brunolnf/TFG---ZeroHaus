@@ -2,7 +2,10 @@ package com.example.zerohaus.Repositorios
 
 import com.example.zerohaus.Modelos.Suscripcion
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Diagnostico
+import com.example.zerohaus.Util.esFalloDeRed
+import com.example.zerohaus.Util.getCadenas
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -48,12 +51,14 @@ class RepositorioMonetizacion {
     }
 
     /**
-     * Activa una suscripción contra el servidor. Idempotente.
+     * Activa una suscripción contra el servidor. Idempotente. Devuelve lo que
+     * ha hecho el servidor: "activada", "renovada" o "ya_activada" (la compra
+     * ya estaba registrada, p. ej. al volver a abrir la pantalla).
      */
     fun activarSuscripcion(
         planId: String,
         purchaseToken: String,
-        callback: (Result<Unit>) -> Unit
+        callback: (Result<String>) -> Unit
     ) {
         val datos = hashMapOf<String, Any>(
             "planId" to planId,
@@ -62,12 +67,21 @@ class RepositorioMonetizacion {
 
         functions.getHttpsCallable("activar_suscripcion")
             .call(datos)
-            .addOnSuccessListener { callback(Result.success(Unit)) }
+            .addOnSuccessListener { r ->
+                val resultado = (r.getData() as? Map<*, *>)?.get("resultado") as? String
+                callback(Result.success(resultado ?: "activada"))
+            }
             .addOnFailureListener { e ->
                 Diagnostico.errorDeFuncion("activar_suscripcion", e)
-                val msg = if (e is FirebaseFunctionsException) e.message
-                else "No se pudo activar la suscripción. Inténtalo de nuevo."
-                callback(Result.failure(Exception(msg ?: "Error activando la suscripción")))
+                val c = getCadenas(AppEstado.idioma)
+                val motivo = ((e as? FirebaseFunctionsException)?.details as? Map<*, *>)?.get("motivo")
+                val msg = when {
+                    e.esFalloDeRed() -> c.errorRed
+                    motivo == "otra_cuenta" -> c.subOtraCuenta
+                    motivo == "no_activa" || motivo == "no_reconocida" -> c.subNoActivaPlay
+                    else -> c.subErrorActivar
+                }
+                callback(Result.failure(Exception(msg)))
             }
     }
 }

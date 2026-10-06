@@ -51,7 +51,6 @@ fun SuscripcionScreen(
     val c = LocalCadenas.current
 
     LaunchedEffect(Unit) {
-        viewModel.configurarTextos(c.subActivada, c.subNadaRestaurar, c.subPlayNoDisponible)
         viewModel.cargar()
         activity?.let { viewModel.iniciarBilling(it) }
     }
@@ -144,6 +143,15 @@ fun SuscripcionScreen(
 
             Text(c.subEligePlan, fontWeight = FontWeight.Bold, fontSize = 18.sp)
 
+            // Con un plan vigente, los demás se ofrecen como CAMBIO de plan
+            // (Google Play sustituye la suscripción en vez de cobrar dos)
+            val planVigente = estado.vigente?.planId
+            val hayPlan = planVigente != null
+            val puedeComprar = estado.suscripcionesCargadas && !estado.activando
+            if (hayPlan) {
+                Text(c.subCambioPlanInfo, color = gris, fontSize = 12.sp)
+            }
+
             // Verificado Trimestral
             PlanCard(
                 titulo = c.subVerificadoTrimestral,
@@ -152,7 +160,9 @@ fun SuscripcionScreen(
                 detalle = c.subVerificadoTrimestralDet,
                 color = verde,
                 icono = Icons.Default.VerifiedUser,
-                activo = tec?.planActivo == Planes.PLAN_VERIFICADO,
+                activo = planVigente == Planes.VERIFICADO_TRIMESTRAL,
+                cambioDePlan = hayPlan,
+                habilitado = puedeComprar,
                 onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.VERIFICADO_TRIMESTRAL) } }
             )
 
@@ -164,7 +174,9 @@ fun SuscripcionScreen(
                 detalle = c.subVerificadoAnualDet,
                 color = verde,
                 icono = Icons.Default.VerifiedUser,
-                activo = tec?.planActivo == Planes.PLAN_VERIFICADO,
+                activo = planVigente == Planes.VERIFICADO_ANUAL,
+                cambioDePlan = hayPlan,
+                habilitado = puedeComprar,
                 destacado = true,
                 onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.VERIFICADO_ANUAL) } }
             )
@@ -177,7 +189,9 @@ fun SuscripcionScreen(
                 detalle = c.subDestacadoDet,
                 color = dorado,
                 icono = Icons.Default.Star,
-                activo = tec?.planActivo == Planes.PLAN_DESTACADO,
+                activo = planVigente == Planes.DESTACADO_MENSUAL,
+                cambioDePlan = hayPlan,
+                habilitado = puedeComprar,
                 onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.DESTACADO_MENSUAL) } }
             )
 
@@ -189,7 +203,9 @@ fun SuscripcionScreen(
                 detalle = c.subDestacadoAnunciosDet,
                 color = Color(0xFF7C3AED),
                 icono = Icons.Default.Campaign,
-                activo = tec?.planActivo == Planes.PLAN_DESTACADO_ANUNCIOS,
+                activo = planVigente == Planes.DESTACADO_ANUNCIOS_MENSUAL,
+                cambioDePlan = hayPlan,
+                habilitado = puedeComprar,
                 onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.DESTACADO_ANUNCIOS_MENSUAL) } }
             )
 
@@ -254,6 +270,8 @@ private fun PlanCard(
     color: Color,
     icono: androidx.compose.ui.graphics.vector.ImageVector,
     activo: Boolean,
+    cambioDePlan: Boolean,
+    habilitado: Boolean,
     destacado: Boolean = false,
     onSuscribir: () -> Unit
 ) {
@@ -308,12 +326,12 @@ private fun PlanCard(
             } else {
                 Button(
                     onClick = onSuscribir,
-                    enabled = precio != null,
+                    enabled = precio != null && habilitado,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = color)
                 ) {
-                    Text(c.subSuscribirme, color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(if (cambioDePlan) c.subCambiarAPlan else c.subSuscribirme, color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

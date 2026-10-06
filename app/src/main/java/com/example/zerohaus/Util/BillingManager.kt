@@ -6,6 +6,7 @@ import android.util.Log
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
+import com.android.billingclient.api.BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
@@ -38,6 +39,9 @@ import java.security.MessageDigest
 /** Por qué no se pudo comprar (la UI lo muestra traducido). */
 enum class ErrorCompra { NO_DISPONIBLE, NO_INICIADA, NO_COMPLETADA }
 
+/** Suscripción vigente que se sustituye al cambiar de plan. */
+data class PlanAnterior(val productoId: String, val purchaseToken: String)
+
 class BillingManager(context: Context) : PurchasesUpdatedListener {
 
     var onSuscripcionPendiente: ((productoId: String, purchaseToken: String) -> Unit)? = null
@@ -46,7 +50,9 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
     private var productos: Map<String, ProductDetails> = emptyMap()
     private var conectado = false
 
-    private val client = BillingClient.newBuilder(context)
+    // applicationContext: el BillingManager vive en un ViewModel, que dura más
+    // que la Activity (guardarla la filtraba en cada giro de pantalla)
+    private val client = BillingClient.newBuilder(context.applicationContext)
         .setListener(this)
         .enablePendingPurchases(
             PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
@@ -79,8 +85,9 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
             override fun onBillingSetupFinished(result: BillingResult) {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                     conectado = true
+                    // Las compras pendientes las procesa quien llama, en onListo
+                    // (antes se procesaban dos veces cada vez)
                     consultarProductos(onListo)
-                    procesarPendientes()
                 } else {
                     Log.w(TAG, "Billing no disponible: ${result.debugMessage}")
                     onListo()
@@ -152,23 +159,42 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
         }
     }
 
-    fun suscribirse(activity: Activity, productoId: String) {
+    /**
+     * Lanza la compra de [productoId]. Con [anterior] (el plan vigente) es un
+     * CAMBIO de plan: Google Play sustituye la suscripción y descuenta el tiempo
+     * no usado. Sin esto, comprar otro plan creaba una segunda suscripción en
+     * paralelo y se cobraban las dos.
+     */
+    fun suscribirse(activity: Activity, productoId: String, anterior: PlanAnterior? = null) {
         val detalles = productos[productoId]
         val offerToken = detalles?.subscriptionOfferDetails?.firstOrNull()?.offerToken
         if (!conectado || detalles == null || offerToken == null) {
             onErrorCompra?.invoke(ErrorCompra.NO_DISPONIBLE)
             return
         }
-        val params = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(
-                listOf(
-                    BillingFlowParams.ProductDetailsParams.newBuilder()
-                        .setProductDetails(detalles)
-                        .setOfferToken(offerToken)
-                        .build()
-                )
+        val producto = BillingFlowParams.ProductDetailsParams.newBuilder()
+            .setProductDetails(detalles)
+            .setOfferToken(offerToken)
+        if (anterior != null) {
+            producto.setSubscriptionProductReplacementParams(
+                SubscriptionProductReplacementParams.newBuilder()
+                    .setOldProductId(anterior.productoId)
+                    .setReplacementMode(SubscriptionProductReplacementParams.ReplacementMode.WITH_TIME_PRORATION)
+                    .build()
             )
-            .apply { cuentaOfuscada()?.let { setObfuscatedAccountId(it) } }
+        }
+        val params = BillingFlowParams.newBuilder()
+            .setProductDetailsParamsList(listOf(producto.build()))
+            .apply {
+                cuentaOfuscada()?.let { setObfuscatedAccountId(it) }
+                if (anterior != null) {
+                    setSubscriptionUpdateParams(
+                        BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                            .setOldPurchaseToken(anterior.purchaseToken)
+                            .build()
+                    )
+                }
+            }
             .build()
         val result = client.launchBillingFlow(activity, params)
         if (result.responseCode != BillingClient.BillingResponseCode.OK) {
