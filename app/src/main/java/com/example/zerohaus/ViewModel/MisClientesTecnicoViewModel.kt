@@ -58,6 +58,10 @@ class MisClientesTecnicoViewModel : ViewModel() {
             .addSnapshotListener { snap, _ ->
                 val clientes = mutableListOf<ClienteResumen>()
                 snap?.documents?.forEach { doc ->
+                    // Igual que la lista de chats: una conversación sin ningún
+                    // mensaje (el cliente pulsó «Chatear» y no escribió) no es un cliente
+                    val ultimo = doc.getString("ultimoMensaje").orEmpty()
+                    if ((doc.getLong("fechaUltimoMensaje") ?: 0L) == 0L && ultimo.isBlank()) return@forEach
                     @Suppress("UNCHECKED_CAST")
                     val participantes = (doc.get("participantes") as? List<String>) ?: emptyList()
                     @Suppress("UNCHECKED_CAST")
@@ -83,8 +87,8 @@ class MisClientesTecnicoViewModel : ViewModel() {
     fun abrirChatConCliente(cliente: ClienteResumen, onChatListo: (String) -> Unit) {
         if (cliente.chatId.isNotBlank()) { onChatListo(cliente.chatId); return }
         if (estado.abriendoChat) return
-        estado = estado.copy(abriendoChat = true)
         val miUid = auth.currentUser?.uid ?: return
+        estado = estado.copy(abriendoChat = true)
         db.collection("usuarios").document(miUid).get()
             .addOnSuccessListener { doc ->
                 val miNombre = doc.getString("nombre") ?: "Profesional"
