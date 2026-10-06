@@ -6,6 +6,7 @@ import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import java.text.Normalizer
 
 /**
  * Directorio de profesionales (`/tecnicos`): listado en tiempo real, perfil
@@ -190,32 +191,31 @@ class RepositorioTecnicos {
             "igualada"       to (41.5807 to 1.6175)
         )
 
+        // Claves sin tildes, en minúsculas y con los signos como espacios
+        private val CIUDADES_NORMALIZADAS: Map<String, Pair<Double, Double>> by lazy {
+            CIUDADES_COORDS.mapKeys { normalizar(it.key) }
+        }
+
         /**
          * Devuelve coordenadas para el nombre de ciudad introducido por el
-         * técnico. Intenta varias tolerancias antes de rendirse:
-         *   1) match exacto con la clave normalizada (lowercase + trim).
-         *   2) match sin tildes (Á → a) por si el usuario las omite y la
-         *      clave canónica las lleva (o viceversa).
-         *   3) match por contención: si el texto incluye o está incluido
-         *      en una clave conocida (ej. "Palencia capital" → "palencia",
-         *      "Pza. Mayor, Madrid" → "madrid"). Devuelve el match más
-         *      largo para evitar falsos positivos.
+         * técnico, sin tildes ni mayúsculas:
+         *   1) la ciudad exacta;
+         *   2) si el texto CONTIENE una ciudad conocida como palabras completas
+         *      ("Palencia capital" → palencia, "Pza. Mayor, Madrid" → madrid),
+         *      la más larga ("San Sebastián de los Reyes" no es Donostia).
+         * Antes se buscaba por trozos de palabra en los dos sentidos y salían
+         * disparates: "Villaviciosa de Odón" acababa en Vic (Barcelona) y
+         * "Lugones" en Lugo. Ciudad desconocida → null (sin coordenadas).
          */
         fun coordenadasDeCiudad(ciudad: String): Pair<Double, Double>? {
-            val raw = ciudad.trim().lowercase()
-            if (raw.isEmpty()) return null
-            CIUDADES_COORDS[raw]?.let { return it }
-
-            val sinTildes = quitarTildes(raw)
-            CIUDADES_COORDS[sinTildes]?.let { return it }
-
-            val claveCoincidente = CIUDADES_COORDS.keys
-                .filter { clave ->
-                    val claveSinT = quitarTildes(clave)
-                    sinTildes.contains(claveSinT) || claveSinT.contains(sinTildes)
-                }
-                .maxByOrNull { it.length }
-            return claveCoincidente?.let { CIUDADES_COORDS[it] }
+            val texto = normalizar(ciudad)
+            if (texto.isEmpty()) return null
+            CIUDADES_NORMALIZADAS[texto]?.let { return it }
+            val conEspacios = " $texto "
+            return CIUDADES_NORMALIZADAS.entries
+                .filter { (clave, _) -> conEspacios.contains(" $clave ") }
+                .maxByOrNull { it.key.length }
+                ?.value
         }
 
         // Provincias cuyo nombre no es el de su capital (el resto coincide)
@@ -233,10 +233,12 @@ class RepositorioTecnicos {
         fun coordenadasDeProvincia(provincia: String): Pair<Double, Double>? =
             coordenadasDeCiudad(CAPITAL_DE_PROVINCIA[provincia.trim()] ?: provincia)
 
-        private fun quitarTildes(s: String): String = s
-            .replace('á', 'a').replace('é', 'e').replace('í', 'i')
-            .replace('ó', 'o').replace('ú', 'u').replace('ü', 'u')
-            .replace('ñ', 'n')
+        /** "Vélez-Málaga" → "velez malaga", "L'Hospitalet" → "l hospitalet". */
+        private fun normalizar(s: String): String =
+            Normalizer.normalize(s.trim().lowercase(), Normalizer.Form.NFD)
+                .replace(Regex("\\p{Mn}+"), "")
+                .replace(Regex("[^a-z0-9]+"), " ")
+                .trim()
     }
 
     fun obtenerTecnicos(callback: (List<Tecnico>) -> Unit) {

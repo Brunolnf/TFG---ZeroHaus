@@ -33,4 +33,26 @@ class UbicacionesTest {
         assertNull(RepositorioTecnicos.coordenadasDeCiudad(""))
         assertNull(RepositorioTecnicos.coordenadasDeCiudad("Springfield"))
     }
+
+    @Test
+    fun `una ciudad dentro de un texto se reconoce por palabras completas`() {
+        val madrid = RepositorioTecnicos.coordenadasDeCiudad("madrid")
+        assertEquals(madrid, RepositorioTecnicos.coordenadasDeCiudad("Pza. Mayor, Madrid"))
+        assertEquals(RepositorioTecnicos.coordenadasDeCiudad("palencia"), RepositorioTecnicos.coordenadasDeCiudad("Palencia capital"))
+        assertEquals(RepositorioTecnicos.coordenadasDeCiudad("hospitalet"), RepositorioTecnicos.coordenadasDeCiudad("L'Hospitalet de Llobregat"))
+        assertEquals(RepositorioTecnicos.coordenadasDeCiudad("velez malaga"), RepositorioTecnicos.coordenadasDeCiudad("Vélez-Málaga"))
+        // La más larga: San Sebastián de los Reyes está en Madrid, no es Donostia
+        assertEquals(
+            RepositorioTecnicos.coordenadasDeCiudad("san sebastián de los reyes"),
+            RepositorioTecnicos.coordenadasDeCiudad("San Sebastián de los Reyes (Madrid)")
+        )
+    }
+
+    @Test
+    fun `un trozo de palabra no es una ciudad`() {
+        // Antes "Villaviciosa de Odón" acababa en Vic (Barcelona) y "Lugones" en Lugo
+        assertNull(RepositorioTecnicos.coordenadasDeCiudad("Villaviciosa de Odón"))
+        assertNull(RepositorioTecnicos.coordenadasDeCiudad("Lugones"))
+        assertNull(RepositorioTecnicos.coordenadasDeCiudad("a"))
+    }
 }
