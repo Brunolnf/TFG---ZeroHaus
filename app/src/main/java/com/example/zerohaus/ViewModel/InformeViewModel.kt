@@ -82,10 +82,14 @@ class InformeViewModel : ViewModel() {
         cargando = false
     }
 
-    /** Carga la vivienda del informe actual (si aún existe) para el simulador. */
+    /**
+     * Carga la vivienda del informe actual (si aún existe) para el simulador.
+     * Se vuelve a leer con cada informe aunque sea la misma vivienda: puede
+     * haberse editado en el preestudio desde la última vez.
+     */
     fun cargarViviendaDelInforme() {
         val id = informe?.viviendaId.orEmpty()
-        if (id.isEmpty() || vivienda?.id == id) return
+        if (id.isEmpty()) return
         repoViviendas.obtenerViviendas { lista ->
             val v = lista.firstOrNull { it.id == id }
             vivienda = v
