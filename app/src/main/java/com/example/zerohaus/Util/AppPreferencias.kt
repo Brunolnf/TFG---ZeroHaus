@@ -47,6 +47,10 @@ class AppPreferencias private constructor(private val prefs: SharedPreferences) 
     fun getEsAdminCached(): Boolean = prefs.getBoolean("es_admin_cache", false)
     fun setEsAdminCached(v: Boolean) = prefs.edit().putBoolean("es_admin_cache", v).apply()
 
+    // Permiso de ubicación del directorio: se pide solo una vez sin que lo pulse
+    fun getUbicacionPedida(): Boolean = prefs.getBoolean("ubicacion_pedida", false)
+    fun setUbicacionPedida(v: Boolean) = prefs.edit().putBoolean("ubicacion_pedida", v).apply()
+
     // Valoración in-app: solo la pedimos una vez y tras varias interacciones.
     fun getResenaPedida(): Boolean = prefs.getBoolean("resena_pedida", false)
     fun setResenaPedida(v: Boolean) = prefs.edit().putBoolean("resena_pedida", v).apply()
