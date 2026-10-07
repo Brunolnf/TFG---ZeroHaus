@@ -91,12 +91,23 @@ object NotificacionesLocales {
         ).forEach { manager.deleteNotificationChannel(it) }
     }
 
+    /** Extra del Intent con el chat que abre un aviso de mensaje (mismo nombre que el `data` del push). */
+    const val EXTRA_CHAT_ID = "chatId"
+
     fun mostrar(titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
         val ctx = appContext ?: return
         mostrar(ctx, titulo, cuerpo, tipo, conSonido)
     }
 
-    fun mostrar(context: Context, titulo: String, cuerpo: String, tipo: String = "general", conSonido: Boolean = true) {
+    /**
+     * Muestra un aviso con la app abierta. Con [chatId], tocarlo abre ese chat
+     * y los mensajes de un mismo chat comparten un único aviso (el último), en
+     * vez de apilarse uno por mensaje.
+     */
+    fun mostrar(
+        context: Context, titulo: String, cuerpo: String, tipo: String = "general",
+        conSonido: Boolean = true, chatId: String? = null
+    ) {
         if (esDuplicado(titulo, cuerpo, tipo)) return
         val canalId = when {
             !conSonido                          -> CANAL_SILENCIO
@@ -104,11 +115,13 @@ object NotificacionesLocales {
             else                                -> CANAL_GENERAL
         }
 
+        val idAviso = chatId?.hashCode() ?: System.currentTimeMillis().toInt()
         val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            chatId?.let { putExtra(EXTRA_CHAT_ID, it) }
         }
         val pendingIntent = PendingIntent.getActivity(
-            context, System.currentTimeMillis().toInt(), intent,
+            context, idAviso, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -130,10 +143,15 @@ object NotificacionesLocales {
             .build()
 
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-            .notify(System.currentTimeMillis().toInt(), notif)
+            .notify(idAviso, notif)
 
         // Vibrar también cuando la app está en primer plano
         if (conSonido) vibrar(context)
+    }
+
+    /** Quita el aviso de un chat (al abrirlo ya no hace falta). */
+    fun quitarAvisoDeChat(context: Context, chatId: String) {
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(chatId.hashCode())
     }
 
     private fun vibrar(context: Context) {

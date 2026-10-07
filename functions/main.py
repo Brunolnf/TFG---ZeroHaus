@@ -390,6 +390,9 @@ def _enviar_push(destino: dict, titulo: str, cuerpo: str, data: dict = None, son
             notification=messaging.AndroidNotification(
                 channel_id=canal,
                 sound="default" if sonido else None,
+                # Un aviso por chat: el siguiente mensaje sustituye al anterior
+                # en vez de apilarse (y tocarlo abre ese chat: el chatId va en data)
+                tag=(data or {}).get("chatId"),
             ),
         ),
     )
