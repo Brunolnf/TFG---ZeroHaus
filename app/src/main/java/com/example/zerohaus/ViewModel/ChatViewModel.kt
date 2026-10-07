@@ -1,11 +1,17 @@
 package com.example.zerohaus.ViewModel
 
 import androidx.compose.runtime.*
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Repositorios.RepositorioChat
+import com.example.zerohaus.Util.Imagenes
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.example.zerohaus.Util.AppEstado
@@ -42,7 +48,7 @@ data class ChatEstado(
  * Lista de conversaciones y conversación abierta: escucha en tiempo real,
  * paginación de mensajes y envío de texto, imágenes y archivos.
  */
-class ChatViewModel : ViewModel() {
+class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     var listaEstado by mutableStateOf(ChatListEstado())
         private set
@@ -59,6 +65,7 @@ class ChatViewModel : ViewModel() {
     private var listenerMensajes: ListenerRegistration? = null
     private var chatAbierto: String? = null
     private var limiteMensajes = PAGINA_MENSAJES
+    private var iniciandoChat = false
 
     private val authStateListener = FirebaseAuth.AuthStateListener { auth ->
         if (auth.currentUser == null) {
@@ -151,7 +158,10 @@ class ChatViewModel : ViewModel() {
                 chatEstado.copy(mensajes = mensajes, hayMasMensajes = hayMas, cargandoAnteriores = false)
             else
                 chatEstado.copy(hayMasMensajes = false, cargandoAnteriores = false)
-            repo.marcarLeidos(chatId)
+            // Solo si de verdad hay no leídos: antes se escribía en el chat con
+            // cada cambio de la conversación (también con los mensajes propios)
+            val chat = listaEstado.chats.firstOrNull { it.id == chatId }
+            if (chat == null || chat.tieneNoLeidos(miUid)) repo.marcarLeidos(chatId)
         }
     }
 
@@ -207,8 +217,20 @@ class ChatViewModel : ViewModel() {
         val uri = chatEstado.imagenPendiente ?: return
         val caption = chatEstado.captionImagen.trim()
         chatEstado = chatEstado.copy(subiendoMedia = true, imagenPendiente = null, captionImagen = "")
-        repo.enviarImagen(chatId, uri, caption) { ok ->
-            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) getCadenas(AppEstado.idioma).chatErrorImagen else null)
+        val errorImagen = getCadenas(AppEstado.idioma).chatErrorImagen
+        viewModelScope.launch {
+            // Comprimida antes de subir: una foto del móvil pesa 3-20 MB y las
+            // de más de 15 MB las rechazaba Storage
+            val jpeg = withContext(Dispatchers.IO) {
+                try { Imagenes.comprimir(getApplication(), uri, LADO_FOTO) } catch (_: OutOfMemoryError) { null }
+            }
+            if (jpeg == null) {
+                chatEstado = chatEstado.copy(subiendoMedia = false, error = errorImagen)
+                return@launch
+            }
+            repo.enviarImagen(chatId, jpeg, caption) { ok ->
+                chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) errorImagen else null)
+            }
         }
     }
 
@@ -230,13 +252,17 @@ class ChatViewModel : ViewModel() {
         tecnicoNombre: String,
         onChatListo: (String) -> Unit
     ) {
+        // Un doble toque en «Chatear» creaba dos conversaciones con la misma persona
+        if (iniciandoChat) return
+        iniciandoChat = true
+        val listo: (String) -> Unit = { chatId -> iniciandoChat = false; onChatListo(chatId) }
         db.collection("usuarios").document(miUid).get()
             .addOnSuccessListener { doc ->
                 val miNombre = doc.getString("nombre") ?: "Usuario"
-                repo.obtenerOCrearChat(tecnicoUid, tecnicoNombre, miNombre, onChatListo)
+                repo.obtenerOCrearChat(tecnicoUid, tecnicoNombre, miNombre, listo)
             }
             .addOnFailureListener {
-                repo.obtenerOCrearChat(tecnicoUid, tecnicoNombre, "Usuario", onChatListo)
+                repo.obtenerOCrearChat(tecnicoUid, tecnicoNombre, "Usuario", listo)
             }
     }
 
@@ -253,5 +279,6 @@ class ChatViewModel : ViewModel() {
 
     companion object {
         private const val PAGINA_MENSAJES = 50L
+        private const val LADO_FOTO = 1600   // px: de sobra para verla en el móvil
     }
 }

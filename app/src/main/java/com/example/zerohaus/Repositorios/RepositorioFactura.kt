@@ -1,15 +1,13 @@
 package com.example.zerohaus.Repositorios
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import com.example.zerohaus.Util.Diagnostico
+import com.example.zerohaus.Util.Imagenes
 import com.example.zerohaus.Util.esFalloDeRed
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
-import java.io.ByteArrayOutputStream
 
 /** Lo que se lee de una factura de la luz, ya validado por el servidor. */
 data class DatosFactura(
@@ -89,29 +87,11 @@ class RepositorioFactura {
                 if (bytes.size > MAX_BYTES) throw ErrorFacturaException(ErrorFactura.DEMASIADO_GRANDE)
                 return mime to bytes
             }
-            // Imagen (o tipo desconocido, como la foto recién hecha): se decodifica
-            val limites = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, limites) }
-            if (limites.outWidth <= 0 || limites.outHeight <= 0) throw ErrorFacturaException(ErrorFactura.NO_LEGIBLE)
-            var muestreo = 1
-            while (maxOf(limites.outWidth, limites.outHeight) / (muestreo * 2) >= LADO_MAX) muestreo *= 2
-            // RGB_565 ocupa la mitad que ARGB_8888 y para leer texto sobra: en el
-            // peor caso (lado de casi 4096 px) la foto queda en unos 25 MB
-            val bitmap = resolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply {
-                    inSampleSize = muestreo
-                    inPreferredConfig = Bitmap.Config.RGB_565
-                })
-            } ?: throw ErrorFacturaException(ErrorFactura.NO_LEGIBLE)
-            val escala = LADO_MAX.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val final = if (escala < 1f)
-                Bitmap.createScaledBitmap(bitmap, (bitmap.width * escala).toInt(), (bitmap.height * escala).toInt(), true)
-            else bitmap
-            val salida = ByteArrayOutputStream()
-            final.compress(Bitmap.CompressFormat.JPEG, 85, salida)
-            if (final !== bitmap) final.recycle()
-            bitmap.recycle()
-            return "image/jpeg" to salida.toByteArray()
+            // Imagen (o tipo desconocido, como la foto recién hecha): reducida,
+            // con la orientación del EXIF y en JPEG
+            val jpeg = Imagenes.comprimir(context, uri, LADO_MAX)
+                ?: throw ErrorFacturaException(ErrorFactura.NO_LEGIBLE)
+            return "image/jpeg" to jpeg
         }
     }
 }

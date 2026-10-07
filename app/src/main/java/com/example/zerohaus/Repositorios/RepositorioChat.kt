@@ -10,6 +10,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Source
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 
 /**
  * Chat entre clientes y profesionales: crear o recuperar conversaciones,
@@ -223,12 +224,13 @@ class RepositorioChat {
         }
     }
 
-    fun enviarImagen(chatId: String, uri: Uri, caption: String = "", callback: (Boolean) -> Unit) {
+    /** Envía una foto ya comprimida en JPEG ([com.example.zerohaus.Util.Imagenes]). */
+    fun enviarImagen(chatId: String, jpeg: ByteArray, caption: String = "", callback: (Boolean) -> Unit) {
         val miUid = uid()
         val ref = db.collection("chats").document(chatId).collection("mensajes").document()
         val storageRef = storage.reference.child("chats/$chatId/${ref.id}.jpg")
 
-        storageRef.putFile(uri)
+        storageRef.putBytes(jpeg, StorageMetadata.Builder().setContentType("image/jpeg").build())
             .continueWithTask { task ->
                 if (!task.isSuccessful) throw task.exception!!
                 storageRef.downloadUrl

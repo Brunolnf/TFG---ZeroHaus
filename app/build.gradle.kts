@@ -143,6 +143,10 @@ dependencies {
     // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 
+    // Orientación EXIF de las fotos al comprimirlas (Util/Imagenes.kt). Ya
+    // venía en el APK por otras librerías; se declara para poder usarla.
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
+
     // Test
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
