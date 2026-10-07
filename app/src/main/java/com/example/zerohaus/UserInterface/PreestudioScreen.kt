@@ -123,7 +123,7 @@ fun PreestudioScreen(
                                             tint = Color(0xFF059669),
                                             modifier = Modifier.size(14.dp))
                                         Text(
-                                            "${c.preDatosCargados} «${estado.viviendaSeleccionada!!.nombre}»",
+                                            "${c.preDatosCargados} «${estado.viviendaSeleccionada.nombre}»",
                                             fontSize = 12.sp,
                                             color = Color(0xFF059669)
                                         )
