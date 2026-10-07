@@ -61,7 +61,7 @@ fun AjustesScreen(
     val estado = viewModel.estado
 
     val context = LocalContext.current
-    val prefs = remember { AppPreferencias(context) }
+    val prefs = remember { AppPreferencias.de(context) }
 
     var expT by remember { mutableStateOf(false) }
     var expI by remember { mutableStateOf(false) }

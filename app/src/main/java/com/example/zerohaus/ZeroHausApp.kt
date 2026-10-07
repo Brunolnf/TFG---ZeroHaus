@@ -36,7 +36,7 @@ class ZeroHausApp : Application() {
             }
         }
 
-        AppEstado.inicializar(AppPreferencias(this))
+        AppEstado.inicializar(AppPreferencias.de(this))
         Diagnostico.inicializar()
 
         // 2. Canales de notificación.
