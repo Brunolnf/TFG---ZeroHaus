@@ -25,6 +25,8 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.
 - Fotos del chat y de perfil comprimidas antes de subirlas (y con su orientación); el directorio ya no descarga todas las reseñas; el perfil público carga sus datos a la vez.
 - Directorio con ubicación aproximada y sin pedir el permiso cada vez.
+- La app arranca con una sola pantalla de bienvenida (la del sistema).
+- El plan «Destacado + Anuncios» deja de venderse: prometía una campaña de Google Ads que nada gestionaba (quien lo tenga lo conserva).
 - FCM pasa al ID de instalación (FID) con el token antiguo de respaldo; preferencias locales sin `EncryptedSharedPreferences` (obsoleto), migradas sin perder ajustes; versiones fijas en el backend.
 
 ### Añadido
