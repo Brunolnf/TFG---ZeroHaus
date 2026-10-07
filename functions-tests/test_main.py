@@ -124,6 +124,30 @@ class ResumenMensajeTest(unittest.TestCase):
             self.assertEqual(set(tabla), set(main._TEXTOS_EMAIL))
 
 
+class _DocFalso:
+    def __init__(self, datos): self._datos = datos
+    def get(self): return self
+    def to_dict(self): return self._datos
+
+
+class _DBFalsa:
+    """Lo justo de Firestore para leer /usuarios/{uid}."""
+    def __init__(self, usuarios): self._usuarios = usuarios
+    def collection(self, _nombre): return self
+    def document(self, uid): return _DocFalso(self._usuarios.get(uid))
+
+
+class NombreRealTest(unittest.TestCase):
+
+    def test_usa_el_nombre_del_perfil_y_no_el_del_mensaje(self):
+        db = _DBFalsa({"u1": {"nombre": "Ana López"}})
+        self.assertEqual(main._nombre_real(db, "u1", "ZeroHaus Soporte"), "Ana López")
+
+    def test_sin_perfil_usa_el_respaldo_recortado(self):
+        self.assertEqual(main._nombre_real(_DBFalsa({}), "u2", "x" * 100), "x" * 60)
+        self.assertEqual(main._nombre_real(_DBFalsa({}), "", ""), "ZeroHaus")
+
+
 class ConfiguracionTest(unittest.TestCase):
 
     def test_ningun_modelo_por_defecto_esta_retirado(self):
