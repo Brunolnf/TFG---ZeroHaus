@@ -1,6 +1,7 @@
 package com.example.zerohaus
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,7 @@ import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.SecurityUtil
 import com.example.zerohaus.Util.getCadenas
 import com.example.zerohaus.Util.Diagnostico
+import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
 
 /**
@@ -84,6 +86,7 @@ class MainActivity : ComponentActivity() {
 
         pedirPermisoNotificaciones()
         ServicioNotificaciones.registrarToken()
+        leerChatDelAviso(intent)
 
         setContent {
             val systemDark = isSystemInDarkTheme()
@@ -106,6 +109,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    // Con la app ya abierta (launchMode singleTop) el aviso llega por aquí
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        leerChatDelAviso(intent)
+    }
+
+    /**
+     * Si la app se abre tocando un aviso de mensaje, recuerda su chat para
+     * abrirlo directamente. Vale para los avisos que pinta Android con la app
+     * en segundo plano (el `data` del push llega como extras) y para los de
+     * NotificacionesLocales.
+     */
+    private fun leerChatDelAviso(intent: Intent?) {
+        intent?.getStringExtra(NotificacionesLocales.EXTRA_CHAT_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { AppEstado.chatPendiente = it }
     }
 
     override fun onDestroy() {

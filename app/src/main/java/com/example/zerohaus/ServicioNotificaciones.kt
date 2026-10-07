@@ -1,6 +1,7 @@
 package com.example.zerohaus
 
 import android.util.Log
+import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
@@ -52,7 +53,10 @@ class ServicioNotificaciones : FirebaseMessagingService() {
         val titulo = message.notification?.title ?: message.data["titulo"] ?: "ZeroHaus"
         val cuerpo  = message.notification?.body  ?: message.data["detalle"] ?: ""
         val tipo    = message.data["tipo"] ?: "general"
-        NotificacionesLocales.mostrar(this, titulo, cuerpo, tipo, conSonido = prefs.getNotificacionesSonido())
+        val chatId  = message.data["chatId"]
+        // Mensaje del chat que se está viendo: ya lo tiene delante
+        if (chatId != null && chatId == AppEstado.chatAbiertoId) return
+        NotificacionesLocales.mostrar(this, titulo, cuerpo, tipo, conSonido = prefs.getNotificacionesSonido(), chatId = chatId)
     }
 
     companion object {
