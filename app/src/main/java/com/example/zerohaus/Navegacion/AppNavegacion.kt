@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -49,12 +48,9 @@ private const val RUTA_VERIFICAR_PATRON = "$RUTA_VERIFICAR?siguiente={siguiente}
 fun AppNavegacion() {
     val sesionVM: SesionViewModel = viewModel()
 
-    var mostrarSplash by rememberSaveable { mutableStateOf(true) }
-
-    if (mostrarSplash) {
-        SplashScreen { mostrarSplash = false }
-        return
-    }
+    // Sin pantalla de bienvenida propia: la del sistema (installSplashScreen en
+    // MainActivity) ya muestra el icono mientras arranca; la de Compose añadía
+    // medio segundo más en cada apertura.
 
     // logueado es Boolean (nunca null): se inicializa sincrónico en SesionViewModel.init
     val logueado = sesionVM.logueado.value
