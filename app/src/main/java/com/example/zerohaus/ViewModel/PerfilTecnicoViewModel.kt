@@ -53,33 +53,45 @@ class PerfilTecnicoViewModel : ViewModel() {
 
     fun cargarTecnico(tecnicoId: String) {
         estado = estado.copy(cargando = true)
-        repoTecnicos.obtenerTecnico(tecnicoId) { tecnico ->
-            estado = estado.copy(tecnico = tecnico)
-            repoResenas.obtenerResenas(tecnicoId) { resenas ->
-                val realOpiniones = resenas.size
-                val realRating = if (resenas.isEmpty()) 0.0
-                                 else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
-                val tecnicoCorregido = tecnico?.copy(opiniones = realOpiniones, rating = realRating)
-                repoResenas.yaValorado(tecnicoId) { valorado ->
-                    val uidProfesional = tecnico?.uid?.takeIf { it.isNotBlank() } ?: tecnicoId
-                    repoChat.buscarConversacionCon(uidProfesional) { chatId ->
-                        val esMiPerfil = repoAuth.getUid() == uidProfesional
-                        estado = estado.copy(
-                            tecnico = tecnicoCorregido,
-                            resenas = resenas,
-                            yaValorado = valorado,
-                            esMiPerfil = esMiPerfil,
-                            chatIdConversacion = chatId,
-                            cargando = false
-                        )
-                        if (!esMiPerfil && tecnico != null && visitaRegistrada != tecnicoId) {
-                            visitaRegistrada = tecnicoId
-                            repoEstadisticas.registrarEvento(tecnicoId, RepositorioEstadisticas.VISITA)
-                        }
-                    }
-                }
+        // Las lecturas van a la vez (antes en cadena: perfil → reseñas → «ya
+        // valorado» → chats) y «ya valorado» sale de las propias reseñas.
+        var tecnico: Tecnico? = null
+        var resenas: List<Resena> = emptyList()
+        var chatId: String? = null
+        var pendientes = 3
+        fun terminar() {
+            if (--pendientes > 0) return
+            val miUid = repoAuth.getUid()
+            val uidProfesional = tecnico?.uid?.takeIf { it.isNotBlank() } ?: tecnicoId
+            val esMiPerfil = miUid == uidProfesional
+            val rating = if (resenas.isEmpty()) 0.0
+                         else Math.round(resenas.map { it.puntuacion }.average() * 10.0) / 10.0
+            estado = estado.copy(
+                tecnico = tecnico?.copy(opiniones = resenas.size, rating = rating),
+                resenas = resenas,
+                yaValorado = miUid != null && resenas.any { it.uid == miUid },
+                esMiPerfil = esMiPerfil,
+                chatIdConversacion = chatId,
+                cargando = false
+            )
+            if (!esMiPerfil && tecnico != null && visitaRegistrada != tecnicoId) {
+                visitaRegistrada = tecnicoId
+                repoEstadisticas.registrarEvento(tecnicoId, RepositorioEstadisticas.VISITA)
             }
         }
+        repoTecnicos.obtenerTecnico(tecnicoId) { t ->
+            tecnico = t
+            // Perfiles antiguos reclamados: el id del documento no es el uid del
+            // profesional, y el chat está a nombre del uid
+            val uid = t?.uid
+            if (!uid.isNullOrBlank() && uid != tecnicoId) {
+                pendientes++
+                repoChat.buscarConversacionCon(uid) { c -> chatId = chatId ?: c; terminar() }
+            }
+            terminar()
+        }
+        repoResenas.obtenerResenas(tecnicoId) { r -> resenas = r; terminar() }
+        repoChat.buscarConversacionCon(tecnicoId) { c -> chatId = chatId ?: c; terminar() }
     }
 
     fun publicarResena(tecnicoId: String, puntuacion: Int, comentario: String) {
