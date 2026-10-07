@@ -564,6 +564,29 @@ def on_resena_changed(event) -> None:
                     )
 
 
+def _recalcular_todos_los_ratings(db) -> int:
+    """Pone `rating` y `opiniones` de cada profesional según sus reseñas reales.
+
+    on_resena_changed los mantiene al día; esto corrige perfiles antiguos (de
+    pruebas, o de antes del trigger) cuya nota no sale de reseñas. La app se
+    fía de estos campos y ya no descarga todas las reseñas en cada móvil.
+    Devuelve cuántos perfiles se han corregido."""
+    notas = {}
+    for r in db.collection("resenas").stream():
+        d = r.to_dict() or {}
+        if d.get("tecnicoId"):
+            notas.setdefault(d["tecnicoId"], []).append(int(d.get("puntuacion") or 0))
+    corregidos = 0
+    for t in db.collection("tecnicos").stream():
+        lista = notas.get(t.id, [])
+        rating = round(sum(lista) / len(lista), 2) if lista else 0.0
+        actual = t.to_dict() or {}
+        if actual.get("rating") != rating or actual.get("opiniones") != len(lista):
+            t.reference.update({"rating": rating, "opiniones": len(lista)})
+            corregidos += 1
+    return corregidos
+
+
 def _recalcular_rating(db, tecnico_id: str) -> None:
     """Recalcula `rating` y `opiniones` del profesional a partir de todas sus reseñas."""
     q = db.collection("resenas").where(filter=FieldFilter("tecnicoId", "==", tecnico_id))
@@ -1542,8 +1565,9 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
     region=REGION,
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
-    """Red de seguridad por si falla o no está configurado RTDN, y limpieza
-    diaria (eventos de estadísticas y notificaciones antiguas)."""
+    """Red de seguridad por si falla o no está configurado RTDN, limpieza
+    diaria (eventos de estadísticas y notificaciones antiguas) y nota de los
+    profesionales recalculada con sus reseñas."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1575,6 +1599,12 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[NOTIFICACIONES] Antiguas borradas: {_purgar_notificaciones_antiguas(db)}")
     except Exception as e:
         print(f"[NOTIFICACIONES] No se pudieron purgar: {e}")
+
+    # 5) Nota de los profesionales = la de sus reseñas reales
+    try:
+        print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
+    except Exception as e:
+        print(f"[VALORACIONES] No se pudieron recalcular: {e}")
 
 
 # Copias de seguridad: las hace Firestore (copias gestionadas, diaria 7 días y
