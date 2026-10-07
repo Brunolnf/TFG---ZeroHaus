@@ -8,6 +8,7 @@ import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.Imagenes
+import com.example.zerohaus.Util.NotificacionesLocales
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -107,6 +108,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         listenerMensajes?.remove()
         chatEstado = ChatEstado()
         chatAbierto = chatId
+        AppEstado.chatAbiertoId = chatId
+        NotificacionesLocales.quitarAvisoDeChat(getApplication(), chatId)
         limiteMensajes = PAGINA_MENSAJES
 
         // Nombre del otro participante
@@ -268,11 +271,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cerrarChat() {
         listenerMensajes?.remove()
+        AppEstado.chatAbiertoId = null
     }
 
     override fun onCleared() {
         super.onCleared()
         FirebaseAuth.getInstance().removeAuthStateListener(authStateListener)
+        AppEstado.chatAbiertoId = null
         listenerChats?.remove()
         listenerMensajes?.remove()
     }
