@@ -195,19 +195,23 @@ fun SuscripcionScreen(
                 onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.DESTACADO_MENSUAL) } }
             )
 
-            // Destacado + Anuncios
-            PlanCard(
-                titulo = c.subDestacadoAnuncios,
-                precio = estado.precios[Planes.DESTACADO_ANUNCIOS_MENSUAL],
-                cargandoPrecio = !estado.billingListo,
-                detalle = c.subDestacadoAnunciosDet,
-                color = Color(0xFF7C3AED),
-                icono = Icons.Default.Campaign,
-                activo = planVigente == Planes.DESTACADO_ANUNCIOS_MENSUAL,
-                cambioDePlan = hayPlan,
-                habilitado = puedeComprar,
-                onSuscribir = { activity?.let { viewModel.suscribirse(it, Planes.DESTACADO_ANUNCIOS_MENSUAL) } }
-            )
+            // Destacado + Anuncios: fuera de venta. Promete una campaña de Google
+            // Ads gestionada que hoy no gestiona nada; solo se muestra a quien ya
+            // lo tenga contratado (para ver su plan y poder cambiarlo).
+            if (planVigente == Planes.DESTACADO_ANUNCIOS_MENSUAL) {
+                PlanCard(
+                    titulo = c.subDestacadoAnuncios,
+                    precio = estado.precios[Planes.DESTACADO_ANUNCIOS_MENSUAL],
+                    cargandoPrecio = !estado.billingListo,
+                    detalle = c.subDestacadoAnunciosDet,
+                    color = Color(0xFF7C3AED),
+                    icono = Icons.Default.Campaign,
+                    activo = true,
+                    cambioDePlan = hayPlan,
+                    habilitado = puedeComprar,
+                    onSuscribir = {}
+                )
+            }
 
             // Beneficios
             Card(
