@@ -30,6 +30,7 @@ import com.example.zerohaus.BuildConfig
 import com.example.zerohaus.ViewModel.AjustesViewModel
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
+import com.example.zerohaus.Util.BillingManager
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.NotificacionesLocales
 
@@ -385,7 +386,21 @@ fun AjustesScreen(
             onDismissRequest = { if (!estado.eliminandoCuenta) mostrarEliminar = false },
             icon = { Icon(Icons.Filled.DeleteForever, null, tint = rojo) },
             title = { Text(c.ajustesEliminarTitulo, fontWeight = FontWeight.SemiBold) },
-            text = { Text(c.ajustesEliminarMensaje) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(c.ajustesEliminarMensaje)
+                    // Borrar la cuenta no cancela la suscripción de Google Play:
+                    // un profesional seguiría pagando sin saberlo
+                    val esProfesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
+                    if (esProfesional) {
+                        Text(c.ajustesEliminarAvisoSuscripcion, color = rojo, fontSize = 13.sp)
+                        TextButton(
+                            onClick = { abrirUrl(BillingManager.urlGestionSuscripcion(PLAY_ID)) },
+                            contentPadding = PaddingValues(0.dp)
+                        ) { Text(c.subGestionar) }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     enabled = !estado.eliminandoCuenta,
