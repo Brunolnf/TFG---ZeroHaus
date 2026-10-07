@@ -44,6 +44,7 @@ import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.esEmpresa
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Util.Formato
+import com.example.zerohaus.Util.AppPreferencias
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.OrdenTecnicos
 import com.example.zerohaus.ViewModel.OrigenUbicacion
@@ -92,18 +93,18 @@ fun TecnicosScreen(
         // Tras dos negativas Android ya no muestra el diálogo y la petición
         // falla sin más: solo queda llevar al usuario a los ajustes de la app.
         if (permisoDenegado && actividad != null &&
-            !ActivityCompat.shouldShowRequestPermissionRationale(actividad, Manifest.permission.ACCESS_FINE_LOCATION)
+            !ActivityCompat.shouldShowRequestPermissionRationale(actividad, Manifest.permission.ACCESS_COARSE_LOCATION)
         ) {
             actividad.startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null))
             )
         } else {
-            locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            locationPermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
     }
     // Al volver de los ajustes con el permiso concedido, se lee el GPS
     LifecycleResumeEffect(Unit) {
-        if (permisoDenegado && ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        if (permisoDenegado && ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             permisoDenegado = false
             obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
         }
@@ -111,11 +112,15 @@ fun TecnicosScreen(
     }
     LaunchedEffect(Unit) {
         viewModel.cargarTecnicos()
-        val tienePermiso = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val tienePermiso = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val prefs = AppPreferencias.de(ctx)
         if (tienePermiso) {
             obtenerUbicacion(ctx) { lat, lng -> viewModel.actualizarUbicacion(lat, lng) }
-        } else {
-            locationPermLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        } else if (!prefs.getUbicacionPedida()) {
+            // Se pide sola solo la primera vez (antes, cada vez que se entraba);
+            // después queda el botón «Usar mi ubicación»
+            prefs.setUbicacionPedida(true)
+            locationPermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
         // Sin ubicación real no se inventa una: la lista se ordena por
         // valoración y no se muestran distancias.
@@ -556,7 +561,7 @@ private tailrec fun Context.buscarActivity(): Activity? = when (this) {
     else -> null
 }
 
-@androidx.annotation.RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+@androidx.annotation.RequiresPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
 private fun obtenerUbicacion(context: android.content.Context, onResult: (Double, Double) -> Unit) {
     try {
         val client = LocationServices.getFusedLocationProviderClient(context)
