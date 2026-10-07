@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Solo lo que la app comparte o pasa a otra app: los PDF de informes y
+     planes (cache/informes) y la foto de la factura que hace la cámara
+     (cache/factura). Antes se exponía toda la caché. -->
 <paths>
-    <cache-path name="shared_files" path="." />
+    <cache-path name="informes" path="informes/" />
+    <cache-path name="factura" path="factura/" />
 </paths>
