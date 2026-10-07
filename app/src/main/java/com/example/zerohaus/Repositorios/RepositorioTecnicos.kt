@@ -326,8 +326,6 @@ class RepositorioTecnicos {
             .addOnFailureListener { callback(null) }
     }
 
-    fun obtenerRanking(callback: (List<Tecnico>) -> Unit) = obtenerTecnicos(callback)
-
     /** Devuelve el perfil de técnico vinculado al uid de Auth actual. */
     fun obtenerMiPerfilTecnico(callback: (Tecnico?) -> Unit) {
         db.collection("tecnicos")

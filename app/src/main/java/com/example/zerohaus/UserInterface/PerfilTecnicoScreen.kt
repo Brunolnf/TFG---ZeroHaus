@@ -620,11 +620,3 @@ private fun ContactoCard(
     }
 }
 
-@Composable
-private fun StatItem(valor: String, label: String, verde: Color, gris: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(valor, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = verde)
-        Spacer(Modifier.height(2.dp))
-        Text(label, color = gris, fontSize = 12.sp)
-    }
-}

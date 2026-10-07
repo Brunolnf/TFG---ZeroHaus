@@ -61,22 +61,16 @@ class RepositorioInformes {
             }
     }
 
-    fun obtenerInformes(
-        onSuccess: (List<InformeEnergetico>) -> Unit,
-        onError: ((Exception) -> Unit)? = null
-    ) {
+    /** Informes del usuario, del más reciente al más antiguo (vacío si no hay red ni caché). */
+    fun obtenerInformes(callback: (List<InformeEnergetico>) -> Unit) {
         db.collection("informes")
             .whereEqualTo("uid", uid())
             .getOrTimeout { snap ->
-                onSuccess(snap?.documents
+                callback(snap?.documents
                     ?.mapNotNull { it.toObject(InformeEnergetico::class.java) }
                     ?.sortedByDescending { it.fechaGeneracion } ?: emptyList())
             }
     }
-
-    // Sobrecarga de compatibilidad para llamadas que no necesitan el error
-    fun obtenerInformes(callback: (List<InformeEnergetico>) -> Unit) =
-        obtenerInformes(onSuccess = callback, onError = null)
 
     /** Consejos de IA ya guardados en el informe, solo si están en [idioma]. */
     fun obtenerSugerenciasGuardadas(informeId: String, idioma: String, callback: (SugerenciasIA?) -> Unit) {
