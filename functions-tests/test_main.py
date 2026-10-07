@@ -148,6 +148,41 @@ class NombreRealTest(unittest.TestCase):
         self.assertEqual(main._nombre_real(_DBFalsa({}), "", ""), "ZeroHaus")
 
 
+class EnviarPushTest(unittest.TestCase):
+
+    def setUp(self):
+        self.enviados = []
+        self.fallar_fid = False
+        self._original = main.messaging.send
+
+        def enviar(msg):
+            if msg.fid and self.fallar_fid:
+                raise main.messaging.UnregisteredError("FID dado de baja")
+            self.enviados.append("fid" if msg.fid else "token")
+        main.messaging.send = enviar
+
+    def tearDown(self):
+        main.messaging.send = self._original
+
+    def test_envia_al_fid_si_lo_hay(self):
+        main._enviar_push({"fid": "f1", "token": "t1"}, "Hola", "Texto")
+        self.assertEqual(self.enviados, ["fid"])
+
+    def test_si_el_fid_falla_usa_el_token_antiguo(self):
+        self.fallar_fid = True
+        main._enviar_push({"fid": "f1", "token": "t1"}, "Hola", "Texto")
+        self.assertEqual(self.enviados, ["token"])
+
+    def test_apps_antiguas_solo_con_token(self):
+        main._enviar_push({"fid": None, "token": "t1"}, "Hola", "Texto")
+        self.assertEqual(self.enviados, ["token"])
+
+    def test_sin_destino_no_envia_nada(self):
+        main._enviar_push({"fid": None, "token": None}, "Hola", "Texto")
+        main._enviar_push(None, "Hola", "Texto")
+        self.assertEqual(self.enviados, [])
+
+
 class ConfiguracionTest(unittest.TestCase):
 
     def test_ningun_modelo_por_defecto_esta_retirado(self):

@@ -9,6 +9,7 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="ajustes.xml" />
         <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+        <exclude domain="sharedpref" path="zerohaus_preferencias.xml" />
         <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
         <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
         <exclude domain="file" path="firebase-installations-store" />
@@ -16,6 +17,7 @@
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="zerohaus_prefs.xml" />
+        <exclude domain="sharedpref" path="zerohaus_preferencias.xml" />
         <exclude domain="sharedpref" path="zerohaus_secure_prefs.xml" />
         <exclude domain="sharedpref" path="com.google.android.gms.appid.xml" />
         <exclude domain="file" path="firebase-installations-store" />

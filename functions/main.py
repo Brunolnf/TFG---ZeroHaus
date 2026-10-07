@@ -289,7 +289,8 @@ def _preferencias(db, uid: str) -> dict:
     snap = db.collection("ajustes").document(uid).get()
     d = (snap.to_dict() or {}) if snap.exists else {}
     return {
-        "token": d.get("tokenFCM") or None,
+        # Destino del push: el FID (app 2.3+) y el token antiguo de respaldo
+        "destino": {"fid": d.get("fidFCM") or None, "token": d.get("tokenFCM") or None},
         "push": d.get("notificacionesPush", True) is not False,
         "sonido": d.get("notificacionesSonido", True) is not False,
         "email": d.get("notificacionesEmail", False) is True,
@@ -371,14 +372,17 @@ def _canal_para_tipo(tipo: str) -> str:
 CANAL_SILENCIO = "zerohaus_silencio_v1"   # canal sin sonido (Ajustes › Sonido desactivado)
 
 
-def _enviar_push(token, titulo: str, cuerpo: str, data: dict = None, sonido: bool = True) -> None:
-    """Envía un push por FCM. Si el token ya no es válido lo ignora sin fallar."""
-    if not token:
-        return
+def _enviar_push(destino: dict, titulo: str, cuerpo: str, data: dict = None, sonido: bool = True) -> None:
+    """Envía un push por FCM a un móvil.
+
+    FCM pasa de los tokens de registro al ID de instalación (FID): firebase-admin
+    marca `Message.token` como obsoleto. Se envía al FID si la app lo ha
+    guardado (`fidFCM`) y, si no hay o falla, al token antiguo (`tokenFCM`),
+    para que las versiones anteriores de la app sigan recibiendo avisos.
+    Un destino que ya no existe se ignora sin fallar."""
     tipo = (data or {}).get("tipo", "general")
     canal = _canal_para_tipo(str(tipo)) if sonido else CANAL_SILENCIO
-    msg = messaging.Message(
-        token=token,
+    comun = dict(
         notification=messaging.Notification(title=titulo, body=cuerpo),
         data={k: str(v) for k, v in (data or {}).items()},
         android=messaging.AndroidConfig(
@@ -389,12 +393,19 @@ def _enviar_push(token, titulo: str, cuerpo: str, data: dict = None, sonido: boo
             ),
         ),
     )
-    try:
-        messaging.send(msg)
-    except (messaging.UnregisteredError, messaging.SenderIdMismatchError):
-        pass
-    except Exception as e:
-        print(f"[FCM] Error enviando push a token {token[:20]}...: {e}")
+    intentos = []
+    if (destino or {}).get("fid"):
+        intentos.append(("fid", lambda: messaging.Message(fid=destino["fid"], **comun)))
+    if (destino or {}).get("token"):
+        intentos.append(("token", lambda: messaging.Message(token=destino["token"], **comun)))
+    for nombre, crear in intentos:
+        try:
+            messaging.send(crear())
+            return
+        except (messaging.UnregisteredError, messaging.SenderIdMismatchError):
+            continue  # ese destino ya no vale: se prueba el siguiente
+        except Exception as e:
+            print(f"[FCM] Error enviando push por {nombre}: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -439,7 +450,7 @@ def on_message_created(event) -> None:
             continue
         if pref["push"]:
             _enviar_push(
-                pref["token"],
+                pref["destino"],
                 titulo=emisor_nombre,
                 cuerpo=cuerpo[:200],
                 data={"tipo": "chat", "chatId": chat_id},
@@ -540,7 +551,7 @@ def on_resena_changed(event) -> None:
             if pref["valoraciones"]:
                 if pref["push"]:
                     _enviar_push(
-                        pref["token"],
+                        pref["destino"],
                         titulo=textos[2],
                         cuerpo=f"{nombre_usuario}: {puntuacion}/5",
                         data={"tipo": "valoracion", "tecnicoId": tecnico_id},

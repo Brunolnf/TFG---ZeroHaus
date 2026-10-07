@@ -64,7 +64,7 @@ fun PanelScreen(
     // (una vez, tras varias interacciones; Google además lo limita).
     LaunchedEffect(estado.cargando, estado.ultimoInforme) {
         if (!estado.cargando && estado.ultimoInforme != null) {
-            (ctx as? Activity)?.let { ResenaApp.pedirSiProcede(it, AppPreferencias(it)) }
+            (ctx as? Activity)?.let { ResenaApp.pedirSiProcede(it, AppPreferencias.de(it)) }
         }
     }
     val nombre = estado.usuario?.nombre ?: c.comUsuarioFallback

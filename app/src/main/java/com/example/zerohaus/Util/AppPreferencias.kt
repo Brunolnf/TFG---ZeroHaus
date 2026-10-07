@@ -4,26 +4,21 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 
 /**
- * Preferencias locales cifradas (EncryptedSharedPreferences, AES-256): idioma,
- * tema, unidades, notificaciones y cachés de sesión.
+ * Preferencias locales: idioma, tema, unidades, notificaciones y cachés de
+ * sesión. Una sola instancia para toda la app ([de]).
+ *
+ * Antes se guardaban con EncryptedSharedPreferences (obsoleto desde
+ * security-crypto 1.1.0), que además se creaba de nuevo en cada uso con
+ * operaciones del Keystore en el hilo principal. Nada de lo que se guarda es
+ * secreto (la sesión la guarda Firebase Auth), así que ahora son unas
+ * SharedPreferences normales, privadas de la app y excluidas de las copias
+ * (ver backup_rules / data_extraction_rules). La primera vez se copian los
+ * valores del fichero cifrado antiguo para que nadie pierda sus ajustes.
  */
-class AppPreferencias(ctx: Context) {
-    private val prefs: SharedPreferences = try {
-        val masterKey = MasterKey.Builder(ctx.applicationContext)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-        EncryptedSharedPreferences.create(
-            ctx.applicationContext,
-            "zerohaus_secure_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-    } catch (_: Exception) {
-        ctx.applicationContext.getSharedPreferences("zerohaus_prefs", Context.MODE_PRIVATE)
-    }
+class AppPreferencias private constructor(private val prefs: SharedPreferences) {
 
     fun getTema(): String = prefs.getString("tema", "Sistema") ?: "Sistema"
     fun setTema(v: String) = prefs.edit().putString("tema", v).apply()
@@ -59,5 +54,59 @@ class AppPreferencias(ctx: Context) {
         val n = prefs.getInt("interacciones", 0) + 1
         prefs.edit().putInt("interacciones", n).apply()
         return n
+    }
+
+    companion object {
+        private const val ARCHIVO = "zerohaus_preferencias"
+        private const val MIGRADO = "_migrado_de_cifradas"
+        // Ficheros de versiones anteriores: el cifrado y su respaldo sin cifrar
+        private const val ARCHIVO_CIFRADO = "zerohaus_secure_prefs"
+        private const val ARCHIVO_RESPALDO = "zerohaus_prefs"
+
+        @Volatile private var instancia: AppPreferencias? = null
+
+        /** Las preferencias de la app (se crean y, si hace falta, se migran una sola vez). */
+        fun de(ctx: Context): AppPreferencias =
+            instancia ?: synchronized(this) {
+                instancia ?: AppPreferencias(abrir(ctx.applicationContext)).also { instancia = it }
+            }
+
+        private fun abrir(ctx: Context): SharedPreferences {
+            val prefs = ctx.getSharedPreferences(ARCHIVO, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean(MIGRADO, false)) migrar(ctx, prefs)
+            return prefs
+        }
+
+        /** Copia los valores de los ficheros antiguos y los borra. */
+        @Suppress("DEPRECATION")
+        private fun migrar(ctx: Context, destino: SharedPreferences) {
+            val editor = destino.edit()
+            copiar(ctx.getSharedPreferences(ARCHIVO_RESPALDO, Context.MODE_PRIVATE).all, editor)
+            if (File(ctx.applicationInfo.dataDir, "shared_prefs/$ARCHIVO_CIFRADO.xml").exists()) {
+                runCatching {
+                    val clave = MasterKey.Builder(ctx).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+                    EncryptedSharedPreferences.create(
+                        ctx, ARCHIVO_CIFRADO, clave,
+                        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+                    ).all
+                }.getOrNull()?.let { copiar(it, editor) }
+            }
+            editor.putBoolean(MIGRADO, true).commit()
+            ctx.deleteSharedPreferences(ARCHIVO_CIFRADO)
+            ctx.deleteSharedPreferences(ARCHIVO_RESPALDO)
+        }
+
+        private fun copiar(valores: Map<String, *>, editor: SharedPreferences.Editor) {
+            valores.forEach { (clave, valor) ->
+                when (valor) {
+                    is String -> editor.putString(clave, valor)
+                    is Boolean -> editor.putBoolean(clave, valor)
+                    is Int -> editor.putInt(clave, valor)
+                    is Long -> editor.putLong(clave, valor)
+                    is Float -> editor.putFloat(clave, valor)
+                }
+            }
+        }
     }
 }
