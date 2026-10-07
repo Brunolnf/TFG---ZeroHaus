@@ -100,7 +100,7 @@ App de una sola Activity con **Jetpack Compose** y **MVVM**; Firebase como backe
 | `Repositorios` | Acceso a Firestore, Storage y Cloud Functions; `AlgoritmoEnergetico` (cálculo puro, testeado). |
 | `Modelos` | Clases de datos de Firestore. |
 | `Navegacion` | Grafo de navegación y pantalla inicial según la sesión. |
-| `Util` | Textos e idiomas, preferencias cifradas, notificaciones, facturación, seguridad y utilidades. |
+| `Util` | Textos e idiomas, preferencias locales, notificaciones, facturación, seguridad y utilidades. |
 
 **Decisiones clave**
 - **La lógica sensible vive en el servidor**: activar suscripciones, verificar el email, borrar cuentas, recalcular valoraciones y enviar notificaciones son Cloud Functions; las reglas de Firestore impiden que la app lo haga por su cuenta.
@@ -141,7 +141,7 @@ Código en [`functions/main.py`](functions/main.py) (región `europe-west1`).
 - **Reglas de Firestore y Storage** con validación de campos, propiedad de los datos y email verificado obligatorio; cubiertas por [tests con el emulador](rules-tests/).
 - **Rol de administrador por *custom claim*** del token (no por email).
 - **App Check (Play Integrity)** en las funciones sensibles; **HMAC** para los códigos de verificación; compras ligadas al usuario mediante `obfuscatedAccountId`.
-- **App**: tráfico solo HTTPS y solo con certificados del sistema, preferencias cifradas (AES-256), `FLAG_SECURE`, cierre de sesión tras 5 min en segundo plano, detección de root / depurador / Frida / Xposed (sin lanzar procesos) y ofuscación R8.
+- **App**: tráfico solo HTTPS y solo con certificados del sistema, preferencias privadas de la app (fuera de las copias), `FLAG_SECURE`, cierre de sesión tras 5 min en segundo plano, detección de root / depurador / Frida / Xposed (sin lanzar procesos) y ofuscación R8.
 - **Privacidad**: la IA nunca recibe nombre, dirección ni email; las visitas individuales a perfiles se borran a las 48 h; borrado total de la cuenta desde la app. Política completa en [`public/privacidad.html`](public/privacidad.html).
 
 ## Estructura del repositorio
