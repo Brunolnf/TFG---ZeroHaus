@@ -1,11 +1,13 @@
 package com.example.zerohaus.ViewModel
 
+import android.app.Application
 import android.net.Uri
 import android.util.Patterns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.Especialidades
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
@@ -13,10 +15,15 @@ import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.Imagenes
 import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.Util.getCadenas
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Estado del perfil propio.
@@ -48,7 +55,7 @@ data class PerfilEstado(
 /**
  * Edición del perfil propio. Técnicos y empresas editan también su perfil profesional.
  */
-class PerfilViewModel : ViewModel() {
+class PerfilViewModel(application: Application) : AndroidViewModel(application) {
 
     var estado by mutableStateOf(PerfilEstado())
         private set
@@ -182,33 +189,46 @@ class PerfilViewModel : ViewModel() {
      */
     fun subirFotoPerfil(uri: Uri) {
         val uid = auth.currentUser?.uid ?: return
+        val error = getCadenas(AppEstado.idioma).perfilErrorGuardar
         estado = estado.copy(subiendoFoto = true, error = null)
-        val ref = storage.reference.child("perfiles/$uid/foto_perfil")
-        ref.putFile(uri)
-            .addOnSuccessListener {
-                ref.downloadUrl.addOnSuccessListener { url ->
+        viewModelScope.launch {
+            // Comprimida antes de subir: Storage rechaza las de más de 5 MB,
+            // que es lo que pesa casi cualquier foto hecha con el móvil
+            val jpeg = withContext(Dispatchers.IO) {
+                try { Imagenes.comprimir(getApplication(), uri, LADO_FOTO_PERFIL) } catch (_: OutOfMemoryError) { null }
+            }
+            if (jpeg == null) {
+                estado = estado.copy(subiendoFoto = false, error = error)
+                return@launch
+            }
+            val ref = storage.reference.child("perfiles/$uid/foto_perfil")
+            ref.putBytes(jpeg, StorageMetadata.Builder().setContentType("image/jpeg").build())
+                .continueWithTask { subida ->
+                    if (!subida.isSuccessful) throw subida.exception ?: Exception("Subida fallida")
+                    ref.downloadUrl
+                }
+                .addOnSuccessListener { url ->
                     val urlString = url.toString()
                     val usuario = estado.usuario
                     if (usuario != null) {
                         val actualizado = usuario.copy(fotoPerfil = urlString)
                         repo.actualizarUsuario(actualizado) { _ ->
-                            estado = estado.copy(
-                                fotoPerfil = urlString,
-                                usuario = actualizado,
-                                subiendoFoto = false
-                            )
+                            estado = estado.copy(fotoPerfil = urlString, usuario = actualizado, subiendoFoto = false)
                         }
                     } else {
                         estado = estado.copy(fotoPerfil = urlString, subiendoFoto = false)
                     }
                 }
-            }
-            .addOnFailureListener { e ->
-                estado = estado.copy(subiendoFoto = false, error = e.message ?: "Error subiendo foto")
-            }
+                // También si falla la URL de descarga (antes se quedaba cargando)
+                .addOnFailureListener { estado = estado.copy(subiendoFoto = false, error = error) }
+        }
     }
 
     fun limpiarMensajes() {
         estado = estado.copy(exito = false, error = null)
+    }
+
+    companion object {
+        private const val LADO_FOTO_PERFIL = 800   // px: se ve como mucho a ~120 dp
     }
 }
