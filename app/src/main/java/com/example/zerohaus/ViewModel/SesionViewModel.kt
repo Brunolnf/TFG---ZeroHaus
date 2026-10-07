@@ -29,8 +29,8 @@ class SesionViewModel : ViewModel() {
     // muestra un botón "Reintentar" en vez de un spinner eterno.
     var cargaFallida = mutableStateOf(false)
 
-    // Cualquier cierre de sesión (botón, cierre automático tras 5 min en
-    // segundo plano, cuenta borrada) pasa por aquí. Sin esto, si la sesión se
+    // Cualquier cierre de sesión (botón, cuenta borrada, depurador detectado
+    // en release) pasa por aquí. Sin esto, si la sesión se
     // cerraba fuera de logout(), la app seguía "dentro" sin usuario y todo
     // fallaba por permisos.
     private val authListener = FirebaseAuth.AuthStateListener { fa ->

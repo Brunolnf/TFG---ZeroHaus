@@ -30,9 +30,12 @@ import com.google.firebase.auth.FirebaseAuth
 
 /**
  * Única Activity de la app (arquitectura single-activity con Navigation Compose).
- * Instala la splash, pide el permiso de notificaciones, cierra la sesión tras
- * 5 minutos en segundo plano y, en release, bloquea las capturas de pantalla
- * (FLAG_SECURE) y termina la app si detecta un depurador o un tracer.
+ * Instala la splash, pide el permiso de notificaciones y, en release, bloquea
+ * las capturas de pantalla (FLAG_SECURE) y termina la app si detecta un
+ * depurador o un tracer.
+ *
+ * La sesión se mantiene como en cualquier app: antes se cerraba tras 5 minutos
+ * en segundo plano y había que volver a poner la contraseña cada vez.
  */
 class MainActivity : ComponentActivity() {
 
@@ -40,25 +43,8 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* resultado gestionado por el sistema */ }
 
-    private var backgroundTimestamp = 0L
-
     private val lifecycleObserver = object : DefaultLifecycleObserver {
-        override fun onStop(owner: LifecycleOwner) {
-            backgroundTimestamp = System.currentTimeMillis()
-        }
-
         override fun onStart(owner: LifecycleOwner) {
-            if (backgroundTimestamp > 0L) {
-                val elapsed = System.currentTimeMillis() - backgroundTimestamp
-                if (elapsed > SESSION_TIMEOUT_MS) {
-                    // SesionViewModel lo detecta, limpia la sesión y vuelve al
-                    // login. (Antes se recreaba la Activity, pero los ViewModel
-                    // sobreviven a recreate() y la app seguía "dentro" sin usuario.)
-                    FirebaseAuth.getInstance().signOut()
-                }
-                backgroundTimestamp = 0L
-            }
-
             if (!BuildConfig.DEBUG) {
                 if (SecurityUtil.debuggerConectado() || SecurityUtil.tracerDetectado()) {
                     FirebaseAuth.getInstance().signOut()
@@ -141,9 +127,5 @@ class MainActivity : ComponentActivity() {
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
-    }
-
-    companion object {
-        private const val SESSION_TIMEOUT_MS = 5 * 60 * 1000L // 5 min background → auto-logout
     }
 }
