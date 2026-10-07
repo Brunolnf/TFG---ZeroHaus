@@ -10,9 +10,6 @@ import com.example.zerohaus.Repositorios.RepositorioInformes
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import com.example.zerohaus.Util.AppEstado
-import com.example.zerohaus.Util.getCadenas
 
 /**
  * Estado del historial de informes y de la comparación entre dos.
@@ -42,20 +39,10 @@ class HistorialInformesViewModel : ViewModel() {
         if (!forzar && estado.informes.isNotEmpty()) return
         viewModelScope.launch {
             estado = estado.copy(cargando = true, error = null)
-            try {
-                val lista = suspendCancellableCoroutine<List<InformeEnergetico>> { cont ->
-                    repo.obtenerInformes(
-                        onSuccess = { cont.resume(it) },
-                        onError = { cont.resumeWithException(it) }
-                    )
-                }
-                estado = estado.copy(informes = lista, cargando = false)
-            } catch (e: Exception) {
-                estado = estado.copy(
-                    cargando = false,
-                    error = getCadenas(AppEstado.idioma).histError
-                )
+            val lista = suspendCancellableCoroutine<List<InformeEnergetico>> { cont ->
+                repo.obtenerInformes { cont.resume(it) }
             }
+            estado = estado.copy(informes = lista, cargando = false)
         }
     }
 

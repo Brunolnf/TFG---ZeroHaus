@@ -1088,7 +1088,6 @@ def leer_factura(req: https_fn.CallableRequest) -> dict:
     """Lee una factura de la luz con Gemini. Args: mime (image/jpeg, image/png,
     image/webp o application/pdf) y datos (el archivo en base64). Devuelve
     consumo del periodo y anualizado, días, importe, potencia y precio medio."""
-    import base64
     from google.genai import types
 
     if req.auth is None:

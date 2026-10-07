@@ -61,8 +61,7 @@ class RepositorioChat {
     private fun actualizarChatYNotificar(
         chatId: String,
         ultimoMensaje: String,
-        miUid: String,
-        @Suppress("UNUSED_PARAMETER") emisorNombre: String
+        miUid: String
     ) {
         db.collection("chats").document(chatId).get()
             .addOnSuccessListener { chatDoc ->
@@ -217,7 +216,7 @@ class RepositorioChat {
 
             ref.set(mensaje)
                 .addOnSuccessListener {
-                    actualizarChatYNotificar(chatId, texto, miUid, nombre)
+                    actualizarChatYNotificar(chatId, texto, miUid)
                     callback(true)
                 }
                 .addOnFailureListener { callback(false) }
@@ -250,7 +249,7 @@ class RepositorioChat {
                     ref.set(mensaje)
                         .addOnSuccessListener {
                             val resumen = if (caption.isNotEmpty()) "📷 $caption" else "📷 Foto"
-                            actualizarChatYNotificar(chatId, resumen, miUid, nombre)
+                            actualizarChatYNotificar(chatId, resumen, miUid)
                             callback(true)
                         }
                         .addOnFailureListener { callback(false) }
@@ -292,7 +291,7 @@ class RepositorioChat {
 
                     ref.set(mensaje)
                         .addOnSuccessListener {
-                            actualizarChatYNotificar(chatId, "📎 $nombre", miUid, emisorNombre)
+                            actualizarChatYNotificar(chatId, "📎 $nombre", miUid)
                             callback(true)
                         }
                         .addOnFailureListener { callback(false) }
