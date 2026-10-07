@@ -1,8 +1,11 @@
-firebase-functions>=0.4.0
-firebase-admin>=6.5.0
+# Versiones fijas: con ">=" cada despliegue podía instalar una versión nueva
+# con cambios incompatibles. Dependabot (pip) propone las subidas.
+firebase-functions==0.6.0
+# 7.7+: envío de push al ID de instalación (Message.fid)
+firebase-admin==7.7.0
 # tzdata: necesario en Windows para que scheduler_fn.Timezone resuelva
 # zonas IANA (Linux/Cloud Functions ya las trae). Sin esto, el deploy
 # falla localmente al hacer el análisis del codebase.
-tzdata>=2024.1
-# Gemini en Vertex AI (sugerencias personalizadas del informe)
-google-genai>=2.6.0
+tzdata==2026.5
+# Gemini en Vertex AI (consejos del informe y lectura de facturas)
+google-genai==2.28.0
