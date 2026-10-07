@@ -284,3 +284,80 @@ describe("auditoría: suplantación y escalada", () => {
     await assertSucceeds(setDoc(doc(verificado("cliente"), "ajustes/cliente"), { idioma: "Español" }));
   });
 });
+
+// Segunda auditoría (diagnóstico 2026-10): chat y notificaciones
+describe("chat: creación, cambios y mensajes", () => {
+  const URL_STORAGE = "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/chats%2F";
+  // Mensaje tal como lo escribe la app (MensajeChat)
+  const mensaje = (extra = {}) => ({
+    id: "m9", chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente",
+    texto: "hola", fecha: 1, leido: false, tipo: "texto", mediaUrl: "", mediaNombre: "", mediaBytes: 0,
+    ...extra,
+  });
+  const chatNuevo = (extra = {}) => ({
+    id: "c2", participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "Cliente", pro: "Pro" },
+    ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 }, ...extra,
+  });
+
+  it("se crea un chat vacío como hace la app", async () => {
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/c2"), chatNuevo()));
+  });
+
+  it("no se puede crear un chat que ya parezca tener mensajes (requisito de las reseñas)", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "chats/c2"), chatNuevo({ fechaUltimoMensaje: 1000 })));
+  });
+
+  it("no se puede crear un chat con uno mismo ni con nombres de terceros", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/c2"), chatNuevo({ participantes: ["cliente", "cliente"] })));
+    await assertFails(setDoc(doc(db, "chats/c2"),
+      chatNuevo({ nombresParticipantes: { cliente: "Cliente", pro: "Pro", otro: "X" } })));
+  });
+
+  it("al enviar se actualizan el último mensaje, su fecha y los no leídos", async () => {
+    await assertSucceeds(updateDoc(doc(verificado("cliente"), "chats/con_mensajes"),
+      { ultimoMensaje: "hola", fechaUltimoMensaje: 2000, "noLeidosPor.pro": 1 }));
+  });
+
+  it("un participante no puede cambiar los nombres ni borrar el chat", async () => {
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "chats/con_mensajes"), { "nombresParticipantes.pro": "ZeroHaus Soporte" }));
+    await assertFails(updateDoc(doc(db, "chats/con_mensajes"), { "noLeidosPor.otro": 5 }));
+    await assertFails(deleteDoc(doc(db, "chats/con_mensajes")));
+  });
+
+  it("se envían texto, fotos y archivos subidos a este chat", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m9"), mensaje()));
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m10"), mensaje({
+      id: "m10", tipo: "imagen", texto: "",
+      mediaUrl: `${URL_STORAGE}con_mensajes%2Fm10.jpg?alt=media&token=abc`,
+    })));
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m11"), mensaje({
+      id: "m11", tipo: "archivo", texto: "", mediaNombre: "presupuesto.pdf", mediaBytes: 1234,
+      mediaUrl: `${URL_STORAGE}con_mensajes%2Fm11_presupuesto.pdf?alt=media&token=abc`,
+    })));
+  });
+
+  it("un adjunto no puede apuntar fuera del Storage de este chat", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m12"),
+      mensaje({ tipo: "imagen", mediaUrl: "https://ejemplo.com/rastreo.png" })));
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m12"),
+      mensaje({ tipo: "archivo", mediaUrl: `${URL_STORAGE}ajeno%2Fx.pdf?alt=media` })));
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m12"),
+      mensaje({ tipo: "texto", mediaUrl: `${URL_STORAGE}con_mensajes%2Fx.jpg` })));
+  });
+
+  it("un mensaje no lleva tipos ni campos inventados", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m13"), mensaje({ tipo: "html" })));
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m13"), mensaje({ verificado: true })));
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m13"), mensaje({ emisorNombre: "x".repeat(500) })));
+  });
+
+  it("la app no crea notificaciones: solo las Cloud Functions", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "notificaciones/n9"),
+      { uid: "cliente", titulo: "t", detalle: "d", leida: false, fecha: 1, tipo: "chat" }));
+  });
+});

@@ -198,13 +198,8 @@ service cloud.firestore {
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida'])
                     && request.resource.data.leida is bool)
                     || esAdmin();
-      allow create: if logueado()
-                    && tamanoDocMaximo()
-                    && request.resource.data.uid == uid()
-                    && request.resource.data.titulo is string
-                    && request.resource.data.titulo.size() <= 200
-                    && request.resource.data.detalle is string
-                    && request.resource.data.detalle.size() <= 1000;
+      // Las crean las Cloud Functions; la app ya no crea ninguna
+      allow create: if esAdmin();
     }
 
     // Solo se puede valorar a un profesional con quien existe una conversación
@@ -255,17 +250,58 @@ service cloud.firestore {
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
+    // Un chat nuevo nace vacío, entre dos personas distintas y con los nombres
+    // solo de sus participantes (antes se podía crear ya "con mensajes", que es
+    // lo que exigen las reseñas).
+    function chatNuevoValido() {
+      let d = request.resource.data;
+      return d.participantes is list
+          && d.participantes.size() == 2
+          && uid() in d.participantes
+          && d.participantes[0] != d.participantes[1]
+          && (!('nombresParticipantes' in d) || d.nombresParticipantes.keys().hasOnly(d.participantes))
+          && d.get('fechaUltimoMensaje', 0) == 0
+          && d.get('ultimoMensaje', '') == '';
+    }
+    // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
+    // los no leídos. Antes un participante podía cambiar cualquier campo,
+    // por ejemplo el nombre con el que el otro le ve.
+    function cambioDeChatValido() {
+      let d = request.resource.data;
+      return d.diff(resource.data).affectedKeys().hasOnly(['ultimoMensaje', 'fechaUltimoMensaje', 'noLeidosPor'])
+          && d.get('ultimoMensaje', '') is string
+          && d.get('ultimoMensaje', '').size() <= 2100
+          && d.get('fechaUltimoMensaje', 0) is int
+          && d.get('fechaUltimoMensaje', 0) <= request.time.toMillis() + 86400000
+          && d.get('noLeidosPor', {}).keys().hasOnly(resource.data.participantes);
+    }
+    // Mensaje bien formado. Los adjuntos solo pueden apuntar al Storage de
+    // este mismo chat: antes se podía mandar como «foto» o «archivo» un
+    // enlace a cualquier web, que el otro abría.
+    function mensajeValido(chatId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['id', 'chatId', 'emisorUid', 'emisorNombre', 'texto', 'fecha',
+                               'leido', 'tipo', 'mediaUrl', 'mediaNombre', 'mediaBytes'])
+          && d.emisorUid == uid()
+          && d.get('tipo', 'texto') in ['texto', 'imagen', 'archivo']
+          && d.get('texto', '') is string && d.get('texto', '').size() <= 2000
+          && d.get('emisorNombre', '') is string && d.get('emisorNombre', '').size() <= 100
+          && d.get('mediaNombre', '') is string && d.get('mediaNombre', '').size() <= 255
+          && (d.get('mediaUrl', '') == ''
+              || (d.get('tipo', 'texto') != 'texto'
+                  && d.mediaUrl is string
+                  && d.mediaUrl.matches('https://firebasestorage[.]googleapis[.]com/v0/b/zerohaus-2a865[.]firebasestorage[.]app/o/chats%2F'
+                                        + chatId + '%2F[^/]+')));
+    }
+
     match /chats/{chatId} {
-      allow read, delete: if (logueado() && uid() in resource.data.participantes) || esAdmin();
-      allow create: if (logueado()
-                    && tamanoDocMaximo()
-                    && uid() in request.resource.data.participantes
-                    && request.resource.data.participantes.size() == 2
-                    && request.resource.data.participantes is list)
-                    || esAdmin();
+      allow read: if (logueado() && uid() in resource.data.participantes) || esAdmin();
+      // La app no borra chats (borrarlo dejaba sus mensajes huérfanos)
+      allow delete: if esAdmin();
+      allow create: if (logueado() && tamanoDocMaximo() && chatNuevoValido()) || esAdmin();
       allow update: if (logueado() && uid() in resource.data.participantes
                     && tamanoDocMaximo()
-                    && noMuta('participantes'))
+                    && cambioDeChatValido())
                     || esAdmin();
 
       match /mensajes/{mensajeId} {
@@ -274,11 +310,7 @@ service cloud.firestore {
           || esAdmin();
         allow create: if (logueado()
           && uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes
-          && request.resource.data.emisorUid == uid()
-          && (!('texto' in request.resource.data.keys())
-              || (request.resource.data.texto is string
-                  && request.resource.data.texto.size() <= 2000))
-          && request.resource.data.keys().size() <= 15)
+          && mensajeValido(chatId))
           || esAdmin();
         // Sin edición: permitía cambiar emisorUid y atribuir el mensaje al otro
         // participante. El emisor puede borrarlo.
