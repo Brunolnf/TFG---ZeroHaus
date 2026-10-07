@@ -434,4 +434,16 @@ fun AppNavegacion() {
             )
         }
     }
+
+    // Aviso de un mensaje tocado: se abre su chat en cuanto hay sesión con el
+    // email verificado (si había que iniciar sesión, al entrar). Va después
+    // del NavHost para que el grafo ya exista.
+    val chatPendiente = AppEstado.chatPendiente
+    LaunchedEffect(chatPendiente, logueado) {
+        val chatId = chatPendiente ?: return@LaunchedEffect
+        val verificado = FirebaseAuth.getInstance().currentUser?.isEmailVerified == true
+        if (!logueado || !verificado || AdminConfig.esAdmin()) return@LaunchedEffect
+        AppEstado.chatPendiente = null
+        nav.navigate("chat/$chatId") { launchSingleTop = true }
+    }
 }
