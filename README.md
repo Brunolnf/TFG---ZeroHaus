@@ -141,7 +141,7 @@ Código en [`functions/main.py`](functions/main.py) (región `europe-west1`).
 - **Reglas de Firestore y Storage** con validación de campos, propiedad de los datos y email verificado obligatorio; cubiertas por [tests con el emulador](rules-tests/).
 - **Rol de administrador por *custom claim*** del token (no por email).
 - **App Check (Play Integrity)** en las funciones sensibles; **HMAC** para los códigos de verificación; compras ligadas al usuario mediante `obfuscatedAccountId`.
-- **App**: tráfico solo HTTPS con *certificate pinning*, preferencias cifradas (AES-256), `FLAG_SECURE`, cierre de sesión tras 5 min en segundo plano, detección de root / depurador / Frida y ofuscación R8.
+- **App**: tráfico solo HTTPS y solo con certificados del sistema, preferencias cifradas (AES-256), `FLAG_SECURE`, cierre de sesión tras 5 min en segundo plano, detección de root / depurador / Frida / Xposed (sin lanzar procesos) y ofuscación R8.
 - **Privacidad**: la IA nunca recibe nombre, dirección ni email; las visitas individuales a perfiles se borran a las 48 h; borrado total de la cuenta desde la app. Política completa en [`public/privacidad.html`](public/privacidad.html).
 
 ## Estructura del repositorio

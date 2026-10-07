@@ -1,40 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Network Security Config — seguridad de red profesional.
+  Network Security Config — seguridad de red.
   1. Prohíbe tráfico cleartext (HTTP) en toda la app.
-  2. Solo confía en certificados del sistema (no user-installed).
-     Un atacante con certificado custom en el dispositivo NO podrá
-     interceptar el tráfico de la app (protege contra Burp/mitmproxy/Charles).
-  3. Certificate pinning para dominios de Firebase (sha256 de sus CA raíz).
+  2. Solo confía en certificados del sistema (no en los que instale el
+     usuario): un certificado añadido a mano en el móvil (Burp, mitmproxy,
+     Charles…) no sirve para interceptar el tráfico de la app.
+
+  Sin certificate pinning a propósito: solo se fijaban 3 raíces de Google
+  (GTS R1, GTS R2 y GlobalSign R2) y Google sirve también cadenas de otras
+  raíces (GTS R3/R4) y las rota sin aviso; con una de ellas la app dejaba de
+  conectar con Firebase. Google desaconseja fijar sus certificados.
 -->
 <network-security-config>
 
-    <!-- Base: solo HTTPS, solo system CAs -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-
-    <!-- Pin de los dominios de Firebase (Google Trust Services + GlobalSign) -->
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="true">firebaseio.com</domain>
-        <domain includeSubdomains="true">googleapis.com</domain>
-        <domain includeSubdomains="true">firebase.google.com</domain>
-        <domain includeSubdomains="true">firestore.googleapis.com</domain>
-        <domain includeSubdomains="true">cloudfunctions.net</domain>
-        <domain includeSubdomains="true">fcm.googleapis.com</domain>
-        <pin-set expiration="2027-01-01">
-            <!-- Google Trust Services Root R1 -->
-            <pin digest="SHA-256">hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=</pin>
-            <!-- GTS Root R2 -->
-            <pin digest="SHA-256">Vfd95BwDeSQo+NUYxVEEIBvvpOpsqJFnMYhBjHCM8Os=</pin>
-            <!-- GlobalSign Root R2 (backup) -->
-            <pin digest="SHA-256">iie1VXtL7HzAMF+/PVPR9xzT80kQxdZeJ+zduCB3BD0=</pin>
-        </pin-set>
-        <trust-anchors>
-            <certificates src="system" />
-        </trust-anchors>
-    </domain-config>
 
 </network-security-config>
