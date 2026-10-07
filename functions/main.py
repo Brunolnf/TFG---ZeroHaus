@@ -414,10 +414,10 @@ def on_message_created(event) -> None:
 
     msg = event.data.to_dict() or {}
     emisor_uid = msg.get("emisorUid", "")
-    emisor_nombre = msg.get("emisorNombre", "Alguien")
     chat_id = event.params["chatId"]
 
     db = firestore.client()
+    emisor_nombre = _nombre_real(db, emisor_uid, msg.get("emisorNombre", ""))
     chat_snap = db.collection("chats").document(chat_id).get()
     if not chat_snap.exists:
         return
@@ -450,6 +450,21 @@ def on_message_created(event) -> None:
                 db, uid, pref["idioma"], "mensaje", clave_limite=f"chat_{chat_id}",
                 nombre=emisor_nombre, texto=cuerpo[:300],
             )
+
+
+def _nombre_real(db, uid: str, respaldo: str) -> str:
+    """Nombre de una persona tal como está en su perfil (/usuarios).
+
+    No se usa el nombre que viene en el mensaje o en la reseña: lo escribe el
+    móvil y podía ser cualquiera («ZeroHaus Soporte»), y el servidor lo ponía
+    en el push y en el email que se envían desde la cuenta de ZeroHaus."""
+    nombre = ""
+    if uid:
+        try:
+            nombre = str((db.collection("usuarios").document(uid).get().to_dict() or {}).get("nombre") or "")
+        except Exception as e:
+            print(f"[NOMBRE] No se pudo leer el perfil de {uid}: {e}")
+    return (nombre.strip() or str(respaldo).strip() or "ZeroHaus")[:60]
 
 
 # Nombre de los adjuntos sin texto (foto, archivo) en los 14 idiomas
@@ -509,7 +524,7 @@ def on_resena_changed(event) -> None:
     if es_creacion:
         data = after.to_dict() or {}
         tecnico_id = data.get("tecnicoId", "")
-        nombre_usuario = data.get("nombreUsuario", "Un cliente")
+        nombre_usuario = _nombre_real(db, data.get("uid", ""), data.get("nombreUsuario", ""))
         puntuacion = int(data.get("puntuacion", 5))
         estrellas = "*" * puntuacion
         if tecnico_id:
@@ -790,8 +805,11 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
 # un límite diario por usuario para acotar el coste.
 
 # gemini-2.0-flash se apagó en junio de 2026 y gemini-2.5-flash el 20/10/2026
-# (solo sigue para proyectos que ya lo usaban). 3.5 Flash tiene endpoint en
-# europe-west1 (datos en la UE); 3.8 Flash, el estable más nuevo, va por global.
+# (solo sigue para proyectos que ya lo usaban). Se prueba primero la región de
+# la UE y, si el modelo no está disponible allí, el endpoint global. OJO: en
+# los logs de octubre de 2026 europe-west1 devuelve 404 para los dos modelos,
+# así que en la práctica responde siempre `global` (lo dice la política de
+# privacidad). Si Google los publica en europe-west1, se usarán sin cambios.
 GEMINI_MODELOS = [m for m in os.environ.get("GEMINI_MODEL", "gemini-3.5-flash,gemini-3.8-flash").split(",") if m]
 GEMINI_UBICACIONES = ["europe-west1", "global"]
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "10"))
