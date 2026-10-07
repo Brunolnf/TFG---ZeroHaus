@@ -1,9 +1,9 @@
 package com.example.zerohaus.Repositorios
 
-import com.example.zerohaus.Modelos.Resena
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.text.Normalizer
@@ -241,81 +241,41 @@ class RepositorioTecnicos {
                 .trim()
     }
 
+    /**
+     * Directorio completo (una vez). La nota y el nº de opiniones son los del
+     * perfil, que mantiene el servidor con las reseñas (on_resena_changed y la
+     * revisión diaria): antes cada móvil descargaba además TODAS las reseñas
+     * de la plataforma para recalcularla.
+     */
     fun obtenerTecnicos(callback: (List<Tecnico>) -> Unit) {
         db.collection("tecnicos").getOrTimeout { snap ->
-            if (snap == null) { callback(emptyList()); return@getOrTimeout }
-            val tecnicos = snap.documents.mapNotNull { doc ->
-                doc.toObject(Tecnico::class.java)?.let { t ->
-                    if (t.id.isBlank()) t.copy(id = doc.id) else t
-                }
-            }
-            db.collection("resenas").getOrTimeout { resenasSnap ->
-                if (resenasSnap == null) { callback(tecnicos); return@getOrTimeout }
-                val porTecnico = resenasSnap.documents
-                    .mapNotNull { it.toObject(Resena::class.java) }
-                    .groupBy { it.tecnicoId }
-                callback(tecnicos.map { t ->
-                    val lista = porTecnico[t.id].orEmpty()
-                    if (lista.isEmpty()) t.copy(rating = 0.0, opiniones = 0)
-                    else t.copy(
-                        rating = Math.round(lista.map { it.puntuacion }.average() * 10.0) / 10.0,
-                        opiniones = lista.size
-                    )
-                })
-            }
+            callback(snap?.documents?.mapNotNull { aTecnico(it) } ?: emptyList())
         }
     }
 
     /**
-     * Tiempo real: directorio completo de técnicos. El callback se dispara con la
-     * caché al instante y luego en cada alta/baja/modificación. Necesario para que
-     * un técnico recién creado aparezca de inmediato en el listado del cliente
-     * (sin reabrir la app). El recálculo de rating con las reseñas vive en una
-     * segunda suscripción para que ambos lados se mantengan en vivo.
+     * Tiempo real: directorio completo de técnicos. El callback se dispara con
+     * la caché al instante y luego en cada alta/baja/modificación (también
+     * cuando el servidor actualiza la nota tras una reseña).
      */
-    fun escucharTecnicos(callback: (List<Tecnico>) -> Unit): Pair<ListenerRegistration, ListenerRegistration> {
-        var tecnicosBase: List<Tecnico> = emptyList()
-        var resenasPorTecnico: Map<String, List<Resena>> = emptyMap()
-
-        // rating/opiniones se recalculan aquí sobre las reseñas vivas; el valor
-        // persistente del doc lo mantiene la Cloud Function `on_resena_changed`.
-        fun emitir() {
-            callback(tecnicosBase.map { t ->
-                val lista = resenasPorTecnico[t.id].orEmpty()
-                if (lista.isEmpty()) t.copy(rating = 0.0, opiniones = 0)
-                else t.copy(
-                    rating = Math.round(lista.map { it.puntuacion }.average() * 10.0) / 10.0,
-                    opiniones = lista.size
-                )
-            })
-        }
-
-        val regTec = db.collection("tecnicos").addSnapshotListener { snap, err ->
+    fun escucharTecnicos(callback: (List<Tecnico>) -> Unit): ListenerRegistration =
+        db.collection("tecnicos").addSnapshotListener { snap, err ->
             if (err != null) {
-                // Loguea para verlo en logcat y emite vacío; el VM detectará uid stale
-                // en la próxima invocación y reenganchará con el auth correcto.
+                // El VM detectará el uid cambiado y volverá a engancharse
                 android.util.Log.w("RepoTecnicos", "Listener técnicos cancelado: ${err.message}")
-                tecnicosBase = emptyList(); emitir(); return@addSnapshotListener
+                callback(emptyList()); return@addSnapshotListener
             }
-            tecnicosBase = snap?.documents?.mapNotNull { doc ->
-                doc.toObject(Tecnico::class.java)?.let { t ->
-                    if (t.id.isBlank()) t.copy(id = doc.id) else t
-                }
-            } ?: emptyList()
-            emitir()
+            callback(snap?.documents?.mapNotNull { aTecnico(it) } ?: emptyList())
         }
-        val regRes = db.collection("resenas").addSnapshotListener { snap, err ->
-            if (err != null) {
-                android.util.Log.w("RepoTecnicos", "Listener reseñas cancelado: ${err.message}")
-                resenasPorTecnico = emptyMap(); emitir(); return@addSnapshotListener
-            }
-            resenasPorTecnico = snap?.documents
-                ?.mapNotNull { it.toObject(Resena::class.java) }
-                ?.groupBy { it.tecnicoId } ?: emptyMap()
-            emitir()
+
+    /** Perfil con su id y la nota redondeada a una cifra decimal (como se muestra). */
+    private fun aTecnico(doc: DocumentSnapshot): Tecnico? =
+        doc.toObject(Tecnico::class.java)?.let { t ->
+            t.copy(
+                id = t.id.ifBlank { doc.id },
+                rating = Math.round(t.rating * 10.0) / 10.0
+            )
         }
-        return regTec to regRes
-    }
 
     fun obtenerTecnico(id: String, callback: (Tecnico?) -> Unit) {
         db.collection("tecnicos").document(id).get()

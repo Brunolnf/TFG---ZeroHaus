@@ -20,33 +20,27 @@ class RankingsViewModel : ViewModel() {
 
     private val repo = RepositorioTecnicos()
     private var listenerTec: ListenerRegistration? = null
-    private var listenerRes: ListenerRegistration? = null
 
     init { cargarRanking() }
 
     /**
-     * Tiempo real: el ranking se reordena solo cuando llega una reseña nueva o
-     * cuando aparece/se modifica un técnico. Demo-friendly: el cliente ve el
-     * cambio de rating de un técnico en cuanto otro cliente publica la reseña.
+     * Tiempo real: el ranking se reordena solo cuando aparece o cambia un
+     * profesional, también cuando el servidor actualiza su nota tras una reseña.
+     * Con [forzar] se vuelve a enganchar (botón «Reintentar»).
      */
     fun cargarRanking(forzar: Boolean = false) {
         if (listenerTec != null && !forzar) return
         listenerTec?.remove()
-        listenerRes?.remove()
         cargando = true
-        val (regT, regR) = repo.escucharTecnicos { lista ->
+        listenerTec = repo.escucharTecnicos { lista ->
             ranking = lista.sortedByDescending { it.rating }
             cargando = false
         }
-        listenerTec = regT
-        listenerRes = regR
     }
 
     override fun onCleared() {
         super.onCleared()
         listenerTec?.remove()
-        listenerRes?.remove()
         listenerTec = null
-        listenerRes = null
     }
 }

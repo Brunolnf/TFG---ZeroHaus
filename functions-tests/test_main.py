@@ -148,6 +148,44 @@ class NombreRealTest(unittest.TestCase):
         self.assertEqual(main._nombre_real(_DBFalsa({}), "", ""), "ZeroHaus")
 
 
+class _Ref:
+    def __init__(self, cambios, doc_id): self._cambios, self._id = cambios, doc_id
+    def update(self, datos): self._cambios[self._id] = datos
+
+
+class _Snap:
+    def __init__(self, doc_id, datos, cambios):
+        self.id, self._datos, self.reference = doc_id, datos, _Ref(cambios, doc_id)
+    def to_dict(self): return self._datos
+
+
+class _DBColecciones:
+    """Lo justo de Firestore para recorrer colecciones y actualizar documentos."""
+    def __init__(self, colecciones):
+        self._colecciones, self.cambios = colecciones, {}
+    def collection(self, nombre):
+        docs = self._colecciones.get(nombre, {})
+        cambios = self.cambios
+        class _Col:
+            def stream(self_):
+                return [_Snap(i, d, cambios) for i, d in docs.items()]
+        return _Col()
+
+
+class RecalcularRatingsTest(unittest.TestCase):
+
+    def test_corrige_notas_que_no_salen_de_resenas(self):
+        db = _DBColecciones({
+            "resenas": {"a": {"tecnicoId": "t1", "puntuacion": 5}, "b": {"tecnicoId": "t1", "puntuacion": 4}},
+            "tecnicos": {
+                "t1": {"rating": 4.5, "opiniones": 2},    # ya correcto: no se toca
+                "t2": {"rating": 4.8, "opiniones": 12},   # perfil de pruebas sin reseñas
+            },
+        })
+        self.assertEqual(main._recalcular_todos_los_ratings(db), 1)
+        self.assertEqual(db.cambios, {"t2": {"rating": 0.0, "opiniones": 0}})
+
+
 class EnviarPushTest(unittest.TestCase):
 
     def setUp(self):

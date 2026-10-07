@@ -58,7 +58,6 @@ class TecnicosViewModel : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
 
     private var listenerTec: ListenerRegistration? = null
-    private var listenerRes: ListenerRegistration? = null
     private var uidEscuchado: String? = null
 
     /**
@@ -93,7 +92,6 @@ class TecnicosViewModel : ViewModel() {
 
     private fun reengancharListeners() {
         listenerTec?.remove(); listenerTec = null
-        listenerRes?.remove(); listenerRes = null
         uidEscuchado = auth.currentUser?.uid
         // La ubicación sacada de la vivienda es de la cuenta anterior
         if (estado.origenUbicacion == OrigenUbicacion.VIVIENDA) {
@@ -107,7 +105,7 @@ class TecnicosViewModel : ViewModel() {
         }
         if (estado.origenUbicacion == null) usarProvinciaDeLaVivienda()
         estado = estado.copy(cargando = estado.tecnicos.isEmpty())
-        val (regT, regR) = repo.escucharTecnicos { lista ->
+        listenerTec = repo.escucharTecnicos { lista ->
             val procesados = lista.map { t ->
                 if (estado.latUsuario != 0.0) {
                     val (tLat, tLng) = coordsEfectivasTecnico(t)
@@ -117,8 +115,6 @@ class TecnicosViewModel : ViewModel() {
             }
             estado = estado.copy(tecnicos = procesados, cargando = false)
         }
-        listenerTec = regT
-        listenerRes = regR
     }
 
     /** Posición del GPS del móvil; tiene prioridad sobre la de la vivienda. */
@@ -229,8 +225,6 @@ class TecnicosViewModel : ViewModel() {
         super.onCleared()
         auth.removeAuthStateListener(authListener)
         listenerTec?.remove()
-        listenerRes?.remove()
         listenerTec = null
-        listenerRes = null
     }
 }
