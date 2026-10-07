@@ -50,14 +50,4 @@ class RepositorioResenas {
                 callback(Result.failure(Exception(e.message ?: "Error verificando reseñas")))
             }
     }
-
-    fun yaValorado(tecnicoId: String, callback: (Boolean) -> Unit) {
-        val uid = auth.currentUser?.uid ?: run { callback(false); return }
-        db.collection("resenas")
-            .whereEqualTo("tecnicoId", tecnicoId)
-            .whereEqualTo("uid", uid)
-            .get()
-            .addOnSuccessListener { snap -> callback(!snap.isEmpty) }
-            .addOnFailureListener { callback(false) }
-    }
 }
