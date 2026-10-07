@@ -21,6 +21,11 @@ object AppEstado {
     // Se persiste para tener un valor síncrono al decidir startDestination
     // al arrancar; se refresca en cada login.
     var esAdminCache by mutableStateOf(false)
+    // Chat de un aviso que el usuario ha tocado: AppNavegacion lo abre en
+    // cuanto hay sesión y lo vacía
+    var chatPendiente by mutableStateOf<String?>(null)
+    // Chat que está en pantalla: sus avisos no se muestran (ya se está leyendo)
+    @Volatile var chatAbiertoId: String? = null
 
     private var prefs: AppPreferencias? = null
 
