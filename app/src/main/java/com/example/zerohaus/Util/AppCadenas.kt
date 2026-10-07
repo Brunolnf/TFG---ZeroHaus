@@ -746,6 +746,7 @@ class AppCadenas internal constructor(
     val subNoActivaPlay: String get() = t("subNoActivaPlay")
     val subCambiarAPlan: String get() = t("subCambiarAPlan")
     val subCambioPlanInfo: String get() = t("subCambioPlanInfo")
+    val ajustesEliminarAvisoSuscripcion: String get() = t("ajustesEliminarAvisoSuscripcion")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
