@@ -24,12 +24,6 @@ object Planes {
     const val PLAN_DESTACADO_ANUNCIOS  = "destacado_anuncios"
 
 
-    fun planDeProducto(productoId: String): String = when (productoId) {
-        VERIFICADO_TRIMESTRAL, VERIFICADO_ANUAL -> PLAN_VERIFICADO
-        DESTACADO_MENSUAL -> PLAN_DESTACADO
-        DESTACADO_ANUNCIOS_MENSUAL -> PLAN_DESTACADO_ANUNCIOS
-        else -> ""
-    }
 
     fun nivelPlan(plan: String): Int = when (plan) {
         PLAN_DESTACADO_ANUNCIOS -> 3

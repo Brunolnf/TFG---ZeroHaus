@@ -30,7 +30,9 @@ class RankingsViewModel : ViewModel() {
      * cambio de rating de un técnico en cuanto otro cliente publica la reseña.
      */
     fun cargarRanking(forzar: Boolean = false) {
-        if (listenerTec != null) return
+        if (listenerTec != null && !forzar) return
+        listenerTec?.remove()
+        listenerRes?.remove()
         cargando = true
         val (regT, regR) = repo.escucharTecnicos { lista ->
             ranking = lista.sortedByDescending { it.rating }

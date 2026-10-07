@@ -116,8 +116,4 @@ class PerfilTecnicoViewModel : ViewModel() {
     fun limpiarMensajes() {
         estado = estado.copy(error = null)
     }
-
-    fun limpiar() {
-        estado = PerfilTecnicoEstado()
-    }
 }

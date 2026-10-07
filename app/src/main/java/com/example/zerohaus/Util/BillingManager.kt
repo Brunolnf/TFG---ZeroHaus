@@ -61,8 +61,6 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
         .enableAutoServiceReconnection()
         .build()
 
-    fun productoDisponible(productoId: String) = productos.containsKey(productoId)
-
     /** Precio localizado de Google Play. Se toma la ÚLTIMA fase de la oferta
      *  (la cuota recurrente): la primera puede ser una prueba gratuita. */
     fun precioDe(productoId: String): String? {

@@ -54,12 +54,6 @@ class RepositorioNotificaciones {
             }
     }
 
-    /** Borra una notificación por id (uso: limpieza de duplicados). */
-    fun eliminarNotificacion(notificacionId: String) {
-        if (notificacionId.isBlank()) return
-        db.collection("notificaciones").document(notificacionId).delete()
-    }
-
     fun marcarTodasLeidas(callback: (Result<Unit>) -> Unit) {
         db.collection("notificaciones")
             .whereEqualTo("uid", uid())
@@ -86,36 +80,11 @@ class RepositorioNotificaciones {
             .addOnFailureListener { e -> callback(Result.failure(Exception(e.message))) }
     }
 
-    fun crearNotificacion(notificacion: Notificacion, callback: (Result<Unit>) -> Unit) {
-        val ref = db.collection("notificaciones").document()
-        val n = notificacion.copy(id = ref.id, uid = uid())
-        ref.set(n)
-            .addOnSuccessListener { callback(Result.success(Unit)) }
-            .addOnFailureListener { e -> callback(Result.failure(Exception(e.message))) }
-    }
-
     companion object {
         /** Ventana para considerar dos notificaciones idénticas como la misma duplicada. */
         private const val VENTANA_DEDUP_MS = 30_000L
         /** Notificaciones que se muestran (las más recientes). */
         private const val LIMITE = 50L
         private const val LOTE = 450
-
-        /**
-         * Crea una notificación con campos básicos para [uid]. Helper compartido
-         * para que repositorios distintos no dupliquen el mismo `hashMapOf`.
-         */
-        fun crearRapida(uid: String, titulo: String, detalle: String, tipo: String) {
-            val db = FirebaseFirestore.getInstance()
-            val ref = db.collection("notificaciones").document()
-            ref.set(
-                hashMapOf(
-                    "id" to ref.id, "uid" to uid,
-                    "titulo" to titulo, "detalle" to detalle,
-                    "fecha" to System.currentTimeMillis(),
-                    "leida" to false, "tipo" to tipo
-                )
-            )
-        }
     }
 }
