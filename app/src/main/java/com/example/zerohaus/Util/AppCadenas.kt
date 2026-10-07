@@ -70,7 +70,6 @@ class AppCadenas internal constructor(
     val recuperarEnviando: String get() = t("recuperarEnviando")
 
     // Splash
-    val splashSlogan: String get() = t("splashSlogan")
 
     // Tabs
     val tabInicio: String get() = t("tabInicio")
