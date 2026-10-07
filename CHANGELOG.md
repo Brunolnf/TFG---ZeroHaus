@@ -4,6 +4,29 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 
 ## [Sin publicar]
 
+### Corregido (diagnóstico de octubre de 2026)
+- **Teléfono y email de contacto del profesional**: desde la 2.2 no se guardaban (el botón «Llamar» no salía nunca). «Perfil guardado» solo si se guarda de verdad.
+- **Cierre de sesión**: el cierre automático tras 5 min dejaba la app dentro sin usuario; al cerrar sesión seguían llegando los avisos de esa cuenta y la siguiente cuenta veía su último informe.
+- **Suscripciones**: cambiar de plan creaba una segunda suscripción y se cobraban las dos (ahora Google Play la sustituye); «Suscripción activada» salía en cada visita.
+- **Copias de seguridad**: la función diaria fallaba con 403 y no había ninguna copia; ahora son copias gestionadas de Firestore (diaria 7 días y semanal 4 semanas).
+- Preestudio con una vivienda guardada: los cambios no se guardaban en la vivienda (simulador e IA con datos viejos).
+- Errores de Firebase en inglés y textos fijos en español, ahora en los 14 idiomas; los avisos del servidor, en el idioma de cada usuario.
+- Chat: los errores de envío no se mostraban y el texto se perdía; posibles cierres al llamar desde una tablet o abrir un adjunto sin app.
+- Notificaciones: sin límite, «marcar todas como leídas» fallaba con más de 500 y un reintento del servidor las duplicaba.
+- Ciudades de los profesionales reconocidas por palabras completas («Villaviciosa de Odón» acababa en Vic), «Mis clientes» sin chats vacíos y zonas climáticas de 8 provincias según la tabla del CTE.
+
+### Seguridad
+- Reglas del chat: los adjuntos solo pueden apuntar al Storage de ese chat, los mensajes solo llevan los campos de la app y nadie puede cambiar el nombre con el que le ve el otro; la app ya no crea notificaciones.
+- Los avisos de mensajes y valoraciones usan el nombre del perfil, no el que escribe el móvil (se podía firmar como «ZeroHaus Soporte»).
+- Fuera el certificate pinning incompleto (podía dejar la app sin conexión) y las comprobaciones de root que lanzaban procesos en el arranque.
+- Al borrar la cuenta se avisa al profesional de que Google Play seguirá cobrando su suscripción.
+
+### Mejorado
+- Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.
+- Fotos del chat y de perfil comprimidas antes de subirlas (y con su orientación); el directorio ya no descarga todas las reseñas; el perfil público carga sus datos a la vez.
+- Directorio con ubicación aproximada y sin pedir el permiso cada vez.
+- FCM pasa al ID de instalación (FID) con el token antiguo de respaldo; preferencias locales sin `EncryptedSharedPreferences` (obsoleto), migradas sin perder ajustes; versiones fijas en el backend.
+
 ### Añadido
 - **Factura de la luz con IA**: en el preestudio se puede hacer una foto o subir el PDF de la factura; Gemini lee consumo, días, importe y potencia contratada (función `leer_factura`). El informe calcula el coste y los ahorros con el precio real que paga el usuario y muestra el consumo real frente al estimado, también en el PDF y el texto compartidos y en los consejos de la IA. El archivo no se guarda; cuenta dentro del límite diario de IA.
 - **Precios de la energía con Firebase Remote Config** (`precio_electricidad`, `precio_gas`, `precio_biomasa`): se cambian desde la consola sin publicar versión; los valores fuera de rango se ignoran.
