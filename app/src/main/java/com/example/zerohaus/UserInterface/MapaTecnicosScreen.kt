@@ -54,7 +54,10 @@ fun MapaTecnicosScreen(
 
     var tecnicoSeleccionado by remember { mutableStateOf<Tecnico?>(null) }
 
-    LaunchedEffect(Unit) { viewModel.cargarTecnicos(forzar = true) }
+    // El directorio ya escucha en tiempo real (el ViewModel lo comparte con la
+    // lista): solo se engancha si aún no lo estaba o cambió la cuenta. Antes se
+    // forzaba y cada apertura del mapa volvía a descargar todos los profesionales.
+    LaunchedEffect(Unit) { viewModel.cargarTecnicos() }
 
     // Posición: la del profesional o, si no la tiene, el centro de su ciudad.
     // Sin ninguna de las dos NO se pinta (nunca se inventa una ubicación).
