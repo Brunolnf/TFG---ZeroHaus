@@ -35,16 +35,42 @@ class AjustesViewModel : ViewModel() {
 
     init { cargarAjustes() }
 
-    fun cargarAjustes() { estado = estado.copy(cargando = true); repo.obtenerAjustes { a -> estado = estado.copy(ajustes = a, cargando = false) } }
-    fun cambiarPush(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesPush = v), mensajeToast = null) }
-    fun cambiarEmail(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesEmail = v), mensajeToast = null) }
-    fun cambiarSonido(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesSonido = v), mensajeToast = null) }
-    fun cambiarNotifMensajes(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesMensajes = v), mensajeToast = null) }
-    fun cambiarNotifValoraciones(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesValoraciones = v), mensajeToast = null) }
-    fun cambiarIdioma(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(idioma = v), mensajeToast = null) }
-    fun cambiarTema(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(tema = v), mensajeToast = null) }
-    fun cambiarUnidadEnergia(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(unidadEnergia = v), mensajeToast = null) }
-    fun cambiarUnidadMoneda(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(unidadMoneda = v), mensajeToast = null) }
+    fun cargarAjustes() {
+        estado = estado.copy(cargando = true)
+        repo.obtenerAjustes { remoto ->
+            // Sin documento (o sin conexión) valen los del dispositivo; antes se
+            // tomaban los de por defecto y la pantalla pisaba con ellos los locales.
+            // El idioma y el tema los manda siempre el dispositivo (la pantalla los
+            // muestra de AppEstado) y el servidor usa el idioma para los avisos.
+            val a = (remoto ?: ajustesLocales()).copy(idioma = AppEstado.idioma, tema = AppEstado.tema)
+            estado = estado.copy(ajustes = a, cargando = false)
+            if (a != remoto) subir()
+        }
+    }
+
+    private fun ajustesLocales() = AjustesUsuario(
+        notificacionesPush = AppEstado.notificacionesPush,
+        notificacionesSonido = AppEstado.notificacionesSonido,
+        idioma = AppEstado.idioma,
+        tema = AppEstado.tema,
+        unidadEnergia = AppEstado.unidadEnergia,
+        unidadMoneda = AppEstado.unidadMoneda
+    )
+    fun cambiarPush(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesPush = v), mensajeToast = null); subir() }
+    fun cambiarEmail(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesEmail = v), mensajeToast = null); subir() }
+    fun cambiarSonido(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesSonido = v), mensajeToast = null); subir() }
+    fun cambiarNotifMensajes(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesMensajes = v), mensajeToast = null); subir() }
+    fun cambiarNotifValoraciones(v: Boolean) { estado = estado.copy(ajustes = estado.ajustes.copy(notificacionesValoraciones = v), mensajeToast = null); subir() }
+    fun cambiarIdioma(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(idioma = v), mensajeToast = null); subir() }
+    fun cambiarTema(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(tema = v), mensajeToast = null); subir() }
+    fun cambiarUnidadEnergia(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(unidadEnergia = v), mensajeToast = null); subir() }
+    fun cambiarUnidadMoneda(v: String) { estado = estado.copy(ajustes = estado.ajustes.copy(unidadMoneda = v), mensajeToast = null); subir() }
+
+    // Cada cambio se sube en el momento: la pantalla ya lo aplica en local y, si
+    // solo se subiera con «Guardar», al volver a entrar el valor del servidor lo
+    // pisaría. Mientras se cargan no se sube nada (se mandarían los valores por
+    // defecto). Si falla, el botón «Guardar» permite reintentarlo.
+    private fun subir() { if (!estado.cargando) repo.guardarAjustes(estado.ajustes) { } }
 
     fun guardar() {
         estado = estado.copy(guardando = true, error = null, mensajeToast = null)

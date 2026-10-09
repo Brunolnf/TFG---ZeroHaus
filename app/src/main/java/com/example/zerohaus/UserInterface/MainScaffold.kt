@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +42,9 @@ fun MainScaffold(
         "mas" to Icons.Default.Menu
     )
     val tabLabels = listOf(c.tabInicio, c.tabMensajes, c.tabExplorar, c.tabMas)
-    var actual by remember { mutableStateOf("inicio") }
+    // rememberSaveable: al volver de una pantalla abierta desde otra pestaña
+    // (Ajustes, Perfil…) se sigue en esa pestaña, no se vuelve a Inicio
+    var actual by rememberSaveable { mutableStateOf("inicio") }
     LaunchedEffect(Unit) { chatViewModel.cargarChats() }
     val noLeidos = chatViewModel.contarNoLeidos()
     val notificaciones = panelViewModel.estado.notificaciones
