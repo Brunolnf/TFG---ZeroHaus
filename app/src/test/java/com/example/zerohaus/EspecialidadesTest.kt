@@ -45,6 +45,12 @@ class EspecialidadesTest {
     }
 
     @Test
+    fun `al mostrarlas no se repiten y las desconocidas se quedan como estan`() {
+        val resultado = Especialidades.paraMostrar(listOf("Calefacción", "Biomasa", "suelo radiante", " Ventilacion mecanica ", ""))
+        assertEquals(listOf(Especialidades.CALEFACCION, Especialidades.BIOMASA, "Ventilacion mecanica"), resultado)
+    }
+
+    @Test
     fun `cada mejora que hace un profesional apunta a su especialidad`() {
         val v = Vivienda(
             superficie = 90, tipoVentanas = "Vidrio simple", aislamiento = "Sin aislamiento",

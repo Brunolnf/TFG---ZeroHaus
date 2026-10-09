@@ -28,6 +28,7 @@ import com.example.zerohaus.Util.TextosEnergia
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
+import com.example.zerohaus.Modelos.Especialidades
 
 /**
  * Mapa de profesionales (Google Maps). Solo se pinta una ubicación real: la
@@ -123,7 +124,7 @@ fun MapaTecnicosScreen(
                                 keys = arrayOf<Any>(tecnico.id, esSeleccionado),
                                 state = rememberUpdatedMarkerState(position = posicion),
                                 title = tecnico.nombre,
-                                snippet = "${tecnico.rating} ★ · ${tecnico.especialidades.firstOrNull()?.let { TextosEnergia.especialidad(it, c) } ?: ""}",
+                                snippet = "${Formato.numero(tecnico.rating)} ★ · ${tecnico.especialidades.firstOrNull()?.let { TextosEnergia.especialidad(it, c) } ?: ""}",
                                 onClick = {
                                     tecnicoSeleccionado = if (esSeleccionado) null else tecnico
                                     true // consume el click para no mostrar InfoWindow nativo
@@ -265,11 +266,11 @@ fun MapaTecnicosScreen(
                                 Text("${Formato.numero(t.rating)} (${t.opiniones})", color = gris, fontSize = 12.sp)
                             }
                             Spacer(Modifier.height(6.dp))
-                            Text(t.especialidades.joinToString(" · ") { TextosEnergia.especialidad(it, c) }, color = gris, fontSize = 13.sp)
+                            Text(Especialidades.paraMostrar(t.especialidades).joinToString(" · ") { TextosEnergia.especialidad(it, c) }, color = gris, fontSize = 13.sp)
                             if (t.ciudad.isNotEmpty()) {
                                 Text(t.ciudad, color = gris, fontSize = 12.sp)
                             }
-                            Text("${t.opiniones} ${c.comValoraciones}", color = gris, fontSize = 12.sp)
+                            Text(Formato.cantidad(t.opiniones, c.comValoracion, c.comValoraciones), color = gris, fontSize = 12.sp)
                             Spacer(Modifier.height(10.dp))
                             Button(
                                 onClick = { onVerPerfil(t.id) },

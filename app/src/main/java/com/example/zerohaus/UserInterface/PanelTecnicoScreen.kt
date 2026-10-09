@@ -141,7 +141,7 @@ fun PanelTecnicoScreen(
                         }
                         Spacer(Modifier.height(16.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            StatVerde("⭐ ${tec.rating}", "${tec.opiniones} ${c.comOpiniones}")
+                            StatVerde("⭐ ${Formato.numero(tec.rating)}", Formato.cantidad(tec.opiniones, c.comOpinion, c.comOpiniones))
                             StatVerde(
                                 if (tec.esDestacado) c.estDestacado
                                 else if (tec.esVerificado) c.estVerificado
@@ -185,7 +185,7 @@ fun PanelTecnicoScreen(
                     icono = Icons.Default.Star,
                     color = Color(0xFFEAB308),
                     titulo = c.resTitulo,
-                    subtitulo = "${tec.opiniones} ${c.comOpiniones} · ⭐ ${tec.rating} ${c.ptecDeMedia}",
+                    subtitulo = "${Formato.cantidad(tec.opiniones, c.comOpinion, c.comOpiniones)} · ⭐ ${Formato.numero(tec.rating)} ${c.ptecDeMedia}",
                     badge = null,
                     onClick = onResenas
                 )
