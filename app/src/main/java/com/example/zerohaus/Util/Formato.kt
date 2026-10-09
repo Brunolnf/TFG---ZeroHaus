@@ -41,6 +41,9 @@ object Formato {
      */
     fun fechas(patron: String): SimpleDateFormat = SimpleDateFormat(patron, locale())
 
+    /** «1 opinión», «3 opiniones»: el número con la palabra en singular o en plural. */
+    fun cantidad(n: Int, singular: String, plural: String): String = "$n ${if (n == 1) singular else plural}"
+
     fun formatEnergia(kwh: Double, decimales: Int = 1): String {
         val unidad = AppEstado.unidadEnergia
         val valor = when (unidad) {

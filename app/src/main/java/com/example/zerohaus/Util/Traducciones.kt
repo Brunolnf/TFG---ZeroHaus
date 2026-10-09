@@ -700,6 +700,8 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Cambiar a este plan",
     "subCambioPlanInfo" to "Al cambiar de plan, Google Play sustituye tu suscripción actual y descuenta el tiempo que te queda: no pagarás dos planes a la vez.",
     "ajustesEliminarAvisoSuscripcion" to "Si tienes una suscripción de profesional, cancélala antes en Google Play: borrar la cuenta no detiene los cobros.",
+    "comOpinion" to "opinión",
+    "comValoracion" to "valoración",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1361,6 +1363,8 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Switch to this plan",
     "subCambioPlanInfo" to "When you switch plans, Google Play replaces your current subscription and credits the unused time: you won't pay for two plans at once.",
     "ajustesEliminarAvisoSuscripcion" to "If you have a professional subscription, cancel it in Google Play first: deleting your account doesn't stop the charges.",
+    "comOpinion" to "review",
+    "comValoracion" to "review",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2022,6 +2026,8 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Canviar a aquest pla",
     "subCambioPlanInfo" to "En canviar de pla, Google Play substitueix la subscripció actual i descompta el temps que et queda: no pagaràs dos plans alhora.",
     "ajustesEliminarAvisoSuscripcion" to "Si tens una subscripció de professional, cancel·la-la abans a Google Play: esborrar el compte no atura els cobraments.",
+    "comOpinion" to "opinió",
+    "comValoracion" to "valoració",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2683,6 +2689,8 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Aldatu plan honetara",
     "subCambioPlanInfo" to "Plana aldatzean, Google Play-k zure egungo harpidetza ordezkatzen du eta erabili gabeko denbora deskontatzen du: ez duzu bi plan aldi berean ordainduko.",
     "ajustesEliminarAvisoSuscripcion" to "Profesionalen harpidetza baduzu, ezeztatu lehenik Google Play-n: kontua ezabatzeak ez ditu kobrantzak geldiarazten.",
+    "comOpinion" to "iritzi",
+    "comValoracion" to "balorazio",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3344,6 +3352,8 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Cambiar a este plan",
     "subCambioPlanInfo" to "Ao cambiar de plan, Google Play substitúe a túa subscrición actual e desconta o tempo que che queda: non pagarás dous plans á vez.",
     "ajustesEliminarAvisoSuscripcion" to "Se tes unha subscrición de profesional, cancélaa antes en Google Play: borrar a conta non detén os cobros.",
+    "comOpinion" to "opinión",
+    "comValoracion" to "valoración",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4005,6 +4015,8 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Mudar para este plano",
     "subCambioPlanInfo" to "Ao mudar de plano, o Google Play substitui a sua subscrição atual e desconta o tempo que falta: não pagará dois planos ao mesmo tempo.",
     "ajustesEliminarAvisoSuscripcion" to "Se tiver uma subscrição de profissional, cancele-a primeiro no Google Play: eliminar a conta não interrompe as cobranças.",
+    "comOpinion" to "avaliação",
+    "comValoracion" to "avaliação",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4666,6 +4678,8 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Passer à cette formule",
     "subCambioPlanInfo" to "Quand vous changez de formule, Google Play remplace votre abonnement actuel et déduit le temps restant : vous ne paierez jamais deux formules à la fois.",
     "ajustesEliminarAvisoSuscripcion" to "Si vous avez un abonnement professionnel, résiliez-le d'abord dans Google Play : supprimer votre compte n'arrête pas les prélèvements.",
+    "comOpinion" to "avis",
+    "comValoracion" to "avis",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5327,6 +5341,8 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Zu diesem Tarif wechseln",
     "subCambioPlanInfo" to "Beim Tarifwechsel ersetzt Google Play dein aktuelles Abo und rechnet die verbleibende Zeit an: Du zahlst nie zwei Tarife gleichzeitig.",
     "ajustesEliminarAvisoSuscripcion" to "Wenn du ein Profi-Abo hast, kündige es zuerst in Google Play: Das Löschen des Kontos stoppt die Abbuchungen nicht.",
+    "comOpinion" to "Bewertung",
+    "comValoracion" to "Bewertung",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5988,6 +6004,8 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Passa a questo piano",
     "subCambioPlanInfo" to "Quando cambi piano, Google Play sostituisce l'abbonamento attuale e scala il tempo rimanente: non pagherai mai due piani insieme.",
     "ajustesEliminarAvisoSuscripcion" to "Se hai un abbonamento da professionista, annullalo prima su Google Play: eliminare l'account non interrompe gli addebiti.",
+    "comOpinion" to "recensione",
+    "comValoracion" to "recensione",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6649,6 +6667,8 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "التبديل إلى هذه الخطة",
     "subCambioPlanInfo" to "عند تغيير الخطة، يستبدل Google Play اشتراكك الحالي ويحتسب المدة المتبقية: لن تدفع مقابل خطتين في الوقت نفسه.",
     "ajustesEliminarAvisoSuscripcion" to "إذا كان لديك اشتراك احترافي، فألغِه أولاً من Google Play: حذف الحساب لا يوقف الدفعات.",
+    "comOpinion" to "تقييم",
+    "comValoracion" to "تقييم",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7310,6 +7330,8 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "切换到此方案",
     "subCambioPlanInfo" to "切换方案时，Google Play 会替换您当前的订阅并抵扣剩余时长：您不会同时为两个方案付费。",
     "ajustesEliminarAvisoSuscripcion" to "如果您有专业版订阅，请先在 Google Play 中取消：删除账户不会停止扣费。",
+    "comOpinion" to "条评价",
+    "comValoracion" to "条评价",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7971,6 +7993,8 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Treci la acest plan",
     "subCambioPlanInfo" to "Când schimbi planul, Google Play îți înlocuiește abonamentul actual și scade timpul rămas: nu vei plăti două planuri în același timp.",
     "ajustesEliminarAvisoSuscripcion" to "Dacă ai un abonament de profesionist, anulează-l mai întâi din Google Play: ștergerea contului nu oprește plățile.",
+    "comOpinion" to "recenzie",
+    "comValoracion" to "recenzie",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8632,6 +8656,8 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Overstappen naar dit abonnement",
     "subCambioPlanInfo" to "Als je van abonnement wisselt, vervangt Google Play je huidige abonnement en verrekent de resterende tijd: je betaalt nooit voor twee abonnementen tegelijk.",
     "ajustesEliminarAvisoSuscripcion" to "Heb je een abonnement voor vakmensen? Zeg het eerst op in Google Play: je account verwijderen stopt de betalingen niet.",
+    "comOpinion" to "beoordeling",
+    "comValoracion" to "beoordeling",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9293,4 +9319,6 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "subCambiarAPlan" to "Zmień na ten plan",
     "subCambioPlanInfo" to "Przy zmianie planu Google Play zastępuje obecną subskrypcję i odlicza niewykorzystany czas: nie zapłacisz za dwa plany jednocześnie.",
     "ajustesEliminarAvisoSuscripcion" to "Jeśli masz subskrypcję dla specjalistów, najpierw anuluj ją w Google Play: usunięcie konta nie zatrzymuje płatności.",
+    "comOpinion" to "opinia",
+    "comValoracion" to "opinia",
 ), respaldo = espanol) }

@@ -40,6 +40,7 @@ import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.ViewModel.PerfilTecnicoViewModel
 import com.example.zerohaus.Util.TextosEnergia
 import java.util.*
+import com.example.zerohaus.Modelos.Especialidades
 
 /**
  * Perfil público de un profesional: datos, plan, contacto (chat y llamada) y
@@ -247,7 +248,7 @@ fun PerfilTecnicoScreen(
                                 Text(Formato.numero(t.rating), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                             Spacer(Modifier.height(2.dp))
-                            Text("${t.opiniones} ${c.comValoraciones}", color = gris, fontSize = 13.sp)
+                            Text(Formato.cantidad(t.opiniones, c.comValoracion, c.comValoraciones), color = gris, fontSize = 13.sp)
                         }
                     }
                 }
@@ -282,7 +283,8 @@ fun PerfilTecnicoScreen(
                 }
 
                 // ---- ESPECIALIDADES ----
-                if (t.especialidades.isNotEmpty()) {
+                val especialidades = Especialidades.paraMostrar(t.especialidades)
+                if (especialidades.isNotEmpty()) {
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -297,7 +299,7 @@ fun PerfilTecnicoScreen(
                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    t.especialidades.forEach { esp ->
+                                    especialidades.forEach { esp ->
                                         Surface(shape = RoundedCornerShape(20.dp), color = verde.copy(alpha = 0.08f)) {
                                             Text(
                                                 TextosEnergia.especialidad(esp, c),

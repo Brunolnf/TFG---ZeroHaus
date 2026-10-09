@@ -494,12 +494,12 @@ fun TecnicosScreen(
                             Spacer(Modifier.height(10.dp))
 
                             // Chips de especialidades con scroll horizontal (max 4)
-                            if (t.especialidades.isNotEmpty()) {
+                            if (Especialidades.paraMostrar(t.especialidades).isNotEmpty()) {
                                 Row(
                                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    t.especialidades.take(4).forEach { esp ->
+                                    Especialidades.paraMostrar(t.especialidades).take(4).forEach { esp ->
                                         Surface(
                                             shape = RoundedCornerShape(20.dp),
                                             color = verde.copy(alpha = 0.08f)
@@ -530,7 +530,7 @@ fun TecnicosScreen(
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(Modifier.width(3.dp))
-                                    Text("${t.opiniones} ${c.comOpiniones}", color = gris, fontSize = 12.sp)
+                                    Text(Formato.cantidad(t.opiniones, c.comOpinion, c.comOpiniones), color = gris, fontSize = 12.sp)
                                 }
                             }
 

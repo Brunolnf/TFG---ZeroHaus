@@ -30,6 +30,7 @@ import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.RankingsViewModel
 import com.example.zerohaus.Util.TextosEnergia
+import com.example.zerohaus.Modelos.Especialidades
 
 /**
  * Ranking de profesionales ordenado por valoración media.
@@ -148,13 +149,13 @@ fun RankingsScreen(
                                 Text(t.nombre, fontWeight = FontWeight.SemiBold)
 
                                 // Especialidades como chips horizontales
-                                if (t.especialidades.isNotEmpty()) {
+                                if (Especialidades.paraMostrar(t.especialidades).isNotEmpty()) {
                                     Spacer(Modifier.height(4.dp))
                                     Row(
                                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        t.especialidades.take(4).forEach { esp ->
+                                        Especialidades.paraMostrar(t.especialidades).take(4).forEach { esp ->
                                             Surface(
                                                 shape = RoundedCornerShape(20.dp),
                                                 color = verde.copy(alpha = 0.08f)
@@ -201,7 +202,7 @@ fun RankingsScreen(
 
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "${t.opiniones} ${c.comOpiniones}",
+                                    Formato.cantidad(t.opiniones, c.comOpinion, c.comOpiniones),
                                     color = gris,
                                     fontSize = 12.sp
                                 )

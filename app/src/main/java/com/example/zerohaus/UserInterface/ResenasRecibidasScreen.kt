@@ -87,7 +87,7 @@ fun ResenasRecibidasScreen(
                                     )
                                 }
                             }
-                            Text("${estado.totales} ${c.comValoraciones}", color = gris, fontSize = 12.sp)
+                            Text(Formato.cantidad(estado.totales, c.comValoracion, c.comValoraciones), color = gris, fontSize = 12.sp)
                         }
                         Spacer(Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -16,6 +16,8 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Chat: los errores de envío no se mostraban y el texto se perdía; posibles cierres al llamar desde una tablet o abrir un adjunto sin app.
 - Notificaciones: sin límite, «marcar todas como leídas» fallaba con más de 500 y un reintento del servidor las duplicaba.
 - Ciudades de los profesionales reconocidas por palabras completas («Villaviciosa de Odón» acababa en Vic), «Mis clientes» sin chats vacíos y zonas climáticas de 8 provincias según la tabla del CTE.
+- Ajustes: un cambio sin pulsar «Guardar» se perdía al volver a entrar (la moneda, por ejemplo, volvía a euros), y sin ajustes en el servidor se ponían los de por defecto; ahora cada cambio se guarda en el momento. Al volver de Ajustes o del perfil la app se queda en la pestaña en la que estaba.
+- Profesionales: «1 opiniones» (ahora en singular en los 14 idiomas), especialidades repetidas en los perfiles escritos a mano («Calefacción · Biomasa · Calefacción») y la nota sin formato del idioma en el panel y en el mapa («4.67» en vez de «4,7»).
 
 ### Seguridad
 - Reglas del chat: los adjuntos solo pueden apuntar al Storage de ese chat, los mensajes solo llevan los campos de la app y nadie puede cambiar el nombre con el que le ve el otro; la app ya no crea notificaciones.

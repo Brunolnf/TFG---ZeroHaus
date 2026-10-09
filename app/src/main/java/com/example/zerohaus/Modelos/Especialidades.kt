@@ -62,6 +62,15 @@ object Especialidades {
         return SINONIMOS.firstOrNull { (raiz, _) -> limpio.contains(raiz) }?.second
     }
 
+    /**
+     * Especialidades de un perfil tal y como se muestran: las reconocidas con su
+     * nombre del catálogo y sin repetir (en los perfiles escritos a mano «Suelo
+     * radiante» y «Calefacción» acababan siendo dos chips de Calefacción) y las
+     * que no se reconocen, tal y como se escribieron.
+     */
+    fun paraMostrar(lista: List<String>): List<String> =
+        lista.map { normalizar(it) ?: it.trim() }.filter { it.isNotEmpty() }.distinct()
+
     /** Especialidades canónicas de un perfil, en el orden del catálogo. */
     fun canonicas(lista: List<String>): List<String> {
         val encontradas = lista.mapNotNull { normalizar(it) }.toSet()
