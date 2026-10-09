@@ -14,7 +14,7 @@ playstore-assets/
 ├── textos/
 │   ├── 1-store-listing.md             Nombre, descripciones, categoría y etiquetas
 │   ├── 2-data-safety.md               Formulario de seguridad de los datos  (no versionado)
-│   ├── 3-release-notes.md             Novedades de la versión 2.2.0 (es / en)
+│   ├── 3-release-notes.md             Novedades de la versión 2.3.0 (es / en)
 │   └── 4-app-access-tester.md         Cuenta de prueba para la revisión  (no versionado)
 ├── generar_graficos.py                Genera los gráficos a partir de los logos
 └── README.md

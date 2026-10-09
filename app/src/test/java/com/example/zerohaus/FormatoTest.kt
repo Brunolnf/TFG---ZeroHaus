@@ -59,6 +59,13 @@ class FormatoTest {
     }
 
     @Test
+    fun `una sola opinion va en singular`() {
+        assertEquals("1 opinión", Formato.cantidad(1, "opinión", "opiniones"))
+        assertEquals("0 opiniones", Formato.cantidad(0, "opinión", "opiniones"))
+        assertEquals("12 opiniones", Formato.cantidad(12, "opinión", "opiniones"))
+    }
+
+    @Test
     fun `cada idioma de Ajustes tiene su codigo ISO`() {
         val codigos = listOf(
             "Español", "English", "Català", "Euskara", "Galego", "Português", "Français",
