@@ -15,9 +15,14 @@ class RepositorioAjustes {
     private val auth = FirebaseAuth.getInstance()
     private fun uid() = auth.currentUser?.uid ?: ""
 
-    fun obtenerAjustes(callback: (AjustesUsuario) -> Unit) {
+    /**
+     * null si los ajustes no se han guardado nunca o no se han podido leer. El
+     * documento puede existir solo con el token de notificaciones, por eso se
+     * mira que tenga un ajuste de verdad.
+     */
+    fun obtenerAjustes(callback: (AjustesUsuario?) -> Unit) {
         db.collection("ajustes").document(uid()).getOrTimeout { doc ->
-            callback(doc?.toObject(AjustesUsuario::class.java) ?: AjustesUsuario(uid = uid()))
+            callback(doc?.takeIf { it.contains("unidadMoneda") }?.toObject(AjustesUsuario::class.java))
         }
     }
 
