@@ -5,9 +5,9 @@
 **Eficiencia energética para tu hogar, y los profesionales que te ayudan a conseguirla.**
 
 [![CI](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml/badge.svg)](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml)
-![Versión](https://img.shields.io/badge/versión-2.2.0-1F6E43)
+![Versión](https://img.shields.io/badge/versión-2.3.0-1F6E43)
 ![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.2-7F52FF?logo=kotlin&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Firestore%20·%20Functions%20·%20Auth-FFCA28?logo=firebase&logoColor=black)
 ![Idiomas](https://img.shields.io/badge/idiomas-14-1F6E43)
@@ -51,7 +51,9 @@ ZeroHaus es una app Android que ayuda a los propietarios a **entender y mejorar 
 |---|---|
 | **Preestudio energético** | Formulario con 14 variables de la vivienda (superficie, año, zona climática CTE por provincia, envolvente, sistemas, fotovoltaica, ocupantes…). |
 | **Informe** | Consumo calculado por usos (calefacción, ACS, refrigeración y usos eléctricos, cada uno con sus propios factores), emisiones (factores RITE) y coste por fuente de energía. Etiqueta A–G por energía primaria no renovable de calefacción, refrigeración y ACS por m², como el certificado del RD 390/2021. Recomendaciones con su ahorro real en €/año. |
-| **Simulador «¿qué pasa si…?»** | Combina mejoras y muestra la nueva etiqueta, el ahorro anual, la inversión orientativa y los años de amortización. |
+| **Factura de la luz con IA** | Foto o PDF de la factura: Gemini lee consumo, días, importe y potencia, y el informe calcula el coste y los ahorros con el precio real que paga el usuario. La factura no se guarda. |
+| **Simulador «¿qué pasa si…?»** | Combina mejoras y muestra la nueva etiqueta, el ahorro anual, la inversión orientativa, la deducción del IRPF por obras de eficiencia y los años de amortización. |
+| **Plan por etapas** | Ordena las mejoras empezando por la que antes se amortiza, con la etiqueta de cada paso; se comparte en PDF. |
 | **Consejos con IA** | Recomendaciones personalizadas con Gemini (Vertex AI) sin enviar datos personales. |
 | **Historial y gráficas** | Comparación entre informes, evolución de consumo, emisiones y coste; exportación a PDF. |
 | **Directorio y mapa** | Búsqueda de profesionales por especialidad, valoración y cercanía real. |
@@ -63,7 +65,7 @@ ZeroHaus es una app Android que ayuda a los propietarios a **entender y mejorar 
 |---|---|
 | **Perfil público** | Especialidades, descripción, contacto y ubicación en el mapa. |
 | **Estadísticas** | Visitas al perfil, chats y llamadas de los últimos 30 días, conversión, posición en el directorio de su ciudad y checklist para completar el perfil. |
-| **Suscripciones** | Verificado (trimestral / anual) y Destacado, con precios reales de Google Play, restauración y gestión desde Play. |
+| **Suscripciones** | Verificado (trimestral / anual) y Destacado, con precios reales de Google Play, cambio de plan sin pagar dos a la vez, restauración y gestión desde Play. |
 | **Clientes y reseñas** | Clientes que le han escrito y valoraciones recibidas. |
 
 ### Comunes
@@ -254,7 +256,7 @@ Configuración externa necesaria: productos de suscripción en Play Console, Pla
 ## Versionado y flujo de trabajo
 
 - **[Versionado semántico](https://semver.org/lang/es/)**: cada versión publicada tiene un tag anotado `vX.Y.Z`, y su `versionName` / `versionCode` en `app/build.gradle.kts`.
-- **Ramas**: `master` contiene siempre la última versión estable; el trabajo se hace en ramas `feat/…`, `fix/…` o `release/X.Y.Z` y se integra con un merge.
+- **Ramas**: `main` contiene siempre la última versión estable y está protegida; el trabajo se hace en ramas `feat/…`, `fix/…` o `release/X.Y.Z` y se integra con un pull request (con la CI en verde y historial lineal).
 - **Commits** con el formato [Conventional Commits](https://www.conventionalcommits.org/es/): `feat(área): …`, `fix(área): …`, `build: …`, `docs: …`.
 - Los cambios de cada versión están en el [CHANGELOG](CHANGELOG.md).
 
