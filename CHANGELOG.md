@@ -4,6 +4,8 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 
 ## [Sin publicar]
 
+## [2.3.0] — 2026-10-09 · versionCode 6
+
 ### Corregido (diagnóstico de octubre de 2026)
 - **Teléfono y email de contacto del profesional**: desde la 2.2 no se guardaban (el botón «Llamar» no salía nunca). «Perfil guardado» solo si se guarda de verdad.
 - **Cierre de sesión**: el cierre automático tras 5 min dejaba la app dentro sin usuario; al cerrar sesión seguían llegando los avisos de esa cuenta y la siguiente cuenta veía su último informe.
@@ -25,7 +27,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.
 - Fotos del chat y de perfil comprimidas antes de subirlas (y con su orientación); el directorio ya no descarga todas las reseñas; el perfil público carga sus datos a la vez.
 - Directorio con ubicación aproximada y sin pedir el permiso cada vez.
-- La app arranca con una sola pantalla de bienvenida (la del sistema).
+- La app arranca con una sola pantalla de bienvenida (la del sistema) y el mapa ya no vuelve a descargar los profesionales cada vez que se abre.
 - El plan «Destacado + Anuncios» deja de venderse: prometía una campaña de Google Ads que nada gestionaba (quien lo tenga lo conserva).
 - FCM pasa al ID de instalación (FID) con el token antiguo de respaldo; preferencias locales sin `EncryptedSharedPreferences` (obsoleto), migradas sin perder ajustes; versiones fijas en el backend.
 
@@ -54,7 +56,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 
 ### Cambiado
 - **Algoritmo energético por usos**: calefacción, ACS, refrigeración y usos eléctricos se calculan por separado y cada factor afecta solo al suyo (la envolvente y el clima a la calefacción, el equipo de ACS al agua caliente, la iluminación y los electrodomésticos a la luz). Los sistemas usan su rendimiento real (caldera de gas 0,92, aerotermia SCOP 3, etc.) y el ACS depende de las personas. La **etiqueta** pasa a calcularse, como el certificado del RD 390/2021, con la energía primaria no renovable de calefacción, refrigeración y ACS por m² (coeficientes RITE), con una ocupación estándar para que no dependa del tamaño; el informe la muestra. Solo afecta a los informes nuevos.
-- **La app va más rápida**: el cambio entre pantallas dura 0,2 s en vez de 0,7 s, la pantalla de bienvenida 0,5 s en vez de 1,2 s, los números del último informe ya no se animan desde 0 cada vez que se vuelve al inicio y el directorio de profesionales solo se vuelve a filtrar cuando cambian los datos.
+- **La app va más rápida**: el cambio entre pantallas dura 0,2 s en vez de 0,7 s, los números del último informe ya no se animan desde 0 cada vez que se vuelve al inicio y el directorio de profesionales solo se vuelve a filtrar cuando cambian los datos.
 - Consejos con IA: `gemini-3.5-flash` (servidor en la UE) con `gemini-3.8-flash` de respaldo; `gemini-2.0-flash` se apagó en junio de 2026 y `gemini-2.5-flash` se apaga el 20/10/2026.
 - Las compilaciones de depuración usan App Check con token de depuración (hay que registrarlo en la consola); antes no llevaban App Check y las funciones protegidas las rechazaban.
 - **Herramientas de compilación**: AGP 9 (con Kotlin integrado), Kotlin 2.4, Gradle 9.8 y compileSdk 37 (el targetSdk sigue en 36, sin cambios de comportamiento). Librerías al día: Firebase BOM 34.19, Compose BOM 2026.09, Navigation 2.10, Play Billing 9.1, Maps Compose 8.6, core 1.19, security-crypto 1.1.0 estable.
@@ -133,6 +135,7 @@ Primera versión en pruebas internas de Google Play.
 - Panel de administración, Cloud Functions y App Check.
 - Modo oscuro, 9 idiomas y unidades configurables.
 
-[Sin publicar]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v2.2.0...HEAD
+[Sin publicar]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/Brunolnf/TFG---ZeroHaus/compare/v1.0.0...v2.2.0
 [1.0.0]: https://github.com/Brunolnf/TFG---ZeroHaus/releases/tag/v1.0.0
