@@ -1,54 +1,54 @@
-# Notas de versión — 2.2.0 (versionCode 5)
+# Notas de versión — 2.3.0 (versionCode 6)
 
 Texto para «Novedades de esta versión» en Play Console (máx. 500 caracteres por idioma).
 
 ## Español (es-ES)
 
 ```
-Nueva versión de ZeroHaus:
-🏠 Informe energético más preciso, con el ahorro de cada mejora en €/año
-🔮 Simulador «¿qué pasa si…?» con inversión y amortización
-✨ Consejos personalizados con IA
-👷 Planes Verificado y Destacado y estadísticas para profesionales
-💬 Contacto directo y gratis con los profesionales
-🔒 Verificación del correo con código
-🌍 Ahora en 14 idiomas
+Novedades de ZeroHaus 2.3:
+🧾 Lee tu factura de la luz con IA y calcula con lo que pagas de verdad
+💶 Deducción del IRPF por obras de eficiencia en el simulador
+🗺️ Plan de reforma por etapas, en PDF
+🔔 Al tocar un aviso de mensaje se abre el chat
+📷 Fotos más ligeras y bien orientadas
+👷 Los profesionales ya pueden guardar su teléfono de contacto
+🛠️ Más rápida y con muchos errores corregidos
 ```
 
 ## English (en-US)
 
 ```
-What's new in ZeroHaus:
-🏠 More accurate energy report, with each upgrade's savings in €/year
-🔮 "What if…?" simulator with investment and payback
-✨ Personalised AI advice
-👷 Verified and Featured plans and statistics for professionals
-💬 Free, direct contact with professionals
-🔒 Email verification with a code
-🌍 Now in 14 languages
+What's new in ZeroHaus 2.3:
+🧾 Read your electricity bill with AI and calculate with what you really pay
+💶 Spanish income-tax (IRPF) deduction for efficiency works in the simulator
+🗺️ Step-by-step renovation plan, as a PDF
+🔔 Tapping a message notification opens the chat
+📷 Lighter, correctly rotated photos
+👷 Professionals can now save their contact phone
+🛠️ Faster, with many bug fixes
 ```
 
 ## Formato multiidioma para Play Console
 
 ```
 <es-ES>
-Nueva versión de ZeroHaus:
-🏠 Informe energético más preciso, con el ahorro de cada mejora en €/año
-🔮 Simulador «¿qué pasa si…?» con inversión y amortización
-✨ Consejos personalizados con IA
-👷 Planes Verificado y Destacado y estadísticas para profesionales
-💬 Contacto directo y gratis con los profesionales
-🔒 Verificación del correo con código
-🌍 Ahora en 14 idiomas
+Novedades de ZeroHaus 2.3:
+🧾 Lee tu factura de la luz con IA y calcula con lo que pagas de verdad
+💶 Deducción del IRPF por obras de eficiencia en el simulador
+🗺️ Plan de reforma por etapas, en PDF
+🔔 Al tocar un aviso de mensaje se abre el chat
+📷 Fotos más ligeras y bien orientadas
+👷 Los profesionales ya pueden guardar su teléfono de contacto
+🛠️ Más rápida y con muchos errores corregidos
 </es-ES>
 <en-US>
-What's new in ZeroHaus:
-🏠 More accurate energy report, with each upgrade's savings in €/year
-🔮 "What if…?" simulator with investment and payback
-✨ Personalised AI advice
-👷 Verified and Featured plans and statistics for professionals
-💬 Free, direct contact with professionals
-🔒 Email verification with a code
-🌍 Now in 14 languages
+What's new in ZeroHaus 2.3:
+🧾 Read your electricity bill with AI and calculate with what you really pay
+💶 Spanish income-tax (IRPF) deduction for efficiency works in the simulator
+🗺️ Step-by-step renovation plan, as a PDF
+🔔 Tapping a message notification opens the chat
+📷 Lighter, correctly rotated photos
+👷 Professionals can now save their contact phone
+🛠️ Faster, with many bug fixes
 </en-US>
 ```
