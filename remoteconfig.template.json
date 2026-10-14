@@ -5,7 +5,7 @@
         "value": "0.17"
       },
       "valueType": "NUMBER",
-      "description": "Precio medio de la luz para hogares (€/kWh, IVA incl.). Se usa en los informes sin factura. Válido entre 0.01 y 1.5."
+      "description": "Precio medio de la luz para hogares (€/kWh, IVA incl.). Se usa en los informes sin factura. Válido entre 0.01 y 1.5. Lo actualiza cada día la función actualizar_precio_luz_diario con el PVPC de Red Eléctrica."
     },
     "precio_gas": {
       "defaultValue": {

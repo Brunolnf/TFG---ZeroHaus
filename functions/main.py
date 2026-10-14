@@ -21,6 +21,7 @@ Triggers de Firestore
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
   revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones.
+  actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
   firebase functions:secrets:set SMTP_USUARIO
@@ -39,7 +40,10 @@ import smtplib
 import ssl
 import time
 import os
-from datetime import datetime
+import urllib.parse
+import urllib.request
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from email.utils import formataddr
 from firebase_functions import https_fn, firestore_fn, scheduler_fn, pubsub_fn, options
@@ -1608,6 +1612,155 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
     except Exception as e:
         print(f"[VALORACIONES] No se pudieron recalcular: {e}")
+
+
+# ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══
+# Los informes sin factura usan `precio_electricidad` de Remote Config. Antes
+# se cambiaba a mano en la consola; ahora cada mañana se calcula con el PVPC
+# (tarifa regulada 2.0TD) de las últimas semanas que publica Red Eléctrica en
+# su API pública REData, y se publica solo si ha cambiado lo suficiente.
+REE_PRECIOS_URL = "https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real"
+REE_ID_PVPC = "1001"                  # indicador PVPC en la respuesta, en €/MWh
+REMOTE_CONFIG_URL = f"https://firebaseremoteconfig.googleapis.com/v1/projects/{PROJECT_ID}/remoteConfig"
+PARAM_PRECIO_LUZ = "precio_electricidad"
+
+PRECIO_LUZ_DIAS = 28                  # media de 4 semanas: suaviza los picos de un día
+PRECIO_LUZ_TRAMO_DIAS = 7             # la API responde mejor a consultas de una semana
+PRECIO_LUZ_MIN_HORAS = 20 * 24        # con menos datos no se toca el precio
+# Impuestos sobre el término de energía (2026): impuesto especial sobre la
+# electricidad (5,11269632 %) e IVA (21 %). Si cambian, se actualizan aquí.
+IMPUESTO_ELECTRICIDAD = 0.0511269632
+IVA_LUZ = 0.21
+PRECIO_LUZ_RANGO = (0.01, 1.5)        # el mismo que acepta la app (PreciosEnergia)
+PRECIO_LUZ_CAMBIO_MIN = 0.005         # medio céntimo: por debajo no se publica
+
+
+class _PrecioLuzNoValido(Exception):
+    """Los datos de Red Eléctrica no bastan para dar un precio fiable."""
+
+
+def _tramos_precio_luz(hoy: date) -> list:
+    """Semanas (inicio, fin) que cubren los PRECIO_LUZ_DIAS días hasta ayer."""
+    tramos = []
+    fin = hoy - timedelta(days=1)
+    restantes = PRECIO_LUZ_DIAS
+    while restantes > 0:
+        dias = min(PRECIO_LUZ_TRAMO_DIAS, restantes)
+        inicio = fin - timedelta(days=dias - 1)
+        tramos.append((inicio, fin))
+        fin = inicio - timedelta(days=1)
+        restantes -= dias
+    return list(reversed(tramos))
+
+
+def _valores_pvpc(respuesta: dict) -> list:
+    """Precios del PVPC (€/MWh) de una respuesta de REData; ignora el resto."""
+    for indicador in (respuesta or {}).get("included") or []:
+        if str(indicador.get("id")) != REE_ID_PVPC:
+            continue
+        valores = []
+        for v in (indicador.get("attributes") or {}).get("values") or []:
+            x = v.get("value") if isinstance(v, dict) else None
+            if isinstance(x, (int, float)) and not isinstance(x, bool) and x > 0:
+                valores.append(float(x))
+        return valores
+    return []
+
+
+def _precio_luz_desde_pvpc(valores_eur_mwh: list) -> float:
+    """Media del PVPC en €/kWh con impuestos, redondeada a 4 decimales.
+
+    No incluye el término de potencia ni el alquiler del contador, que no
+    dependen de lo que se consume; el precio de una factura real sí los lleva.
+    """
+    if len(valores_eur_mwh) < PRECIO_LUZ_MIN_HORAS:
+        raise _PrecioLuzNoValido(f"solo {len(valores_eur_mwh)} horas con precio")
+    media_kwh = sum(valores_eur_mwh) / len(valores_eur_mwh) / 1000
+    precio = round(media_kwh * (1 + IMPUESTO_ELECTRICIDAD) * (1 + IVA_LUZ), 4)
+    minimo, maximo = PRECIO_LUZ_RANGO
+    if not minimo <= precio <= maximo:
+        raise _PrecioLuzNoValido(f"{precio} €/kWh está fuera del rango válido")
+    return precio
+
+
+def _aplicar_precio_luz(plantilla: dict, precio: float) -> bool:
+    """Pone el precio en la plantilla de Remote Config. False si no hace falta
+    (la diferencia con el actual es menor que PRECIO_LUZ_CAMBIO_MIN)."""
+    parametros = plantilla.setdefault("parameters", {})
+    parametro = parametros.setdefault(PARAM_PRECIO_LUZ, {"valueType": "NUMBER"})
+    try:
+        actual = float((parametro.get("defaultValue") or {}).get("value"))
+    except (TypeError, ValueError):
+        actual = None
+    if actual is not None and abs(actual - precio) < PRECIO_LUZ_CAMBIO_MIN:
+        return False
+    parametro["defaultValue"] = {"value": f"{precio:.4f}"}
+    return True
+
+
+def _descargar_pvpc(hoy: date) -> list:
+    """Precios horarios del PVPC (€/MWh) de los últimos PRECIO_LUZ_DIAS días."""
+    valores = []
+    for inicio, fin in _tramos_precio_luz(hoy):
+        consulta = urllib.parse.urlencode({
+            "start_date": f"{inicio.isoformat()}T00:00",
+            "end_date": f"{fin.isoformat()}T23:59",
+            "time_trunc": "hour",
+        })
+        peticion = urllib.request.Request(
+            f"{REE_PRECIOS_URL}?{consulta}", headers={"Accept": "application/json"}
+        )
+        with urllib.request.urlopen(peticion, timeout=30) as r:
+            valores += _valores_pvpc(json.load(r))
+    return valores
+
+
+def _publicar_precio_luz(precio: float, horas: int) -> bool:
+    """Lee la plantilla de Remote Config, cambia solo el precio de la luz y la
+    publica. If-Match con el ETag evita pisar un cambio hecho a la vez en la consola."""
+    creds, _ = default_creds(scopes=["https://www.googleapis.com/auth/firebase.remoteconfig"])
+    sesion = AuthorizedSession(creds)
+    r = sesion.get(REMOTE_CONFIG_URL, timeout=30)
+    r.raise_for_status()
+    etag = r.headers.get("ETag") or "*"
+    plantilla = r.json()
+    if not _aplicar_precio_luz(plantilla, precio):
+        return False
+    plantilla["version"] = {
+        "description": f"{PARAM_PRECIO_LUZ} = {precio:.4f} (PVPC de Red Eléctrica, media de {horas} h)"
+    }
+    r = sesion.put(
+        REMOTE_CONFIG_URL,
+        data=json.dumps(plantilla),
+        headers={"Content-Type": "application/json; UTF-8", "If-Match": etag},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return True
+
+
+@scheduler_fn.on_schedule(
+    schedule="every day 06:30",
+    timezone=scheduler_fn.Timezone("Europe/Madrid"),
+    region=REGION,
+)
+def actualizar_precio_luz_diario(event: scheduler_fn.ScheduledEvent) -> None:
+    """Actualiza `precio_electricidad` con el PVPC de Red Eléctrica. Si la API
+    falla o los datos no son fiables se deja el precio que había."""
+    hoy = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    try:
+        valores = _descargar_pvpc(hoy)
+        precio = _precio_luz_desde_pvpc(valores)
+    except (_PrecioLuzNoValido, OSError, ValueError) as e:
+        print(f"[PRECIO_LUZ] Sin cambios, datos de Red Eléctrica no válidos: {e}")
+        return
+    try:
+        publicado = _publicar_precio_luz(precio, len(valores))
+    except Exception as e:
+        print(f"[PRECIO_LUZ] No se pudo publicar {precio} €/kWh en Remote Config: {e}")
+        return
+    estado = "publicado" if publicado else "sin cambios (diferencia menor de medio céntimo)"
+    print(f"[PRECIO_LUZ] {precio} €/kWh con {len(valores)} h de PVPC: {estado}")
 
 
 # Copias de seguridad: las hace Firestore (copias gestionadas, diaria 7 días y
