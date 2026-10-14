@@ -34,6 +34,7 @@ import hashlib
 import hmac
 import html
 import json
+import math
 import re
 import secrets
 import smtplib
@@ -1654,14 +1655,18 @@ def _tramos_precio_luz(hoy: date) -> list:
 
 
 def _valores_pvpc(respuesta: dict) -> list:
-    """Precios del PVPC (€/MWh) de una respuesta de REData; ignora el resto."""
+    """Precios del PVPC (€/MWh) de una respuesta de REData; ignora el resto.
+
+    Los negativos se quedan: el PVPC baja de cero en las horas solares de
+    algunos fines de semana, y quitarlos subiría la media.
+    """
     for indicador in (respuesta or {}).get("included") or []:
         if str(indicador.get("id")) != REE_ID_PVPC:
             continue
         valores = []
         for v in (indicador.get("attributes") or {}).get("values") or []:
             x = v.get("value") if isinstance(v, dict) else None
-            if isinstance(x, (int, float)) and not isinstance(x, bool) and x > 0:
+            if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x):
                 valores.append(float(x))
         return valores
     return []
