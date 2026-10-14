@@ -248,9 +248,14 @@ def respuesta_ree(pvpc, spot=(50.0,)):
 class PrecioLuzTest(unittest.TestCase):
 
     def test_solo_lee_el_pvpc_y_descarta_valores_raros(self):
-        r = respuesta_ree([120.0, None, "x", -5, 0, 130.5, True])
+        r = respuesta_ree([120.0, None, "x", 130.5, True, float("nan"), float("inf")])
         self.assertEqual(main._valores_pvpc(r), [120.0, 130.5])
         self.assertEqual(main._valores_pvpc({}), [])
+
+    def test_los_precios_negativos_o_cero_cuentan_en_la_media(self):
+        # El PVPC baja de cero en horas solares de fin de semana (p. ej. 12/10/2026)
+        r = respuesta_ree([120.0, -12.35, 0, 130.5])
+        self.assertEqual(main._valores_pvpc(r), [120.0, -12.35, 0.0, 130.5])
 
     def test_precio_con_impuestos_en_eur_kwh(self):
         precio = main._precio_luz_desde_pvpc([120.0] * main.PRECIO_LUZ_MIN_HORAS)
