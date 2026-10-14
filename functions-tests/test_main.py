@@ -236,5 +236,66 @@ class ConfiguracionTest(unittest.TestCase):
             self.assertEqual(esquema["type"], "OBJECT")
 
 
+def respuesta_ree(pvpc, spot=(50.0,)):
+    """Respuesta de REData con el PVPC (id 1001) y el precio spot (id 600)."""
+    def indicador(id_, valores):
+        return {"id": id_, "attributes": {"values": [
+            {"value": v, "datetime": "2026-10-01T00:00:00.000+02:00"} for v in valores
+        ]}}
+    return {"included": [indicador("600", spot), indicador("1001", pvpc)]}
+
+
+class PrecioLuzTest(unittest.TestCase):
+
+    def test_solo_lee_el_pvpc_y_descarta_valores_raros(self):
+        r = respuesta_ree([120.0, None, "x", -5, 0, 130.5, True])
+        self.assertEqual(main._valores_pvpc(r), [120.0, 130.5])
+        self.assertEqual(main._valores_pvpc({}), [])
+
+    def test_precio_con_impuestos_en_eur_kwh(self):
+        precio = main._precio_luz_desde_pvpc([120.0] * main.PRECIO_LUZ_MIN_HORAS)
+        esperado = round(0.12 * (1 + main.IMPUESTO_ELECTRICIDAD) * (1 + main.IVA_LUZ), 4)
+        self.assertEqual(precio, esperado)
+        self.assertAlmostEqual(precio, 0.1526, places=4)
+
+    def test_con_pocos_datos_o_precio_absurdo_no_se_actualiza(self):
+        with self.assertRaises(main._PrecioLuzNoValido):
+            main._precio_luz_desde_pvpc([120.0] * 24)
+        with self.assertRaises(main._PrecioLuzNoValido):
+            main._precio_luz_desde_pvpc([5000.0] * main.PRECIO_LUZ_MIN_HORAS)   # 6,4 €/kWh
+
+    def test_las_semanas_cubren_los_dias_hasta_ayer_sin_solaparse(self):
+        from datetime import date, timedelta
+        hoy = date(2026, 10, 14)
+        tramos = main._tramos_precio_luz(hoy)
+        self.assertEqual(tramos[-1][1], hoy - timedelta(days=1))
+        self.assertEqual(tramos[0][0], hoy - timedelta(days=main.PRECIO_LUZ_DIAS))
+        dias = sum((fin - inicio).days + 1 for inicio, fin in tramos)
+        self.assertEqual(dias, main.PRECIO_LUZ_DIAS)
+        for (_, fin), (inicio, _) in zip(tramos, tramos[1:]):
+            self.assertEqual(inicio, fin + timedelta(days=1))
+
+    def test_solo_cambia_el_precio_de_la_luz_y_si_merece_la_pena(self):
+        plantilla = {"parameters": {
+            "precio_electricidad": {"defaultValue": {"value": "0.17"}, "valueType": "NUMBER", "description": "luz"},
+            "precio_gas": {"defaultValue": {"value": "0.08"}, "valueType": "NUMBER"},
+        }}
+        self.assertFalse(main._aplicar_precio_luz(plantilla, 0.172))      # menos de medio céntimo
+        self.assertEqual(plantilla["parameters"]["precio_electricidad"]["defaultValue"]["value"], "0.17")
+
+        self.assertTrue(main._aplicar_precio_luz(plantilla, 0.1526))
+        luz = plantilla["parameters"]["precio_electricidad"]
+        self.assertEqual(luz["defaultValue"]["value"], "0.1526")
+        self.assertEqual(luz["description"], "luz")
+        self.assertEqual(plantilla["parameters"]["precio_gas"]["defaultValue"]["value"], "0.08")
+
+    def test_crea_el_parametro_si_no_existe_o_usaba_el_valor_de_la_app(self):
+        vacia = {}
+        self.assertTrue(main._aplicar_precio_luz(vacia, 0.15))
+        self.assertEqual(vacia["parameters"]["precio_electricidad"]["defaultValue"]["value"], "0.1500")
+        con_defecto_de_app = {"parameters": {"precio_electricidad": {"defaultValue": {"useInAppDefault": True}}}}
+        self.assertTrue(main._aplicar_precio_luz(con_defecto_de_app, 0.15))
+
+
 if __name__ == "__main__":
     unittest.main()

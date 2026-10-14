@@ -126,6 +126,7 @@ Código en [`functions/main.py`](functions/main.py) (región `europe-west1`).
 | `activar_suscripcion` | callable | Verifica la compra con Google Play (API v2), la liga al usuario y activa el plan. |
 | `on_play_rtdn` | Pub/Sub | Avisos en tiempo real de Play: renovaciones, cancelaciones, reembolsos. |
 | `revisar_suscripciones_diario` | programada | Respaldo diario de las suscripciones y limpieza de eventos de estadísticas. |
+| `actualizar_precio_luz_diario` | programada | Cada día a las 06:30 calcula el precio de la luz con el PVPC oficial de Red Eléctrica (media de 28 días, con impuestos) y lo publica en Remote Config (`precio_electricidad`) si cambia más de medio céntimo. |
 | `enviar_codigo_verificacion` | callable | Genera y envía por email el código de 6 dígitos (irrepetible, un solo uso). |
 | `verificar_codigo_email` | callable | Comprueba el código y marca el email como verificado. |
 | `generar_sugerencias_ia` | callable | Consejos del informe con Gemini; caché por idioma y límite diario. |
@@ -249,7 +250,9 @@ python herramientas/i18n.py comprobar            # verifica que los 14 idiomas e
    firebase deploy --only firestore:rules,storage
    ```
 
-Configuración externa necesaria: productos de suscripción en Play Console, Play Developer API vinculada, tema Pub/Sub `play-rtdn` con permiso de publicación para Google Play y Vertex AI API habilitada.
+Configuración externa necesaria: productos de suscripción en Play Console, Play Developer API vinculada, tema Pub/Sub `play-rtdn` con permiso de publicación para Google Play, Vertex AI API habilitada y, para `actualizar_precio_luz_diario`, la Firebase Remote Config API habilitada y el rol «Administrador de Firebase Remote Config» en la cuenta de servicio de las funciones.
+
+> `precio_electricidad` lo mantiene la función a diario. Si despliegas la plantilla de Remote Config (`firebase deploy` sin `--only`, o `--only remoteconfig`), su valor vuelve al de `remoteconfig.template.json` hasta la siguiente ejecución.
 
 ## Versionado y flujo de trabajo
 
