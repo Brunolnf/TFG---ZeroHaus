@@ -43,7 +43,11 @@ beforeEach(async () => {
       tipoProfesional: "TECNICO", emailContacto: "legacy@x.es",
     });
     await setDoc(doc(db, "chats/con_mensajes"), {
-      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000,
+      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente", "pro"],
+    });
+    // El cliente escribió pero el profesional aún no ha contestado
+    await setDoc(doc(db, "chats/sin_respuesta"), {
+      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente"],
     });
     await setDoc(doc(db, "chats/vacio"), {
       participantes: ["cliente", "pro"], fechaUltimoMensaje: 0,
@@ -73,6 +77,21 @@ describe("reseñas", () => {
   it("se rechaza si el chat no tiene mensajes", async () => {
     const db = verificado("cliente");
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resena({ chatId: "vacio" })));
+  });
+
+  it("se rechaza si el profesional aún no ha contestado", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resena({ chatId: "sin_respuesta" })));
+  });
+
+  it("nadie se apunta como autor de un chat desde la app (lo pone el servidor)", async () => {
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "chats/sin_respuesta"), { escribieron: ["cliente", "pro"] }));
+    await assertFails(setDoc(doc(db, "chats/nuevo"), {
+      id: "nuevo", participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "C", pro: "P" },
+      ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 },
+      escribieron: ["cliente", "pro"],
+    }));
   });
 
   it("se rechaza con el chat de otra persona", async () => {
@@ -349,6 +368,13 @@ describe("chat: creación, cambios y mensajes", () => {
       mensaje({ tipo: "texto", mediaUrl: `${URL_STORAGE}con_mensajes%2Fx.jpg` })));
   });
 
+  it("los archivos del chat son solo PDF", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/m14"), mensaje({
+      id: "m14", tipo: "archivo", texto: "", mediaNombre: "app.apk", mediaBytes: 1234,
+      mediaUrl: `${URL_STORAGE}con_mensajes%2Fm14_app.apk?alt=media&token=abc`,
+    })));
+  });
+
   it("un mensaje no lleva tipos ni campos inventados", async () => {
     const db = verificado("cliente");
     await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m13"), mensaje({ tipo: "html" })));
@@ -359,5 +385,67 @@ describe("chat: creación, cambios y mensajes", () => {
   it("la app no crea notificaciones: solo las Cloud Functions", async () => {
     await assertFails(setDoc(doc(verificado("cliente"), "notificaciones/n9"),
       { uid: "cliente", titulo: "t", detalle: "d", leida: false, fecha: 1, tipo: "chat" }));
+  });
+});
+
+// Tercera auditoría (2026-10-14)
+describe("auditoría: id del chat, bloqueo y perfil profesional", () => {
+  // El id del chat se usaba dentro de la expresión que valida los adjuntos:
+  // con un id como «x|.*» la alternativa aceptaba cualquier URL de internet
+  const ID_MALICIOSO = "x|.*";
+  const URL_EXTERNA = "https://malicioso.example/descarga%2Fapp.apk";
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), `chats/${ID_MALICIOSO}`), {
+        participantes: ["cliente", "pro"], fechaUltimoMensaje: 0,
+      }));
+  });
+
+  it("no se puede crear un chat con un id que no sea como los de la app", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "chats/a|.*"), {
+      id: "a|.*", participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "C", pro: "P" },
+      ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 },
+    }));
+    // Los ids automáticos de Firestore (20 letras y números) siguen valiendo
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/AbCdEfGhIj0123456789"), {
+      id: "AbCdEfGhIj0123456789", participantes: ["cliente", "pro"],
+      nombresParticipantes: { cliente: "C", pro: "P" },
+      ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 },
+    }));
+  });
+
+  it("un adjunto no puede llevar a otra web aunque el chat tenga un id raro", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), `chats/${ID_MALICIOSO}/mensajes/m1`), {
+      id: "m1", chatId: ID_MALICIOSO, emisorUid: "cliente", emisorNombre: "Cliente",
+      texto: "", fecha: 1, leido: false, tipo: "archivo", mediaUrl: URL_EXTERNA,
+      mediaNombre: "factura.pdf", mediaBytes: 1,
+    }));
+  });
+
+  it("un usuario no puede borrar su perfil para quitarse un bloqueo", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      updateDoc(doc(ctx.firestore(), "usuarios/cliente"), { bloqueado: true }));
+    await assertFails(deleteDoc(doc(verificado("cliente"), "usuarios/cliente")));
+  });
+
+  it("el profesional edita su perfil como hace la app", async () => {
+    await assertSucceeds(updateDoc(doc(verificado("pro"), "tecnicos/pro"), {
+      nombre: "Pro", ciudad: "Madrid", descripcion: "Aislamientos", telefono: "600000000",
+      emailContacto: "pro@x.es", especialidades: ["Aislamiento", "Ventanas"],
+      latitud: 40.4168, longitud: -3.7038,
+    }));
+    // Reparación de un perfil antiguo: rellena id y uid
+    await assertSucceeds(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { id: "pro" }));
+  });
+
+  it("el perfil profesional, que descargan todos, no admite campos inventados ni gigantes", async () => {
+    const db = verificado("pro");
+    await assertFails(updateDoc(doc(db, "tecnicos/pro"), { relleno: "x".repeat(100000) }));
+    await assertFails(updateDoc(doc(db, "tecnicos/pro"), { ciudad: "x".repeat(5000) }));
+    await assertFails(updateDoc(doc(db, "tecnicos/pro"),
+      { especialidades: Array.from({ length: 50 }, (_, i) => `E${i}`) }));
+    await assertFails(updateDoc(doc(db, "tecnicos/pro"), { especialidades: ["x".repeat(5000)] }));
+    await assertFails(updateDoc(doc(db, "tecnicos/pro"), { latitud: 500 }));
   });
 });

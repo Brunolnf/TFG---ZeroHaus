@@ -21,7 +21,8 @@ import com.google.firebase.functions.FirebaseFunctions
  * con las mismas credenciales del proyecto, creamos al usuario allí
  * y desechamos la sesión secundaria. La sesión del admin queda intacta.
  *
- * **Bloquear**: flag `bloqueado` en Firestore que el login comprueba.
+ * **Bloquear**: Cloud Function `bloquear_usuario`, que desactiva la cuenta en
+ * Auth, cierra sus sesiones y pone el flag `bloqueado` que muestra el login.
  *
  * **Eliminar**: el cliente no puede borrar la cuenta Auth de otro usuario
  * (requiere Admin SDK), así que se delega en la Cloud Function
@@ -168,12 +169,17 @@ class RepositorioAdmin {
             }
     }
 
-    /** Bloquea o desbloquea. El cambio surte efecto en el siguiente login. */
+    /**
+     * Bloquea o desbloquea con la Cloud Function `bloquear_usuario`. Solo con
+     * el flag de Firestore, otra app o la API REST seguían usando la cuenta;
+     * ahora se desactiva en Auth y su sesión caduca en menos de una hora.
+     */
     fun setBloqueado(uid: String, bloqueado: Boolean, callback: (Result<Unit>) -> Unit) {
-        db.collection("usuarios").document(uid)
-            .set(mapOf("bloqueado" to bloqueado), SetOptions.merge())
+        functions.getHttpsCallable("bloquear_usuario")
+            .call(hashMapOf("uid" to uid, "bloqueado" to bloqueado))
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
+                Diagnostico.errorDeFuncion("bloquear_usuario", e)
                 callback(Result.failure(Exception(e.message ?: "Error cambiando estado")))
             }
     }

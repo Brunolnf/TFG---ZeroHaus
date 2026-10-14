@@ -24,6 +24,14 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Los avisos de mensajes y valoraciones usan el nombre del perfil, no el que escribe el móvil (se podía firmar como «ZeroHaus Soporte»).
 - Fuera el certificate pinning incompleto (podía dejar la app sin conexión) y las comprobaciones de root que lanzaban procesos en el arranque.
 - Al borrar la cuenta se avisa al profesional de que Google Play seguirá cobrando su suscripción.
+- Auditoría del 14/10/2026: un chat creado con un id como `x|.*` permitía enviar como «foto» o «archivo» un enlace a cualquier web; ahora el id tiene que ser como los de la app.
+- Bloquear a un usuario desde el panel lo desactiva en Firebase Auth y cierra sus sesiones (función `bloquear_usuario`); antes solo lo comprobaba el login de la app, y el usuario podía borrar su perfil para quitarse el bloqueo.
+- El perfil profesional, que descargan todos los clientes, no admite campos inventados ni enormes (ciudad, especialidades, coordenadas).
+- Los consejos con IA, la lectura de facturas y la activación de suscripciones exigen el email verificado, como el resto de datos.
+- **Reseñas**: solo se puede valorar a un profesional que te haya contestado por el chat (antes bastaba con abrir un chat con él). Quién ha escrito lo anota el servidor; los chats antiguos se rellenan solos.
+- **Adjuntos del chat**: solo fotos y PDF (antes cualquier archivo, también una APK).
+- Envío de códigos de verificación con App Check y tope diario de correos de toda la app (300), para que nadie pueda usar la cuenta de correo de ZeroHaus para mandar códigos en masa.
+- Las cuentas bloqueadas antes de este cambio se desactivan en Firebase Auth en la revisión diaria.
 
 ### Mejorado
 - Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.
@@ -34,6 +42,7 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - FCM pasa al ID de instalación (FID) con el token antiguo de respaldo; preferencias locales sin `EncryptedSharedPreferences` (obsoleto), migradas sin perder ajustes; versiones fijas en el backend.
 
 ### Añadido
+- **Precio de la luz automático**: la función programada `actualizar_precio_luz_diario` calcula cada mañana el precio medio de la luz con el PVPC oficial de Red Eléctrica (últimos 28 días, con impuesto especial sobre la electricidad e IVA) y lo publica en Remote Config (`precio_electricidad`) si cambia más de medio céntimo. Si la API de Red Eléctrica falla o faltan datos, se mantiene el precio anterior. Con 7 tests nuevos en `functions-tests/`.
 - **Factura de la luz con IA**: en el preestudio se puede hacer una foto o subir el PDF de la factura; Gemini lee consumo, días, importe y potencia contratada (función `leer_factura`). El informe calcula el coste y los ahorros con el precio real que paga el usuario y muestra el consumo real frente al estimado, también en el PDF y el texto compartidos y en los consejos de la IA. El archivo no se guarda; cuenta dentro del límite diario de IA.
 - **Precios de la energía con Firebase Remote Config** (`precio_electricidad`, `precio_gas`, `precio_biomasa`): se cambian desde la consola sin publicar versión; los valores fuera de rango se ignoran.
 - **Deducción del IRPF en el simulador**: al marcar mejoras, estima si darían derecho a la deducción por obras de eficiencia energética en la vivienda habitual (20 % si la demanda de calefacción y refrigeración baja un 7 %; 40 % si la energía primaria no renovable baja un 30 % o la vivienda mejora hasta A o B), su importe con la base máxima (5.000 € o 7.500 €), la inversión neta y la amortización con la deducción. Se muestra hasta el último día de obras con deducción (31/12/2026), que se puede ampliar desde Remote Config (`deduccion_irpf_hasta`) si se vuelve a prorrogar.

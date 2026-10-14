@@ -127,8 +127,8 @@ class RepositorioChat {
     }
 
     /**
-     * Id del chat CON MENSAJES entre el usuario actual y [otroUid], o null.
-     * Es el requisito para poder valorar a un profesional.
+     * Id del chat con [otroUid] en el que han escrito los dos (el profesional
+     * ha contestado), o null. Es el requisito para poder valorarle.
      */
     fun buscarConversacionCon(otroUid: String, callback: (String?) -> Unit) {
         val miUid = uid()
@@ -138,7 +138,7 @@ class RepositorioChat {
             .getOrTimeout { snap ->
                 val chat = snap?.documents
                     ?.mapNotNull { it.toObject(Chat::class.java)?.copy(id = it.id) }
-                    ?.filter { otroUid in it.participantes && it.fechaUltimoMensaje > 0 }
+                    ?.filter { otroUid in it.participantes && miUid in it.escribieron && otroUid in it.escribieron }
                     ?.maxByOrNull { it.fechaUltimoMensaje }
                 callback(chat?.id)
             }
@@ -268,10 +268,13 @@ class RepositorioChat {
         callback: (Boolean) -> Unit
     ) {
         val miUid = uid()
+        // Solo PDF (las reglas lo exigen): con la extensión, aunque el sistema
+        // dé el nombre sin ella
+        val nombrePdf = if (nombre.lowercase().endsWith(".pdf")) nombre else "$nombre.pdf"
         val ref = db.collection("chats").document(chatId).collection("mensajes").document()
-        val storageRef = storage.reference.child("chats/$chatId/${ref.id}_$nombre")
+        val storageRef = storage.reference.child("chats/$chatId/${ref.id}_$nombrePdf")
 
-        storageRef.putFile(uri)
+        storageRef.putFile(uri, StorageMetadata.Builder().setContentType("application/pdf").build())
             .continueWithTask { task ->
                 if (!task.isSuccessful) throw task.exception!!
                 storageRef.downloadUrl
@@ -287,13 +290,13 @@ class RepositorioChat {
                         texto = "",
                         tipo = "archivo",
                         mediaUrl = url,
-                        mediaNombre = nombre,
+                        mediaNombre = nombrePdf,
                         mediaBytes = bytes
                     )
 
                     ref.set(mensaje)
                         .addOnSuccessListener {
-                            actualizarChatYNotificar(chatId, "📎 $nombre", miUid)
+                            actualizarChatYNotificar(chatId, "📎 $nombrePdf", miUid)
                             callback(true)
                         }
                         .addOnFailureListener { callback(false) }

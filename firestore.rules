@@ -44,6 +44,48 @@ service cloud.firestore {
           && (!('telefono' in d.keys()) || (d.telefono is string && d.telefono.size() <= 20))
           && (!('emailContacto' in d.keys()) || (d.emailContacto is string && d.emailContacto.size() <= 254));
     }
+    // El perfil profesional lo descarga todo el mundo (directorio y mapa): sin
+    // estos límites un profesional podía meter campos inventados o enormes y
+    // hacer que cada cliente se bajara ~1 MB por él. `claves` son los campos
+    // que se escriben (todos al crear, solo los cambiados al editar), para no
+    // bloquear perfiles antiguos por campos que no se tocan.
+    function especialidadValida(l, i) {
+      return l.size() <= i || (l[i] is string && l[i].size() <= 80);
+    }
+    function especialidadesValidas(l) {
+      return l is list && l.size() <= 20
+          && especialidadValida(l, 0) && especialidadValida(l, 1) && especialidadValida(l, 2)
+          && especialidadValida(l, 3) && especialidadValida(l, 4) && especialidadValida(l, 5)
+          && especialidadValida(l, 6) && especialidadValida(l, 7) && especialidadValida(l, 8)
+          && especialidadValida(l, 9) && especialidadValida(l, 10) && especialidadValida(l, 11)
+          && especialidadValida(l, 12) && especialidadValida(l, 13) && especialidadValida(l, 14)
+          && especialidadValida(l, 15) && especialidadValida(l, 16) && especialidadValida(l, 17)
+          && especialidadValida(l, 18) && especialidadValida(l, 19);
+    }
+    function camposUbicacionValidos(claves) {
+      let d = request.resource.data;
+      return (!('ciudad' in claves) || (d.ciudad is string && d.ciudad.size() <= 100))
+          && (!('especialidades' in claves) || especialidadesValidas(d.especialidades))
+          && (!('latitud' in claves) || (d.latitud is number && d.latitud >= -90 && d.latitud <= 90))
+          && (!('longitud' in claves) || (d.longitud is number && d.longitud >= -180 && d.longitud <= 180));
+    }
+    // Al editar solo cambian campos del modelo Tecnico de la app (los de
+    // servidor siguen congelados con noMuta); nada de campos nuevos.
+    function edicionPerfilValida() {
+      let cambios = request.resource.data.diff(resource.data).affectedKeys();
+      return camposPerfilValidos()
+          && camposUbicacionValidos(cambios)
+          && cambios.hasOnly(['id', 'uid', 'nombre', 'ciudad', 'descripcion', 'telefono',
+                              'emailContacto', 'especialidades', 'latitud', 'longitud',
+                              'distanciaKm', 'tipoProfesional', 'rating', 'opiniones',
+                              'proyectosCompletados', 'planActivo', 'suscripcionHasta']);
+    }
+    // Ids de chat como los que crea la app (automáticos de Firestore). El id
+    // se mete en la expresión que valida los adjuntos: con «x|.*» aceptaba
+    // un enlace a cualquier web.
+    function idChatValido(chatId) {
+      return chatId.matches('[A-Za-z0-9_-]{1,128}');
+    }
 
     match /usuarios/{userId} {
       // Leer y crear tu propio perfil se permite antes de verificar: el registro
@@ -72,7 +114,9 @@ service cloud.firestore {
                         && (!('nombre' in request.resource.data.keys())
                             || (request.resource.data.nombre is string
                                 && request.resource.data.nombre.size() <= 60)));
-      allow delete: if esMio(userId) || esAdmin();
+      // Solo el administrador: borrarlo y volver a crearlo quitaba el bloqueo.
+      // El borrado de la propia cuenta lo hace la Cloud Function eliminar_mi_cuenta.
+      allow delete: if esAdmin();
     }
 
     match /viviendas/{docId} {
@@ -124,12 +168,8 @@ service cloud.firestore {
                     && request.resource.data.get('suscripcionHasta', 0) == 0
                     && request.resource.data.nombre is string
                     && request.resource.data.nombre.size() <= 100
-                    && (!('descripcion' in request.resource.data.keys())
-                        || request.resource.data.descripcion.size() <= 2000)
-                    && (!('telefono' in request.resource.data.keys())
-                        || request.resource.data.telefono.size() <= 20)
-                    && (!('emailContacto' in request.resource.data.keys())
-                        || request.resource.data.emailContacto.size() <= 254))
+                    && camposPerfilValidos()
+                    && camposUbicacionValidos(request.resource.data.keys()))
                     || esAdmin();
       allow update: if esAdmin()
                     || ((logueado() && resource.data.uid == uid() && noMuta('uid'))
@@ -137,13 +177,13 @@ service cloud.firestore {
                         && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
                         && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
                         && noMutaOpcional('tipoProfesional')
-                        && camposPerfilValidos())
+                        && edicionPerfilValida())
                     || ((logueado() && docId == uid() && request.resource.data.uid == uid())
                         && tamanoDocMaximo()
                         && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
                         && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
                         && noMutaOpcional('tipoProfesional')
-                        && camposPerfilValidos())
+                        && edicionPerfilValida())
                     // Reclamar un perfil legacy sin uid: solo con el email VERIFICADO
                     // (si no, cualquiera podría registrarse con el correo de otro).
                     || ((logueado()
@@ -155,7 +195,7 @@ service cloud.firestore {
                         && noMuta('rating') && noMuta('opiniones') && noMuta('proyectosCompletados')
                         && noMutaOpcional('planActivo') && noMutaOpcional('suscripcionHasta')
                         && noMutaOpcional('tipoProfesional')
-                        && camposPerfilValidos());
+                        && edicionPerfilValida());
       allow delete: if esAdmin();
 
       // Eventos para las estadísticas del profesional (visita al perfil,
@@ -203,13 +243,16 @@ service cloud.firestore {
     }
 
     // Solo se puede valorar a un profesional con quien existe una conversación
-    // real (chat con mensajes). Evita reseñas falsas desde cuentas sin relación.
+    // real: los dos han escrito en el chat, o sea, el profesional ha
+    // contestado. `escribieron` solo lo pone la Cloud Function de mensajes
+    // (antes bastaba con abrir un chat o escribirle uno mismo).
     function conversacionReal(chatId, tecnicoId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId)).data;
       let prof = get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data;
       return uid() in chat.participantes
           && prof.uid in chat.participantes
-          && chat.get('fechaUltimoMensaje', 0) > 0;
+          && uid() in chat.get('escribieron', [])
+          && prof.uid in chat.get('escribieron', []);
     }
 
     match /resenas/{docId} {
@@ -253,15 +296,17 @@ service cloud.firestore {
     // Un chat nuevo nace vacío, entre dos personas distintas y con los nombres
     // solo de sus participantes (antes se podía crear ya "con mensajes", que es
     // lo que exigen las reseñas).
-    function chatNuevoValido() {
+    function chatNuevoValido(chatId) {
       let d = request.resource.data;
-      return d.participantes is list
+      return idChatValido(chatId)
+          && d.participantes is list
           && d.participantes.size() == 2
           && uid() in d.participantes
           && d.participantes[0] != d.participantes[1]
           && (!('nombresParticipantes' in d) || d.nombresParticipantes.keys().hasOnly(d.participantes))
           && d.get('fechaUltimoMensaje', 0) == 0
-          && d.get('ultimoMensaje', '') == '';
+          && d.get('ultimoMensaje', '') == ''
+          && d.get('escribieron', []).size() == 0;
     }
     // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
     // los no leídos. Antes un participante podía cambiar cualquier campo,
@@ -287,8 +332,12 @@ service cloud.firestore {
           && d.get('texto', '') is string && d.get('texto', '').size() <= 2000
           && d.get('emisorNombre', '') is string && d.get('emisorNombre', '').size() <= 100
           && d.get('mediaNombre', '') is string && d.get('mediaNombre', '').size() <= 255
+          // Los archivos son solo PDF (las fotos van como «imagen»): antes se
+          // podía mandar cualquier cosa, también una APK
+          && (d.get('tipo', 'texto') != 'archivo' || d.get('mediaNombre', '').lower().matches('.+[.]pdf'))
           && (d.get('mediaUrl', '') == ''
               || (d.get('tipo', 'texto') != 'texto'
+                  && idChatValido(chatId)
                   && d.mediaUrl is string
                   && d.mediaUrl.matches('https://firebasestorage[.]googleapis[.]com/v0/b/zerohaus-2a865[.]firebasestorage[.]app/o/chats%2F'
                                         + chatId + '%2F[^/]+')));
@@ -298,7 +347,7 @@ service cloud.firestore {
       allow read: if (logueado() && uid() in resource.data.participantes) || esAdmin();
       // La app no borra chats (borrarlo dejaba sus mensajes huérfanos)
       allow delete: if esAdmin();
-      allow create: if (logueado() && tamanoDocMaximo() && chatNuevoValido()) || esAdmin();
+      allow create: if (logueado() && tamanoDocMaximo() && chatNuevoValido(chatId)) || esAdmin();
       allow update: if (logueado() && uid() in resource.data.participantes
                     && tamanoDocMaximo()
                     && cambioDeChatValido())

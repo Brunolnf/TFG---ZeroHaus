@@ -12,6 +12,7 @@ Callables (se invocan desde la app con Firebase Functions)
   eliminar_mi_cuenta           Borrado completo de la propia cuenta (RGPD / Play).
   eliminar_usuario_completo    Borrado completo de un usuario (solo admin).
   marcar_email_verificado      Marca un email como verificado (solo admin).
+  bloquear_usuario             Bloquea o desbloquea una cuenta en Auth y en /usuarios (solo admin).
 
 Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
@@ -20,7 +21,9 @@ Triggers de Firestore
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
-  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones.
+  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
+                               autores de chats antiguos y bloqueos pendientes en Auth.
+  actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
   firebase functions:secrets:set SMTP_USUARIO
@@ -33,13 +36,17 @@ import hashlib
 import hmac
 import html
 import json
+import math
 import re
 import secrets
 import smtplib
 import ssl
 import time
 import os
-from datetime import datetime
+import urllib.parse
+import urllib.request
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from email.utils import formataddr
 from firebase_functions import https_fn, firestore_fn, scheduler_fn, pubsub_fn, options
@@ -104,6 +111,21 @@ def _verificar_admin(req: https_fn.CallableRequest) -> None:
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "Solo el administrador puede ejecutar esta operación."
         )
+
+
+def _exigir_email_verificado(req: https_fn.CallableRequest) -> str:
+    """uid de quien llama, si ha iniciado sesión con el email verificado (lo
+    mismo que exigen las reglas para cualquier dato). Sin esto, una cuenta
+    recién creada y sin verificar podía gastar el cupo de Gemini."""
+    if req.auth is None:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
+    if (req.auth.token or {}).get("email_verified") is not True:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Verifica tu email para continuar.",
+            {"motivo": "email_sin_verificar"},
+        )
+    return req.auth.uid
 
 
 def _borrar_query(db, query, batch_size=400) -> int:
@@ -263,6 +285,58 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
 )
+def bloquear_usuario(req: https_fn.CallableRequest) -> dict:
+    """Bloquea o desbloquea una cuenta. Reservado al administrador.
+    Args: uid (str), bloqueado (bool).
+
+    Antes era solo el campo `bloqueado` de /usuarios, que comprueba el login
+    de la app: con otra app o la API REST se seguía usando la cuenta. Ahora
+    también se desactiva en Auth (no puede iniciar sesión ni renovar el
+    token) y se cierran sus sesiones abiertas."""
+    _verificar_admin(req)
+    data = req.data or {}
+    uid = data.get("uid")
+    bloqueado = data.get("bloqueado")
+    if not uid or not isinstance(uid, str) or not isinstance(bloqueado, bool):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Faltan 'uid' o 'bloqueado'.")
+    if uid == req.auth.uid:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "El administrador no puede bloquearse a sí mismo."
+        )
+    try:
+        auth.update_user(uid, disabled=bloqueado)
+    except auth.UserNotFoundError:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
+    if bloqueado:
+        # El token que ya tiene vale como mucho una hora más; no se renueva
+        auth.revoke_refresh_tokens(uid)
+    firestore.client().collection("usuarios").document(uid).set({"bloqueado": bloqueado}, merge=True)
+    print(f"[ADMIN] {req.auth.uid} {'bloqueó' if bloqueado else 'desbloqueó'} a {uid}")
+    return {"ok": True}
+
+
+def _sincronizar_bloqueados(db) -> int:
+    """Desactiva en Auth a quien tiene `bloqueado` en /usuarios pero sigue con
+    la cuenta activa (bloqueados antes de bloquear_usuario o a mano en la
+    consola). Devuelve cuántos."""
+    desactivados = 0
+    for u in db.collection("usuarios").where(filter=FieldFilter("bloqueado", "==", True)).stream():
+        try:
+            if not auth.get_user(u.id).disabled:
+                auth.update_user(u.id, disabled=True)
+                auth.revoke_refresh_tokens(u.id)
+                desactivados += 1
+        except auth.UserNotFoundError:
+            continue
+    return desactivados
+
+
+@https_fn.on_call(
+    region=REGION,
+    enforce_app_check=True,
+    cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+)
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
     todos sus datos. Obligatorio por la política de Google Play (borrado de
@@ -319,6 +393,25 @@ _AVISOS_EMAIL = {
 }
 
 AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación cada 30 min
+# Tope de correos al día entre todos (códigos y avisos): la cuenta de Gmail
+# admite unos 500 y, si se pasa, Google la bloquea y nadie recibe su código.
+# Así, aunque alguien cree cuentas en masa para mandar códigos, no la tumba.
+CORREOS_MAX_DIA = int(os.environ.get("CORREOS_MAX_DIA", "300"))
+
+
+def _reservar_cupo_correo(db) -> bool:
+    """Gasta un correo del tope diario (CORREOS_MAX_DIA). False si ya no quedan."""
+    ref = db.collection("limites_correo").document(time.strftime("%Y%m%d", time.gmtime()))
+
+    @firestore.transactional
+    def _reservar(txn):
+        enviados = int((ref.get(transaction=txn).to_dict() or {}).get("enviados") or 0)
+        if enviados >= CORREOS_MAX_DIA:
+            return False
+        txn.set(ref, {"enviados": enviados + 1})
+        return True
+
+    return _reservar(db.transaction())
 
 
 def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str = "", **campos) -> None:
@@ -333,6 +426,9 @@ def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str 
             ref.set({clave_limite: _ahora_ms()}, merge=True)
         usuario = auth.get_user(uid)
         if not usuario.email or not usuario.email_verified:
+            return
+        if not _reservar_cupo_correo(db):
+            print(f"[EMAIL] Tope diario de correos alcanzado: sin aviso '{tipo}' a {uid}")
             return
         t = _AVISOS_EMAIL.get(idioma, _AVISOS_EMAIL["Español"])
         asunto, cuerpo = (t[0], t[1]) if tipo == "mensaje" else (t[2], t[3])
@@ -437,6 +533,17 @@ def on_message_created(event) -> None:
         return
     participantes = (chat_snap.to_dict() or {}).get("participantes", [])
     destinatarios = [uid for uid in participantes if uid != emisor_uid]
+    # Quién ha escrito en el chat: solo lo pone el servidor, y las reseñas
+    # exigen que hayan escrito los dos (que el profesional haya contestado)
+    if emisor_uid in participantes:
+        try:
+            if "escribieron" in (chat_snap.to_dict() or {}):
+                chat_snap.reference.update({"escribieron": firestore.ArrayUnion([emisor_uid])})
+            else:
+                # Chat de antes de este campo: se rellena con todos sus mensajes
+                _rellenar_escribieron_chat(chat_snap)
+        except Exception as e:
+            print(f"[CHAT] No se pudo anotar quién escribió en {chat_id}: {e}")
 
     for uid in destinatarios:
         pref = _preferencias(db, uid)
@@ -464,6 +571,30 @@ def on_message_created(event) -> None:
                 db, uid, pref["idioma"], "mensaje", clave_limite=f"chat_{chat_id}",
                 nombre=emisor_nombre, texto=cuerpo[:300],
             )
+
+
+def _autores_del_chat(mensajes: list, participantes: list) -> list:
+    """Participantes que han escrito algún mensaje, en el orden de `participantes`."""
+    escritos = {m.get("emisorUid") for m in mensajes}
+    return [p for p in participantes if p in escritos]
+
+
+def _rellenar_escribieron_chat(chat_snap) -> None:
+    """Pone `escribieron` de un chat a partir de los mensajes que tiene."""
+    mensajes = [m.to_dict() or {} for m in chat_snap.reference.collection("mensajes").stream()]
+    participantes = (chat_snap.to_dict() or {}).get("participantes") or []
+    chat_snap.reference.update({"escribieron": _autores_del_chat(mensajes, participantes)})
+
+
+def _rellenar_escribieron_antiguos(db) -> int:
+    """Chats con mensajes de antes del campo `escribieron` (los que no reciben
+    mensajes nuevos no pasan por on_message_created). Devuelve cuántos."""
+    rellenados = 0
+    for chat in db.collection("chats").where(filter=FieldFilter("fechaUltimoMensaje", ">", 0)).stream():
+        if "escribieron" not in (chat.to_dict() or {}):
+            _rellenar_escribieron_chat(chat)
+            rellenados += 1
+    return rellenados
 
 
 def _nombre_real(db, uid: str, respaldo: str) -> str:
@@ -711,10 +842,11 @@ def _enviar_email_codigo(destino: str, codigo: str, idioma: str) -> None:
     )
 
 
-# enforce_app_check=False a propósito: los builds de depuración no instalan
-# App Check y, si no, nadie podría verificar su email para entrar. Están
-# protegidas por autenticación y por los límites de envío e intentos.
-@https_fn.on_call(region=REGION, secrets=[SMTP_USUARIO, SMTP_CLAVE])
+# Con App Check, como el resto de funciones: sin él, cualquiera podía crear
+# cuentas con correos ajenos y usar esta función para mandarles códigos desde
+# la cuenta de ZeroHaus. Los builds de depuración usan el token de depuración
+# (Util/ProveedorAppCheck.kt) y la app de Google Play, Play Integrity.
+@https_fn.on_call(region=REGION, enforce_app_check=True, secrets=[SMTP_USUARIO, SMTP_CLAVE])
 def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     """Envía un código nuevo. Args: idioma (str). Devuelve {verificado} o
     {enviado, esperaSeg} si hay que esperar para reenviar."""
@@ -763,6 +895,16 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     if codigo is None:
         return {"enviado": False, "esperaSeg": (espera + 999) // 1000}
 
+    if not _reservar_cupo_correo(db):
+        print("[VERIFICACION] Tope diario de correos alcanzado")
+        ref.update({"ultimoEnvio": 0, "huella": firestore.DELETE_FIELD})
+        # Mismo motivo que el límite por usuario: la app ya dice «inténtalo mañana»
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Se han enviado demasiados códigos hoy. Inténtalo mañana.",
+            {"motivo": "envios"},
+        )
+
     try:
         _enviar_email_codigo(usuario.email, codigo, idioma)
     except Exception as e:
@@ -776,7 +918,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     return {"enviado": True, "esperaSeg": ENVIO_ESPERA_MS // 1000}
 
 
-@https_fn.on_call(region=REGION, secrets=[SMTP_USUARIO, SMTP_CLAVE])
+@https_fn.on_call(region=REGION, enforce_app_check=True, secrets=[SMTP_USUARIO, SMTP_CLAVE])
 def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     """Comprueba el código. Args: codigo (str de 6 dígitos)."""
     if req.auth is None:
@@ -1005,9 +1147,7 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
 
     Args: informeId (str), idioma (str, nombre del idioma de la app),
     regenerar (bool, ignora la caché)."""
-    if req.auth is None:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
-    uid = req.auth.uid
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     informe_id = str(data.get("informeId") or "")
     idioma = str(data.get("idioma") or "Español")[:30]
@@ -1127,8 +1267,7 @@ def leer_factura(req: https_fn.CallableRequest) -> dict:
     consumo del periodo y anualizado, días, importe, potencia y precio medio."""
     from google.genai import types
 
-    if req.auth is None:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     mime = str(data.get("mime") or "")
     if mime not in FACTURA_TIPOS:
@@ -1140,7 +1279,7 @@ def leer_factura(req: https_fn.CallableRequest) -> dict:
     if not archivo or len(archivo) > FACTURA_MAX_BYTES:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Archivo demasiado grande.", {"motivo": "tamano"})
 
-    _consumir_cupo_ia(firestore.client(), req.auth.uid)
+    _consumir_cupo_ia(firestore.client(), uid)
 
     try:
         leido = _llamar_gemini(
@@ -1406,11 +1545,7 @@ def activar_suscripcion(req: https_fn.CallableRequest) -> dict:
     Idempotencia: /suscripciones/{purchaseToken} como libro contable, ligado
     al uid que lo registró por primera vez.
     """
-    if req.auth is None:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión."
-        )
-    uid = req.auth.uid
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     plan_id = data.get("planId") or ""
     token = data.get("purchaseToken") or ""
@@ -1569,8 +1704,9 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Red de seguridad por si falla o no está configurado RTDN, limpieza
-    diaria (eventos de estadísticas y notificaciones antiguas) y nota de los
-    profesionales recalculada con sus reseñas."""
+    diaria (eventos de estadísticas y notificaciones antiguas), nota de los
+    profesionales recalculada con sus reseñas, autores de los chats antiguos
+    y cuentas bloqueadas desactivadas en Auth."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1608,6 +1744,174 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
     except Exception as e:
         print(f"[VALORACIONES] No se pudieron recalcular: {e}")
+
+    # 6) Quién ha escrito en los chats antiguos (requisito de las reseñas)
+    try:
+        print(f"[CHAT] Chats antiguos con autores anotados: {_rellenar_escribieron_antiguos(db)}")
+    except Exception as e:
+        print(f"[CHAT] No se pudieron anotar los autores: {e}")
+
+    # 7) Usuarios bloqueados con la cuenta de Auth aún activa
+    try:
+        print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
+    except Exception as e:
+        print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
+
+
+# ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══
+# Los informes sin factura usan `precio_electricidad` de Remote Config. Antes
+# se cambiaba a mano en la consola; ahora cada mañana se calcula con el PVPC
+# (tarifa regulada 2.0TD) de las últimas semanas que publica Red Eléctrica en
+# su API pública REData, y se publica solo si ha cambiado lo suficiente.
+REE_PRECIOS_URL = "https://apidatos.ree.es/es/datos/mercados/precios-mercados-tiempo-real"
+REE_ID_PVPC = "1001"                  # indicador PVPC en la respuesta, en €/MWh
+REMOTE_CONFIG_URL = f"https://firebaseremoteconfig.googleapis.com/v1/projects/{PROJECT_ID}/remoteConfig"
+PARAM_PRECIO_LUZ = "precio_electricidad"
+
+PRECIO_LUZ_DIAS = 28                  # media de 4 semanas: suaviza los picos de un día
+PRECIO_LUZ_TRAMO_DIAS = 7             # la API responde mejor a consultas de una semana
+PRECIO_LUZ_MIN_HORAS = 20 * 24        # con menos datos no se toca el precio
+# Impuestos sobre el término de energía (2026): impuesto especial sobre la
+# electricidad (5,11269632 %) e IVA (21 %). Si cambian, se actualizan aquí.
+IMPUESTO_ELECTRICIDAD = 0.0511269632
+IVA_LUZ = 0.21
+PRECIO_LUZ_RANGO = (0.01, 1.5)        # el mismo que acepta la app (PreciosEnergia)
+PRECIO_LUZ_CAMBIO_MIN = 0.005         # medio céntimo: por debajo no se publica
+
+
+class _PrecioLuzNoValido(Exception):
+    """Los datos de Red Eléctrica no bastan para dar un precio fiable."""
+
+
+def _tramos_precio_luz(hoy: date) -> list:
+    """Semanas (inicio, fin) que cubren los PRECIO_LUZ_DIAS días hasta ayer."""
+    tramos = []
+    fin = hoy - timedelta(days=1)
+    restantes = PRECIO_LUZ_DIAS
+    while restantes > 0:
+        dias = min(PRECIO_LUZ_TRAMO_DIAS, restantes)
+        inicio = fin - timedelta(days=dias - 1)
+        tramos.append((inicio, fin))
+        fin = inicio - timedelta(days=1)
+        restantes -= dias
+    return list(reversed(tramos))
+
+
+def _valores_pvpc(respuesta: dict) -> list:
+    """Precios del PVPC (€/MWh) de una respuesta de REData; ignora el resto.
+
+    Los negativos se quedan: el PVPC baja de cero en las horas solares de
+    algunos fines de semana, y quitarlos subiría la media.
+    """
+    for indicador in (respuesta or {}).get("included") or []:
+        if str(indicador.get("id")) != REE_ID_PVPC:
+            continue
+        valores = []
+        for v in (indicador.get("attributes") or {}).get("values") or []:
+            x = v.get("value") if isinstance(v, dict) else None
+            if isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x):
+                valores.append(float(x))
+        return valores
+    return []
+
+
+def _precio_luz_desde_pvpc(valores_eur_mwh: list) -> float:
+    """Media del PVPC en €/kWh con impuestos, redondeada a 4 decimales.
+
+    No incluye el término de potencia ni el alquiler del contador, que no
+    dependen de lo que se consume; el precio de una factura real sí los lleva.
+    """
+    if len(valores_eur_mwh) < PRECIO_LUZ_MIN_HORAS:
+        raise _PrecioLuzNoValido(f"solo {len(valores_eur_mwh)} horas con precio")
+    media_kwh = sum(valores_eur_mwh) / len(valores_eur_mwh) / 1000
+    precio = round(media_kwh * (1 + IMPUESTO_ELECTRICIDAD) * (1 + IVA_LUZ), 4)
+    minimo, maximo = PRECIO_LUZ_RANGO
+    if not minimo <= precio <= maximo:
+        raise _PrecioLuzNoValido(f"{precio} €/kWh está fuera del rango válido")
+    return precio
+
+
+def _aplicar_precio_luz(plantilla: dict, precio: float) -> bool:
+    """Pone el precio en la plantilla de Remote Config. False si no hace falta
+    (la diferencia con el actual es menor que PRECIO_LUZ_CAMBIO_MIN)."""
+    parametros = plantilla.setdefault("parameters", {})
+    parametro = parametros.setdefault(PARAM_PRECIO_LUZ, {"valueType": "NUMBER"})
+    try:
+        actual = float((parametro.get("defaultValue") or {}).get("value"))
+    except (TypeError, ValueError):
+        actual = None
+    if actual is not None and abs(actual - precio) < PRECIO_LUZ_CAMBIO_MIN:
+        return False
+    parametro["defaultValue"] = {"value": f"{precio:.4f}"}
+    return True
+
+
+def _descargar_pvpc(hoy: date) -> list:
+    """Precios horarios del PVPC (€/MWh) de los últimos PRECIO_LUZ_DIAS días."""
+    valores = []
+    for inicio, fin in _tramos_precio_luz(hoy):
+        consulta = urllib.parse.urlencode({
+            "start_date": f"{inicio.isoformat()}T00:00",
+            "end_date": f"{fin.isoformat()}T23:59",
+            "time_trunc": "hour",
+        })
+        peticion = urllib.request.Request(
+            f"{REE_PRECIOS_URL}?{consulta}", headers={"Accept": "application/json"}
+        )
+        with urllib.request.urlopen(peticion, timeout=30) as r:
+            valores += _valores_pvpc(json.load(r))
+    return valores
+
+
+def _publicar_precio_luz(precio: float, horas: int) -> bool:
+    """Lee la plantilla de Remote Config, cambia solo el precio de la luz y la
+    publica. If-Match con el ETag evita pisar un cambio hecho a la vez en la consola."""
+    creds, _ = default_creds(scopes=["https://www.googleapis.com/auth/firebase.remoteconfig"])
+    sesion = AuthorizedSession(creds)
+    r = sesion.get(REMOTE_CONFIG_URL, timeout=30)
+    r.raise_for_status()
+    etag = r.headers.get("ETag") or "*"
+    plantilla = r.json()
+    if not _aplicar_precio_luz(plantilla, precio):
+        return False
+    plantilla["version"] = {
+        "description": f"{PARAM_PRECIO_LUZ} = {precio:.4f} (PVPC de Red Eléctrica, media de {horas} h)"
+    }
+    r = sesion.put(
+        REMOTE_CONFIG_URL,
+        data=json.dumps(plantilla),
+        headers={"Content-Type": "application/json; UTF-8", "If-Match": etag},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return True
+
+
+@scheduler_fn.on_schedule(
+    schedule="every day 06:30",
+    timezone=scheduler_fn.Timezone("Europe/Madrid"),
+    region=REGION,
+    # 4 consultas a Red Eléctrica y 2 a Remote Config de hasta 30 s cada una:
+    # con los 60 s por defecto se cortaría antes de dejar su línea en el registro
+    timeout_sec=300,
+)
+def actualizar_precio_luz_diario(event: scheduler_fn.ScheduledEvent) -> None:
+    """Actualiza `precio_electricidad` con el PVPC de Red Eléctrica. Si la API
+    falla o los datos no son fiables se deja el precio que había."""
+    hoy = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    try:
+        valores = _descargar_pvpc(hoy)
+        precio = _precio_luz_desde_pvpc(valores)
+    except (_PrecioLuzNoValido, OSError, ValueError) as e:
+        print(f"[PRECIO_LUZ] Sin cambios, datos de Red Eléctrica no válidos: {e}")
+        return
+    try:
+        publicado = _publicar_precio_luz(precio, len(valores))
+    except Exception as e:
+        print(f"[PRECIO_LUZ] No se pudo publicar {precio} €/kWh en Remote Config: {e}")
+        return
+    estado = "publicado" if publicado else "sin cambios (diferencia menor de medio céntimo)"
+    print(f"[PRECIO_LUZ] {precio} €/kWh con {len(valores)} h de PVPC: {estado}")
 
 
 # Copias de seguridad: las hace Firestore (copias gestionadas, diaria 7 días y
