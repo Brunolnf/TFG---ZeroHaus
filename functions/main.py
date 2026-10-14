@@ -12,6 +12,7 @@ Callables (se invocan desde la app con Firebase Functions)
   eliminar_mi_cuenta           Borrado completo de la propia cuenta (RGPD / Play).
   eliminar_usuario_completo    Borrado completo de un usuario (solo admin).
   marcar_email_verificado      Marca un email como verificado (solo admin).
+  bloquear_usuario             Bloquea o desbloquea una cuenta en Auth y en /usuarios (solo admin).
 
 Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
@@ -109,6 +110,21 @@ def _verificar_admin(req: https_fn.CallableRequest) -> None:
             https_fn.FunctionsErrorCode.PERMISSION_DENIED,
             "Solo el administrador puede ejecutar esta operación."
         )
+
+
+def _exigir_email_verificado(req: https_fn.CallableRequest) -> str:
+    """uid de quien llama, si ha iniciado sesión con el email verificado (lo
+    mismo que exigen las reglas para cualquier dato). Sin esto, una cuenta
+    recién creada y sin verificar podía gastar el cupo de Gemini."""
+    if req.auth is None:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
+    if (req.auth.token or {}).get("email_verified") is not True:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.PERMISSION_DENIED,
+            "Verifica tu email para continuar.",
+            {"motivo": "email_sin_verificar"},
+        )
+    return req.auth.uid
 
 
 def _borrar_query(db, query, batch_size=400) -> int:
@@ -260,6 +276,42 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
+    return {"ok": True}
+
+
+@https_fn.on_call(
+    region=REGION,
+    enforce_app_check=True,
+    cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+)
+def bloquear_usuario(req: https_fn.CallableRequest) -> dict:
+    """Bloquea o desbloquea una cuenta. Reservado al administrador.
+    Args: uid (str), bloqueado (bool).
+
+    Antes era solo el campo `bloqueado` de /usuarios, que comprueba el login
+    de la app: con otra app o la API REST se seguía usando la cuenta. Ahora
+    también se desactiva en Auth (no puede iniciar sesión ni renovar el
+    token) y se cierran sus sesiones abiertas."""
+    _verificar_admin(req)
+    data = req.data or {}
+    uid = data.get("uid")
+    bloqueado = data.get("bloqueado")
+    if not uid or not isinstance(uid, str) or not isinstance(bloqueado, bool):
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Faltan 'uid' o 'bloqueado'.")
+    if uid == req.auth.uid:
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+            "El administrador no puede bloquearse a sí mismo."
+        )
+    try:
+        auth.update_user(uid, disabled=bloqueado)
+    except auth.UserNotFoundError:
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
+    if bloqueado:
+        # El token que ya tiene vale como mucho una hora más; no se renueva
+        auth.revoke_refresh_tokens(uid)
+    firestore.client().collection("usuarios").document(uid).set({"bloqueado": bloqueado}, merge=True)
+    print(f"[ADMIN] {req.auth.uid} {'bloqueó' if bloqueado else 'desbloqueó'} a {uid}")
     return {"ok": True}
 
 
@@ -1010,9 +1062,7 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
 
     Args: informeId (str), idioma (str, nombre del idioma de la app),
     regenerar (bool, ignora la caché)."""
-    if req.auth is None:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
-    uid = req.auth.uid
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     informe_id = str(data.get("informeId") or "")
     idioma = str(data.get("idioma") or "Español")[:30]
@@ -1132,8 +1182,7 @@ def leer_factura(req: https_fn.CallableRequest) -> dict:
     consumo del periodo y anualizado, días, importe, potencia y precio medio."""
     from google.genai import types
 
-    if req.auth is None:
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     mime = str(data.get("mime") or "")
     if mime not in FACTURA_TIPOS:
@@ -1145,7 +1194,7 @@ def leer_factura(req: https_fn.CallableRequest) -> dict:
     if not archivo or len(archivo) > FACTURA_MAX_BYTES:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Archivo demasiado grande.", {"motivo": "tamano"})
 
-    _consumir_cupo_ia(firestore.client(), req.auth.uid)
+    _consumir_cupo_ia(firestore.client(), uid)
 
     try:
         leido = _llamar_gemini(
@@ -1411,11 +1460,7 @@ def activar_suscripcion(req: https_fn.CallableRequest) -> dict:
     Idempotencia: /suscripciones/{purchaseToken} como libro contable, ligado
     al uid que lo registró por primera vez.
     """
-    if req.auth is None:
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión."
-        )
-    uid = req.auth.uid
+    uid = _exigir_email_verificado(req)
     data = req.data or {}
     plan_id = data.get("planId") or ""
     token = data.get("purchaseToken") or ""
