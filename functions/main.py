@@ -1748,6 +1748,9 @@ def _publicar_precio_luz(precio: float, horas: int) -> bool:
     schedule="every day 06:30",
     timezone=scheduler_fn.Timezone("Europe/Madrid"),
     region=REGION,
+    # 4 consultas a Red Eléctrica y 2 a Remote Config de hasta 30 s cada una:
+    # con los 60 s por defecto se cortaría antes de dejar su línea en el registro
+    timeout_sec=300,
 )
 def actualizar_precio_luz_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Actualiza `precio_electricidad` con el PVPC de Red Eléctrica. Si la API
