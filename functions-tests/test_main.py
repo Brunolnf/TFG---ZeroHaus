@@ -302,5 +302,29 @@ class PrecioLuzTest(unittest.TestCase):
         self.assertTrue(main._aplicar_precio_luz(con_defecto_de_app, 0.15))
 
 
+class _Peticion:
+    """CallableRequest mínima: solo lo que miran las comprobaciones de sesión."""
+
+    def __init__(self, uid=None, verificado=False):
+        self.auth = None if uid is None else type("Auth", (), {
+            "uid": uid, "token": {"email_verified": verificado},
+        })()
+
+
+class EmailVerificadoTest(unittest.TestCase):
+
+    def codigo(self, peticion):
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            main._exigir_email_verificado(peticion)
+        return error.exception.code
+
+    def test_con_el_email_verificado_devuelve_el_uid(self):
+        self.assertEqual(main._exigir_email_verificado(_Peticion("u1", verificado=True)), "u1")
+
+    def test_sin_sesion_o_sin_verificar_no_pasa(self):
+        self.assertEqual(self.codigo(_Peticion()), main.https_fn.FunctionsErrorCode.UNAUTHENTICATED)
+        self.assertEqual(self.codigo(_Peticion("u1")), main.https_fn.FunctionsErrorCode.PERMISSION_DENIED)
+
+
 if __name__ == "__main__":
     unittest.main()

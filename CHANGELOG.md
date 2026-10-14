@@ -20,6 +20,10 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Los avisos de mensajes y valoraciones usan el nombre del perfil, no el que escribe el móvil (se podía firmar como «ZeroHaus Soporte»).
 - Fuera el certificate pinning incompleto (podía dejar la app sin conexión) y las comprobaciones de root que lanzaban procesos en el arranque.
 - Al borrar la cuenta se avisa al profesional de que Google Play seguirá cobrando su suscripción.
+- Auditoría del 14/10/2026: un chat creado con un id como `x|.*` permitía enviar como «foto» o «archivo» un enlace a cualquier web; ahora el id tiene que ser como los de la app.
+- Bloquear a un usuario desde el panel lo desactiva en Firebase Auth y cierra sus sesiones (función `bloquear_usuario`); antes solo lo comprobaba el login de la app, y el usuario podía borrar su perfil para quitarse el bloqueo.
+- El perfil profesional, que descargan todos los clientes, no admite campos inventados ni enormes (ciudad, especialidades, coordenadas).
+- Los consejos con IA, la lectura de facturas y la activación de suscripciones exigen el email verificado, como el resto de datos.
 
 ### Mejorado
 - Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.
