@@ -20,12 +20,16 @@ service firebase.storage {
       // quitar lo que había enviado el otro. El borrado de cuentas y chats lo
       // hace el servidor con el Admin SDK.
       // (subir encima de un archivo existente también cuenta como create)
+      // Solo fotos y PDF: antes valía cualquier archivo (también una APK)
       allow create: if verificado()
                     && resource == null
                     && request.auth.uid in firestore.get(
                          /databases/(default)/documents/chats/$(chatId)
                        ).data.participantes
-                    && request.resource.size < 15 * 1024 * 1024;
+                    && request.resource.size < 15 * 1024 * 1024
+                    && (request.resource.contentType.matches('image/.*')
+                        || (request.resource.contentType == 'application/pdf'
+                            && request.resource.name.lower().matches('.+[.]pdf')));
       allow update, delete: if false;
     }
 

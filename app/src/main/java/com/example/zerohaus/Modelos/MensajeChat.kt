@@ -26,7 +26,10 @@ data class Chat(
     val nombresParticipantes: Map<String, String> = emptyMap(),
     val ultimoMensaje: String = "",
     val fechaUltimoMensaje: Long = 0L,
-    val noLeidosPor: Map<String, Int> = emptyMap()
+    val noLeidosPor: Map<String, Int> = emptyMap(),
+    // Quién ha escrito algún mensaje. Lo pone la Cloud Function de mensajes
+    // (las reglas no dejan a la app); para valorar tienen que estar los dos.
+    val escribieron: List<String> = emptyList()
 ) {
     fun tieneNoLeidos(miUid: String): Boolean {
         return (noLeidosPor[miUid] ?: 0) > 0

@@ -286,7 +286,8 @@ fun ChatScreen(
                                 Text(cad.chatFoto, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             }
                             OutlinedButton(
-                                onClick = { archivoLauncher.launch(arrayOf("*/*")) },
+                                // Solo PDF: es lo único que aceptan las reglas además de las fotos
+                                onClick = { archivoLauncher.launch(arrayOf("application/pdf")) },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(20.dp),
                                 border = BorderStroke(1.dp, verde.copy(alpha = 0.45f)),

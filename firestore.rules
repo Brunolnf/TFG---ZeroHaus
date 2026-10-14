@@ -243,13 +243,16 @@ service cloud.firestore {
     }
 
     // Solo se puede valorar a un profesional con quien existe una conversación
-    // real (chat con mensajes). Evita reseñas falsas desde cuentas sin relación.
+    // real: los dos han escrito en el chat, o sea, el profesional ha
+    // contestado. `escribieron` solo lo pone la Cloud Function de mensajes
+    // (antes bastaba con abrir un chat o escribirle uno mismo).
     function conversacionReal(chatId, tecnicoId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId)).data;
       let prof = get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data;
       return uid() in chat.participantes
           && prof.uid in chat.participantes
-          && chat.get('fechaUltimoMensaje', 0) > 0;
+          && uid() in chat.get('escribieron', [])
+          && prof.uid in chat.get('escribieron', []);
     }
 
     match /resenas/{docId} {
@@ -302,7 +305,8 @@ service cloud.firestore {
           && d.participantes[0] != d.participantes[1]
           && (!('nombresParticipantes' in d) || d.nombresParticipantes.keys().hasOnly(d.participantes))
           && d.get('fechaUltimoMensaje', 0) == 0
-          && d.get('ultimoMensaje', '') == '';
+          && d.get('ultimoMensaje', '') == ''
+          && d.get('escribieron', []).size() == 0;
     }
     // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
     // los no leídos. Antes un participante podía cambiar cualquier campo,
@@ -328,6 +332,9 @@ service cloud.firestore {
           && d.get('texto', '') is string && d.get('texto', '').size() <= 2000
           && d.get('emisorNombre', '') is string && d.get('emisorNombre', '').size() <= 100
           && d.get('mediaNombre', '') is string && d.get('mediaNombre', '').size() <= 255
+          // Los archivos son solo PDF (las fotos van como «imagen»): antes se
+          // podía mandar cualquier cosa, también una APK
+          && (d.get('tipo', 'texto') != 'archivo' || d.get('mediaNombre', '').lower().matches('.+[.]pdf'))
           && (d.get('mediaUrl', '') == ''
               || (d.get('tipo', 'texto') != 'texto'
                   && idChatValido(chatId)

@@ -65,6 +65,16 @@ describe("archivos del chat", () => {
   it("sin el email verificado no se sube nada", async () => {
     await assertFails(uploadBytes(ref(sinVerificar("cliente"), "chats/c1/m4.jpg"), imagen, jpeg));
   });
+
+  it("se envían PDF, pero no otros archivos como una APK", async () => {
+    const st = verificado("cliente");
+    const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    await assertSucceeds(uploadBytes(ref(st, "chats/c1/m5_presupuesto.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(st, "chats/c1/m6_app.apk"), pdf,
+      { contentType: "application/vnd.android.package-archive" }));
+    // Un PDF de mentira con otra extensión tampoco
+    await assertFails(uploadBytes(ref(st, "chats/c1/m7_app.apk"), pdf, { contentType: "application/pdf" }));
+  });
 });
 
 describe("fotos de perfil", () => {
