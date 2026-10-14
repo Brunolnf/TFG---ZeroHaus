@@ -24,6 +24,10 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 - Bloquear a un usuario desde el panel lo desactiva en Firebase Auth y cierra sus sesiones (función `bloquear_usuario`); antes solo lo comprobaba el login de la app, y el usuario podía borrar su perfil para quitarse el bloqueo.
 - El perfil profesional, que descargan todos los clientes, no admite campos inventados ni enormes (ciudad, especialidades, coordenadas).
 - Los consejos con IA, la lectura de facturas y la activación de suscripciones exigen el email verificado, como el resto de datos.
+- **Reseñas**: solo se puede valorar a un profesional que te haya contestado por el chat (antes bastaba con abrir un chat con él). Quién ha escrito lo anota el servidor; los chats antiguos se rellenan solos.
+- **Adjuntos del chat**: solo fotos y PDF (antes cualquier archivo, también una APK).
+- Envío de códigos de verificación con App Check y tope diario de correos de toda la app (300), para que nadie pueda usar la cuenta de correo de ZeroHaus para mandar códigos en masa.
+- Las cuentas bloqueadas antes de este cambio se desactivan en Firebase Auth en la revisión diaria.
 
 ### Mejorado
 - Tocar el aviso de un mensaje abre ese chat; no se avisa del chat abierto y hay un aviso por chat, no uno por mensaje.

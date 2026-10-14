@@ -43,7 +43,11 @@ beforeEach(async () => {
       tipoProfesional: "TECNICO", emailContacto: "legacy@x.es",
     });
     await setDoc(doc(db, "chats/con_mensajes"), {
-      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000,
+      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente", "pro"],
+    });
+    // El cliente escribió pero el profesional aún no ha contestado
+    await setDoc(doc(db, "chats/sin_respuesta"), {
+      participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente"],
     });
     await setDoc(doc(db, "chats/vacio"), {
       participantes: ["cliente", "pro"], fechaUltimoMensaje: 0,
@@ -73,6 +77,21 @@ describe("reseñas", () => {
   it("se rechaza si el chat no tiene mensajes", async () => {
     const db = verificado("cliente");
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resena({ chatId: "vacio" })));
+  });
+
+  it("se rechaza si el profesional aún no ha contestado", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resena({ chatId: "sin_respuesta" })));
+  });
+
+  it("nadie se apunta como autor de un chat desde la app (lo pone el servidor)", async () => {
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "chats/sin_respuesta"), { escribieron: ["cliente", "pro"] }));
+    await assertFails(setDoc(doc(db, "chats/nuevo"), {
+      id: "nuevo", participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "C", pro: "P" },
+      ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 },
+      escribieron: ["cliente", "pro"],
+    }));
   });
 
   it("se rechaza con el chat de otra persona", async () => {
@@ -347,6 +366,13 @@ describe("chat: creación, cambios y mensajes", () => {
       mensaje({ tipo: "archivo", mediaUrl: `${URL_STORAGE}ajeno%2Fx.pdf?alt=media` })));
     await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m12"),
       mensaje({ tipo: "texto", mediaUrl: `${URL_STORAGE}con_mensajes%2Fx.jpg` })));
+  });
+
+  it("los archivos del chat son solo PDF", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/m14"), mensaje({
+      id: "m14", tipo: "archivo", texto: "", mediaNombre: "app.apk", mediaBytes: 1234,
+      mediaUrl: `${URL_STORAGE}con_mensajes%2Fm14_app.apk?alt=media&token=abc`,
+    })));
   });
 
   it("un mensaje no lleva tipos ni campos inventados", async () => {

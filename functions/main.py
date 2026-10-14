@@ -21,7 +21,8 @@ Triggers de Firestore
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
-  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones.
+  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
+                               autores de chats antiguos y bloqueos pendientes en Auth.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -315,6 +316,22 @@ def bloquear_usuario(req: https_fn.CallableRequest) -> dict:
     return {"ok": True}
 
 
+def _sincronizar_bloqueados(db) -> int:
+    """Desactiva en Auth a quien tiene `bloqueado` en /usuarios pero sigue con
+    la cuenta activa (bloqueados antes de bloquear_usuario o a mano en la
+    consola). Devuelve cuántos."""
+    desactivados = 0
+    for u in db.collection("usuarios").where(filter=FieldFilter("bloqueado", "==", True)).stream():
+        try:
+            if not auth.get_user(u.id).disabled:
+                auth.update_user(u.id, disabled=True)
+                auth.revoke_refresh_tokens(u.id)
+                desactivados += 1
+        except auth.UserNotFoundError:
+            continue
+    return desactivados
+
+
 @https_fn.on_call(
     region=REGION,
     enforce_app_check=True,
@@ -376,6 +393,25 @@ _AVISOS_EMAIL = {
 }
 
 AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación cada 30 min
+# Tope de correos al día entre todos (códigos y avisos): la cuenta de Gmail
+# admite unos 500 y, si se pasa, Google la bloquea y nadie recibe su código.
+# Así, aunque alguien cree cuentas en masa para mandar códigos, no la tumba.
+CORREOS_MAX_DIA = int(os.environ.get("CORREOS_MAX_DIA", "300"))
+
+
+def _reservar_cupo_correo(db) -> bool:
+    """Gasta un correo del tope diario (CORREOS_MAX_DIA). False si ya no quedan."""
+    ref = db.collection("limites_correo").document(time.strftime("%Y%m%d", time.gmtime()))
+
+    @firestore.transactional
+    def _reservar(txn):
+        enviados = int((ref.get(transaction=txn).to_dict() or {}).get("enviados") or 0)
+        if enviados >= CORREOS_MAX_DIA:
+            return False
+        txn.set(ref, {"enviados": enviados + 1})
+        return True
+
+    return _reservar(db.transaction())
 
 
 def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str = "", **campos) -> None:
@@ -390,6 +426,9 @@ def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str 
             ref.set({clave_limite: _ahora_ms()}, merge=True)
         usuario = auth.get_user(uid)
         if not usuario.email or not usuario.email_verified:
+            return
+        if not _reservar_cupo_correo(db):
+            print(f"[EMAIL] Tope diario de correos alcanzado: sin aviso '{tipo}' a {uid}")
             return
         t = _AVISOS_EMAIL.get(idioma, _AVISOS_EMAIL["Español"])
         asunto, cuerpo = (t[0], t[1]) if tipo == "mensaje" else (t[2], t[3])
@@ -494,6 +533,17 @@ def on_message_created(event) -> None:
         return
     participantes = (chat_snap.to_dict() or {}).get("participantes", [])
     destinatarios = [uid for uid in participantes if uid != emisor_uid]
+    # Quién ha escrito en el chat: solo lo pone el servidor, y las reseñas
+    # exigen que hayan escrito los dos (que el profesional haya contestado)
+    if emisor_uid in participantes:
+        try:
+            if "escribieron" in (chat_snap.to_dict() or {}):
+                chat_snap.reference.update({"escribieron": firestore.ArrayUnion([emisor_uid])})
+            else:
+                # Chat de antes de este campo: se rellena con todos sus mensajes
+                _rellenar_escribieron_chat(chat_snap)
+        except Exception as e:
+            print(f"[CHAT] No se pudo anotar quién escribió en {chat_id}: {e}")
 
     for uid in destinatarios:
         pref = _preferencias(db, uid)
@@ -521,6 +571,30 @@ def on_message_created(event) -> None:
                 db, uid, pref["idioma"], "mensaje", clave_limite=f"chat_{chat_id}",
                 nombre=emisor_nombre, texto=cuerpo[:300],
             )
+
+
+def _autores_del_chat(mensajes: list, participantes: list) -> list:
+    """Participantes que han escrito algún mensaje, en el orden de `participantes`."""
+    escritos = {m.get("emisorUid") for m in mensajes}
+    return [p for p in participantes if p in escritos]
+
+
+def _rellenar_escribieron_chat(chat_snap) -> None:
+    """Pone `escribieron` de un chat a partir de los mensajes que tiene."""
+    mensajes = [m.to_dict() or {} for m in chat_snap.reference.collection("mensajes").stream()]
+    participantes = (chat_snap.to_dict() or {}).get("participantes") or []
+    chat_snap.reference.update({"escribieron": _autores_del_chat(mensajes, participantes)})
+
+
+def _rellenar_escribieron_antiguos(db) -> int:
+    """Chats con mensajes de antes del campo `escribieron` (los que no reciben
+    mensajes nuevos no pasan por on_message_created). Devuelve cuántos."""
+    rellenados = 0
+    for chat in db.collection("chats").where(filter=FieldFilter("fechaUltimoMensaje", ">", 0)).stream():
+        if "escribieron" not in (chat.to_dict() or {}):
+            _rellenar_escribieron_chat(chat)
+            rellenados += 1
+    return rellenados
 
 
 def _nombre_real(db, uid: str, respaldo: str) -> str:
@@ -768,10 +842,11 @@ def _enviar_email_codigo(destino: str, codigo: str, idioma: str) -> None:
     )
 
 
-# enforce_app_check=False a propósito: los builds de depuración no instalan
-# App Check y, si no, nadie podría verificar su email para entrar. Están
-# protegidas por autenticación y por los límites de envío e intentos.
-@https_fn.on_call(region=REGION, secrets=[SMTP_USUARIO, SMTP_CLAVE])
+# Con App Check, como el resto de funciones: sin él, cualquiera podía crear
+# cuentas con correos ajenos y usar esta función para mandarles códigos desde
+# la cuenta de ZeroHaus. Los builds de depuración usan el token de depuración
+# (Util/ProveedorAppCheck.kt) y la app de Google Play, Play Integrity.
+@https_fn.on_call(region=REGION, enforce_app_check=True, secrets=[SMTP_USUARIO, SMTP_CLAVE])
 def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     """Envía un código nuevo. Args: idioma (str). Devuelve {verificado} o
     {enviado, esperaSeg} si hay que esperar para reenviar."""
@@ -820,6 +895,16 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     if codigo is None:
         return {"enviado": False, "esperaSeg": (espera + 999) // 1000}
 
+    if not _reservar_cupo_correo(db):
+        print("[VERIFICACION] Tope diario de correos alcanzado")
+        ref.update({"ultimoEnvio": 0, "huella": firestore.DELETE_FIELD})
+        # Mismo motivo que el límite por usuario: la app ya dice «inténtalo mañana»
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Se han enviado demasiados códigos hoy. Inténtalo mañana.",
+            {"motivo": "envios"},
+        )
+
     try:
         _enviar_email_codigo(usuario.email, codigo, idioma)
     except Exception as e:
@@ -833,7 +918,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     return {"enviado": True, "esperaSeg": ENVIO_ESPERA_MS // 1000}
 
 
-@https_fn.on_call(region=REGION, secrets=[SMTP_USUARIO, SMTP_CLAVE])
+@https_fn.on_call(region=REGION, enforce_app_check=True, secrets=[SMTP_USUARIO, SMTP_CLAVE])
 def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     """Comprueba el código. Args: codigo (str de 6 dígitos)."""
     if req.auth is None:
@@ -1619,8 +1704,9 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Red de seguridad por si falla o no está configurado RTDN, limpieza
-    diaria (eventos de estadísticas y notificaciones antiguas) y nota de los
-    profesionales recalculada con sus reseñas."""
+    diaria (eventos de estadísticas y notificaciones antiguas), nota de los
+    profesionales recalculada con sus reseñas, autores de los chats antiguos
+    y cuentas bloqueadas desactivadas en Auth."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1658,6 +1744,18 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
     except Exception as e:
         print(f"[VALORACIONES] No se pudieron recalcular: {e}")
+
+    # 6) Quién ha escrito en los chats antiguos (requisito de las reseñas)
+    try:
+        print(f"[CHAT] Chats antiguos con autores anotados: {_rellenar_escribieron_antiguos(db)}")
+    except Exception as e:
+        print(f"[CHAT] No se pudieron anotar los autores: {e}")
+
+    # 7) Usuarios bloqueados con la cuenta de Auth aún activa
+    try:
+        print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
+    except Exception as e:
+        print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
 
 
 # ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══

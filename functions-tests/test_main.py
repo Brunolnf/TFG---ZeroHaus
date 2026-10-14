@@ -302,6 +302,16 @@ class PrecioLuzTest(unittest.TestCase):
         self.assertTrue(main._aplicar_precio_luz(con_defecto_de_app, 0.15))
 
 
+class AutoresDelChatTest(unittest.TestCase):
+
+    def test_solo_los_participantes_que_han_escrito(self):
+        mensajes = [{"emisorUid": "cliente"}, {"emisorUid": "cliente"}, {"emisorUid": "intruso"}]
+        self.assertEqual(main._autores_del_chat(mensajes, ["cliente", "pro"]), ["cliente"])
+        mensajes.append({"emisorUid": "pro"})
+        self.assertEqual(main._autores_del_chat(mensajes, ["cliente", "pro"]), ["cliente", "pro"])
+        self.assertEqual(main._autores_del_chat([], ["cliente", "pro"]), [])
+
+
 class _Peticion:
     """CallableRequest mínima: solo lo que miran las comprobaciones de sesión."""
 
