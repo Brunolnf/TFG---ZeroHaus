@@ -21,8 +21,8 @@ android {
         applicationId = "es.zerohaus.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.3"   // factura con IA, IRPF, plan por etapas y arreglos del diagnóstico
+        versionCode = 7
+        versionName = "2.3.1"   // 2.3 (factura con IA, IRPF, plan por etapas, diagnóstico) + contacto y páginas legales
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")

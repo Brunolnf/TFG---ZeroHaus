@@ -36,11 +36,12 @@ import com.example.zerohaus.Util.NotificacionesLocales
 
 // URLs y contacto de la app. Servidas por Firebase Hosting (carpeta /public).
 // Si algún día conectas el dominio propio zerohaus.es en Firebase Hosting,
-// basta con cambiar el host aquí.
+// basta con cambiar el host aquí. El email es el mismo de las páginas legales
+// (soporte@zerohaus.es no existía: «Contactar» escribía a una dirección muerta).
 private const val URL_PRIVACIDAD = "https://zerohaus-2a865.web.app/privacidad"
 private const val URL_TERMINOS = "https://zerohaus-2a865.web.app/terminos"
 private const val URL_DATOS = "https://zerohaus-2a865.web.app/datos"
-private const val EMAIL_SOPORTE = "soporte@zerohaus.es"
+private const val EMAIL_SOPORTE = "brulinf9@gmail.com"
 private const val PLAY_ID = "es.zerohaus.app"
 
 /**
