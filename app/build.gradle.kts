@@ -89,7 +89,7 @@ dependencies {
 
     // Firebase
     // BOM 34: los módulos -ktx desaparecen (sus APIs Kotlin están en los principales)
-    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-storage")
@@ -107,8 +107,8 @@ dependencies {
     implementation("com.android.billingclient:billing-ktx:9.1.0")
 
     // Google Maps
-    implementation("com.google.maps.android:maps-compose:8.6.0")
-    implementation("com.google.android.gms:play-services-maps:20.0.0")
+    implementation("com.google.maps.android:maps-compose:9.0.1")
+    implementation("com.google.android.gms:play-services-maps:20.1.0")
     implementation("com.google.android.gms:play-services-location:21.4.0")
 
     // Compose
