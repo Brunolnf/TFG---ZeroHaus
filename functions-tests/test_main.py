@@ -9,7 +9,10 @@ Están fuera de functions/ para que no se suban con el despliegue.
 import json
 import os
 import sys
+import time
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 # main.py declara los secretos SMTP; para importarlo basta con valores ficticios
 os.environ.setdefault("SMTP_USUARIO", "tests@example.com")
@@ -17,6 +20,7 @@ os.environ.setdefault("SMTP_CLAVE", "tests")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "functions"))
 
 import main  # noqa: E402
+from google.api_core.exceptions import NotFound  # noqa: E402
 
 
 def factura(**cambios):
@@ -334,6 +338,115 @@ class EmailVerificadoTest(unittest.TestCase):
     def test_sin_sesion_o_sin_verificar_no_pasa(self):
         self.assertEqual(self.codigo(_Peticion()), main.https_fn.FunctionsErrorCode.UNAUTHENTICATED)
         self.assertEqual(self.codigo(_Peticion("u1")), main.https_fn.FunctionsErrorCode.PERMISSION_DENIED)
+
+
+# ── Firestore y Auth en memoria, para probar los flujos con transacciones ──
+
+class _SnapMem:
+    def __init__(self, ref, datos):
+        self.reference, self.id, self._datos = ref, ref.id, datos
+        self.exists = datos is not None
+    def to_dict(self): return None if self._datos is None else dict(self._datos)
+
+
+class _RefMem:
+    def __init__(self, db, ruta):
+        self._db, self.ruta, self.id = db, ruta, ruta.rsplit("/", 1)[-1]
+    def get(self, transaction=None): return _SnapMem(self, self._db.docs.get(self.ruta))
+    def set(self, datos, merge=False):
+        base = dict(self._db.docs.get(self.ruta) or {}) if merge else {}
+        base.update(datos)
+        self._db.docs[self.ruta] = base
+    def update(self, datos):
+        if self.ruta not in self._db.docs:
+            raise NotFound(f"No existe {self.ruta}")
+        base = {**self._db.docs[self.ruta], **datos}
+        self._db.docs[self.ruta] = {k: v for k, v in base.items() if v is not main.firestore.DELETE_FIELD}
+
+
+class _FirestoreMem:
+    def __init__(self): self.docs = {}
+    def collection(self, nombre):
+        return SimpleNamespace(document=lambda doc_id: _RefMem(self, f"{nombre}/{doc_id}"))
+    def transaction(self):
+        return SimpleNamespace(set=lambda ref, datos, merge=False: ref.set(datos, merge=merge),
+                               update=lambda ref, datos: ref.update(datos))
+
+
+class _ConServiciosFalsos(unittest.TestCase):
+    """Firestore y Auth en memoria y el correo capturado (nada sale a la red)."""
+
+    def setUp(self):
+        self.db = _FirestoreMem()
+        self.usuarios = {}         # uid → SimpleNamespace(email, email_verified)
+        self.correos = []          # destinatarios de los avisos enviados
+        self.codigos = []          # (destino, código) de los emails de verificación
+        self.update_user = mock.Mock()
+        for parche in (
+            mock.patch.object(main.firestore, "transactional", lambda f: f),
+            mock.patch.object(main.firestore, "client", lambda: self.db),
+            mock.patch.object(main.auth, "get_user", self._get_user),
+            mock.patch.object(main.auth, "update_user", self.update_user),
+            mock.patch.object(main, "_enviar_email", lambda destino, *a, **k: self.correos.append(destino)),
+            mock.patch.object(main, "_enviar_email_codigo", lambda destino, codigo, idioma: self.codigos.append((destino, codigo))),
+        ):
+            parche.start()
+            self.addCleanup(parche.stop)
+
+    def _get_user(self, uid):
+        if uid not in self.usuarios:
+            raise main.auth.UserNotFoundError(f"No existe {uid}")
+        return self.usuarios[uid]
+
+    def usuario(self, uid, email, verificado):
+        self.usuarios[uid] = SimpleNamespace(uid=uid, email=email, email_verified=verificado)
+
+    @staticmethod
+    def hoy():
+        return time.strftime("%Y%m%d", time.gmtime())
+
+
+class CupoCorreosTest(_ConServiciosFalsos):
+    """Los avisos por email no pueden dejar sin correo a los códigos de verificación."""
+
+    def aviso(self, uid, chat="c1"):
+        main._enviar_aviso_email(self.db, uid, "Español", "mensaje", clave_limite=f"chat_{chat}",
+                                 nombre="Ana", texto="hola")
+
+    def test_con_el_cupo_de_avisos_gastado_los_codigos_siguen_saliendo(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs[f"limites_correo/{self.hoy()}"] = {"enviados": 150, "avisos": 150}
+        self.aviso("dest")
+        self.assertEqual(self.correos, [])
+        self.assertTrue(main._reservar_cupo_correo(self.db))
+
+    def test_con_el_tope_total_gastado_no_sale_nada(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs[f"limites_correo/{self.hoy()}"] = {"enviados": 300, "avisos": 10}
+        self.aviso("dest")
+        self.assertEqual(self.correos, [])
+        self.assertFalse(main._reservar_cupo_correo(self.db))
+
+    def test_un_aviso_cuenta_en_el_total_y_en_los_avisos(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.aviso("dest")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        self.assertEqual(self.db.docs[f"limites_correo/{self.hoy()}"], {"enviados": 1, "avisos": 1})
+
+    def test_como_mucho_20_avisos_al_dia_a_la_misma_persona(self):
+        self.usuario("dest", "dest@x.es", True)
+        for i in range(21):
+            self.aviso("dest", chat=f"c{i}")   # chats distintos: no los frena la espera de 30 min
+        self.assertEqual(len(self.correos), 20)
+        self.usuario("otra", "otra@x.es", True)
+        self.aviso("otra")
+        self.assertEqual(len(self.correos), 21)
+
+    def test_el_tope_por_persona_se_reinicia_cada_dia(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["avisos_email/dest"] = {"dia": "20000101", "enviadosHoy": 20}
+        self.aviso("dest")
+        self.assertEqual(self.correos, ["dest@x.es"])
 
 
 if __name__ == "__main__":

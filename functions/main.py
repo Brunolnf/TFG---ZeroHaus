@@ -397,18 +397,49 @@ AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación c
 # admite unos 500 y, si se pasa, Google la bloquea y nadie recibe su código.
 # Así, aunque alguien cree cuentas en masa para mandar códigos, no la tumba.
 CORREOS_MAX_DIA = int(os.environ.get("CORREOS_MAX_DIA", "300"))
+# Parte del tope que pueden gastar los avisos (mensajes y valoraciones): el
+# resto queda siempre para los códigos de verificación.
+CORREOS_AVISOS_MAX_DIA = int(os.environ.get("CORREOS_AVISOS_MAX_DIA", "150"))
+# Avisos por email que recibe como mucho una misma persona al día
+AVISOS_MAX_DIA_USUARIO = int(os.environ.get("AVISOS_MAX_DIA_USUARIO", "20"))
 
 
-def _reservar_cupo_correo(db) -> bool:
-    """Gasta un correo del tope diario (CORREOS_MAX_DIA). False si ya no quedan."""
-    ref = db.collection("limites_correo").document(time.strftime("%Y%m%d", time.gmtime()))
+def _hoy_utc() -> str:
+    return time.strftime("%Y%m%d", time.gmtime())
+
+
+def _reservar_cupo_correo(db, aviso: bool = False) -> bool:
+    """Gasta un correo del tope diario. Los códigos solo miran el total
+    (CORREOS_MAX_DIA); los avisos, además, su propio cupo
+    (CORREOS_AVISOS_MAX_DIA), para no dejar sin código a nadie. False si no quedan."""
+    ref = db.collection("limites_correo").document(_hoy_utc())
 
     @firestore.transactional
     def _reservar(txn):
-        enviados = int((ref.get(transaction=txn).to_dict() or {}).get("enviados") or 0)
-        if enviados >= CORREOS_MAX_DIA:
+        d = ref.get(transaction=txn).to_dict() or {}
+        enviados = int(d.get("enviados") or 0)
+        avisos = int(d.get("avisos") or 0)
+        if enviados >= CORREOS_MAX_DIA or (aviso and avisos >= CORREOS_AVISOS_MAX_DIA):
             return False
-        txn.set(ref, {"enviados": enviados + 1})
+        txn.set(ref, {"enviados": enviados + 1, "avisos": avisos + (1 if aviso else 0)})
+        return True
+
+    return _reservar(db.transaction())
+
+
+def _reservar_aviso_usuario(db, uid: str) -> bool:
+    """Gasta uno de los AVISOS_MAX_DIA_USUARIO avisos diarios de este
+    destinatario (/avisos_email/{uid}: dia, enviadosHoy). False si ya no quedan."""
+    ref = db.collection("avisos_email").document(uid)
+    hoy = _hoy_utc()
+
+    @firestore.transactional
+    def _reservar(txn):
+        d = ref.get(transaction=txn).to_dict() or {}
+        enviados_hoy = int(d.get("enviadosHoy") or 0) if d.get("dia") == hoy else 0
+        if enviados_hoy >= AVISOS_MAX_DIA_USUARIO:
+            return False
+        txn.set(ref, {"dia": hoy, "enviadosHoy": enviados_hoy + 1}, merge=True)
         return True
 
     return _reservar(db.transaction())
@@ -427,7 +458,11 @@ def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str 
         usuario = auth.get_user(uid)
         if not usuario.email or not usuario.email_verified:
             return
-        if not _reservar_cupo_correo(db):
+        # Primero el tope de la persona: así no se gasta cupo común en balde
+        if not _reservar_aviso_usuario(db, uid):
+            print(f"[EMAIL] Tope diario de avisos de {uid} alcanzado: sin aviso '{tipo}'")
+            return
+        if not _reservar_cupo_correo(db, aviso=True):
             print(f"[EMAIL] Tope diario de correos alcanzado: sin aviso '{tipo}' a {uid}")
             return
         t = _AVISOS_EMAIL.get(idioma, _AVISOS_EMAIL["Español"])
