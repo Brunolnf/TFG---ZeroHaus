@@ -1,11 +1,15 @@
 package com.example.zerohaus.Modelos
 
+import com.google.firebase.firestore.Exclude
+import com.google.firebase.firestore.IgnoreExtraProperties
+
 /**
  * Perfil público de un profesional (técnico certificador o empresa de
  * reformas) en `/tecnicos`. `rating` y `opiniones` los recalcula el servidor;
  * `planActivo` y `suscripcionHasta` solo los escribe la Cloud Function de
  * suscripciones.
  */
+@IgnoreExtraProperties
 data class Tecnico(
     val id: String = "",
     val uid: String = "",
@@ -27,13 +31,26 @@ data class Tecnico(
     // Suscripción: gestionada por la Cloud Function activar_suscripcion.
     // Las rules congelan ambos campos para el cliente.
     val planActivo: String = "",
-    val suscripcionHasta: Long = 0
+    val suscripcionHasta: Long = 0,
+    // false = cuenta aún sin el email verificado: no sale en el directorio.
+    // Solo lo escribe el servidor (las reglas lo impiden al cliente), así que
+    // nunca se serializa: lo rellena RepositorioTecnicos al leer el perfil.
+    // null = perfil anterior a este campo (se muestra).
+    @get:Exclude val emailVerificado: Boolean? = null
 ) {
     companion object {
         const val TIPO_TECNICO = "TECNICO"
         const val TIPO_EMPRESA = "EMPRESA"
     }
 }
+
+/**
+ * Perfiles que muestran el directorio y el mapa: se ocultan los de cuentas
+ * que aún no han verificado su email (`emailVerificado == false`), salvo el
+ * propio, para que el profesional siga viendo el suyo.
+ */
+fun visiblesEnDirectorio(tecnicos: List<Tecnico>, miUid: String?): List<Tecnico> =
+    tecnicos.filter { it.emailVerificado != false || (!miUid.isNullOrEmpty() && it.uid == miUid) }
 
 val Tecnico.esEmpresa: Boolean get() = tipoProfesional == Tecnico.TIPO_EMPRESA
 

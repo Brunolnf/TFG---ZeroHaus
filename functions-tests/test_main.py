@@ -450,9 +450,9 @@ class CupoCorreosTest(_ConServiciosFalsos):
         self.assertEqual(self.correos, ["dest@x.es"])
 
 
-def llamar(funcion, uid, admin=False, **datos):
-    """Ejecuta una callable (sin el envoltorio HTTP) como el usuario `uid`."""
-    peticion = SimpleNamespace(auth=SimpleNamespace(uid=uid, token={"admin": admin}), data=datos)
+def llamar(funcion, quien, admin=False, **datos):
+    """Ejecuta una callable (sin el envoltorio HTTP) como el usuario `quien`."""
+    peticion = SimpleNamespace(auth=SimpleNamespace(uid=quien, token={"admin": admin}), data=datos)
     return inspect.unwrap(funcion)(peticion)
 
 
@@ -482,6 +482,59 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
             self.verificar("u1", codigo)
         self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
         self.update_user.assert_not_called()
+
+
+class PerfilEmailVerificadoTest(_ConServiciosFalsos):
+    """`emailVerificado` de /tecnicos (oculta del directorio los perfiles de
+    cuentas sin verificar): solo lo escribe el servidor."""
+
+    def crear_perfil(self, uid, **datos):
+        """Simula el alta de /tecnicos/{uid} y el trigger que la sigue."""
+        self.db.docs[f"tecnicos/{uid}"] = {"id": uid, "uid": uid, "nombre": "Pro", **datos}
+        evento = SimpleNamespace(data=_RefMem(self.db, f"tecnicos/{uid}").get(), params={"tecnicoId": uid})
+        inspect.unwrap(main.on_tecnico_creado)(evento)
+        return self.db.docs[f"tecnicos/{uid}"]
+
+    def test_el_perfil_de_una_cuenta_sin_verificar_queda_oculto(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], False)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=False)["emailVerificado"], False)
+
+    def test_el_perfil_de_una_cuenta_verificada_queda_visible(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], True)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=False)["emailVerificado"], True)
+
+    def test_el_perfil_de_una_cuenta_que_no_existe_queda_oculto(self):
+        self.assertIs(self.crear_perfil("fantasma")["emailVerificado"], False)
+
+    def test_no_pisa_el_true_que_ya_puso_la_verificacion(self):
+        self.usuario("p1", "p1@x.es", False)   # Auth leído antes de verificar
+        self.assertIs(self.crear_perfil("p1", emailVerificado=True)["emailVerificado"], True)
+
+    def test_al_verificar_el_codigo_el_perfil_se_hace_visible(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "nombre": "Pro", "emailVerificado": False}
+        llamar(main.enviar_codigo_verificacion, "p1", idioma="Español")
+        self.assertEqual(llamar(main.verificar_codigo_email, "p1", codigo=self.codigos[-1][1]), {"verificado": True})
+        self.assertEqual(self.db.docs["tecnicos/p1"], {"uid": "p1", "nombre": "Pro", "emailVerificado": True})
+
+    def test_verificar_sin_perfil_profesional_no_falla_ni_lo_crea(self):
+        self.usuario("c1", "c1@x.es", False)
+        llamar(main.enviar_codigo_verificacion, "c1", idioma="Español")
+        self.assertEqual(llamar(main.verificar_codigo_email, "c1", codigo=self.codigos[-1][1]), {"verificado": True})
+        self.assertNotIn("tecnicos/c1", self.db.docs)
+
+    def test_el_administrador_marca_el_email_y_el_perfil_se_hace_visible(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "emailVerificado": False}
+        self.assertEqual(llamar(main.marcar_email_verificado, "admin", admin=True, uid="p1"), {"ok": True})
+        self.update_user.assert_called_once_with("p1", email_verified=True)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+        # Sin perfil profesional tampoco falla
+        self.usuario("c1", "c1@x.es", False)
+        self.assertEqual(llamar(main.marcar_email_verificado, "admin", admin=True, uid="c1"), {"ok": True})
+        self.assertNotIn("tecnicos/c1", self.db.docs)
 
 
 if __name__ == "__main__":

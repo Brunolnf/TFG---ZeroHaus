@@ -268,12 +268,16 @@ class RepositorioTecnicos {
             callback(snap?.documents?.mapNotNull { aTecnico(it) } ?: emptyList())
         }
 
-    /** Perfil con su id y la nota redondeada a una cifra decimal (como se muestra). */
+    /**
+     * Perfil con su id, la nota redondeada a una cifra decimal (como se
+     * muestra) y `emailVerificado`, que el modelo no lee ni escribe solo.
+     */
     private fun aTecnico(doc: DocumentSnapshot): Tecnico? =
         doc.toObject(Tecnico::class.java)?.let { t ->
             t.copy(
                 id = t.id.ifBlank { doc.id },
-                rating = Math.round(t.rating * 10.0) / 10.0
+                rating = Math.round(t.rating * 10.0) / 10.0,
+                emailVerificado = doc.get("emailVerificado") as? Boolean
             )
         }
 

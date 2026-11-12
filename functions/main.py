@@ -18,6 +18,7 @@ Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
   on_resena_changed            Reseña creada/editada/borrada → recalcula la nota.
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
+  on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
@@ -52,6 +53,7 @@ from email.utils import formataddr
 from firebase_functions import https_fn, firestore_fn, scheduler_fn, pubsub_fn, options
 from firebase_functions.params import SecretParam
 from firebase_admin import initialize_app, auth, firestore, messaging, storage
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 from google.auth import default as default_creds
 from google.auth.transport.requests import AuthorizedSession
@@ -276,6 +278,7 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
         auth.update_user(uid, email_verified=True)
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
+    _marcar_perfil_verificado(firestore.client(), uid)
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
     return {"ok": True}
 
@@ -1016,7 +1019,63 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         )
 
     auth.update_user(uid, email_verified=True)
+    _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Perfil profesional: en el directorio solo con el email verificado
+# ════════════════════════════════════════════════════════════════════════
+#
+# /tecnicos/{id}.emailVerificado lo escribe solo el servidor (las reglas no
+# dejan al cliente ponerlo a true ni quitarlo). La app oculta del directorio y
+# del mapa los perfiles con false; los anteriores a este campo no lo tienen y
+# se siguen mostrando.
+
+def _marcar_perfil_verificado(db, uid: str) -> None:
+    """Hace visible el perfil profesional de `uid` tras verificar su email.
+    Siempre después de actualizar Auth (on_tecnico_creado depende de ese orden).
+    Sin perfil no hace nada; otros fallos se registran sin romper la verificación."""
+    try:
+        db.collection("tecnicos").document(uid).update({"emailVerificado": True})
+    except NotFound:
+        pass
+    except Exception as e:
+        print(f"[VERIFICACION] No se pudo marcar el perfil de {uid}: {e}")
+
+
+def _anotar_email_verificado(db, ref, uid: str) -> None:
+    """Pone emailVerificado del perfil según Auth, en una transacción y sin pisar
+    un true que haya puesto ya la verificación del código."""
+
+    @firestore.transactional
+    def _anotar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return
+        actual = (snap.to_dict() or {}).get("emailVerificado")
+        if actual is True:
+            return
+        try:
+            verificado = auth.get_user(uid).email_verified is True
+        except auth.UserNotFoundError:
+            verificado = False
+        if actual is not verificado:
+            txn.update(ref, {"emailVerificado": verificado})
+
+    _anotar(db.transaction())
+
+
+@firestore_fn.on_document_created(document="tecnicos/{tecnicoId}", region=REGION)
+def on_tecnico_creado(event) -> None:
+    """Perfil profesional nuevo (la app lo crea al registrarse, antes de
+    verificar el email): queda oculto del directorio hasta que la cuenta lo verifica."""
+    if event.data is None:
+        return
+    uid = (event.data.to_dict() or {}).get("uid") or ""
+    if not uid:
+        return  # sin cuenta asociada: solo puede crearlo el administrador
+    _anotar_email_verificado(firestore.client(), event.data.reference, uid)
 
 
 # ════════════════════════════════════════════════════════════════════════
