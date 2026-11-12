@@ -6,6 +6,7 @@ instaladas:
 
 Están fuera de functions/ para que no se suban con el despliegue.
 """
+import inspect
 import json
 import os
 import sys
@@ -447,6 +448,40 @@ class CupoCorreosTest(_ConServiciosFalsos):
         self.db.docs["avisos_email/dest"] = {"dia": "20000101", "enviadosHoy": 20}
         self.aviso("dest")
         self.assertEqual(self.correos, ["dest@x.es"])
+
+
+def llamar(funcion, uid, admin=False, **datos):
+    """Ejecuta una callable (sin el envoltorio HTTP) como el usuario `uid`."""
+    peticion = SimpleNamespace(auth=SimpleNamespace(uid=uid, token={"admin": admin}), data=datos)
+    return inspect.unwrap(funcion)(peticion)
+
+
+class CodigoVerificacionTest(_ConServiciosFalsos):
+    """El código solo verifica el email al que se envió."""
+
+    def pedir_codigo(self, uid):
+        self.assertTrue(llamar(main.enviar_codigo_verificacion, uid, idioma="Español")["enviado"])
+        return self.codigos[-1][1]
+
+    def verificar(self, uid, codigo):
+        return llamar(main.verificar_codigo_email, uid, codigo=codigo)
+
+    def test_el_codigo_verifica_la_cuenta_con_el_mismo_email(self):
+        self.usuario("u1", "Ana@X.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["email"], "ana@x.es")
+        self.usuarios["u1"].email = "ana@x.es"   # mayúsculas aparte, es el mismo
+        self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.update_user.assert_called_once_with("u1", email_verified=True)
+
+    def test_si_el_email_de_la_cuenta_cambia_el_codigo_ya_no_vale(self):
+        self.usuario("u1", "a@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.usuarios["u1"].email = "b@x.es"
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
+        self.update_user.assert_not_called()
 
 
 if __name__ == "__main__":

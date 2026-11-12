@@ -820,17 +820,22 @@ _TEXTOS_EMAIL = {
 }
 
 
-def _huella_codigo(uid: str, codigo: str) -> str:
-    """HMAC del código ligado al usuario: en Firestore nunca está en claro."""
-    return hmac.new(SMTP_CLAVE.value.encode(), f"{uid}:{codigo}".encode(), hashlib.sha256).hexdigest()
+def _normalizar_email(email) -> str:
+    return (email or "").strip().lower()
 
 
-def _generar_codigo_nuevo(uid: str, historial: list) -> tuple:
+def _huella_codigo(uid: str, email: str, codigo: str) -> str:
+    """HMAC del código ligado al usuario y al email al que se envió: en
+    Firestore nunca está en claro."""
+    return hmac.new(SMTP_CLAVE.value.encode(), f"{uid}:{email}:{codigo}".encode(), hashlib.sha256).hexdigest()
+
+
+def _generar_codigo_nuevo(uid: str, email: str, historial: list) -> tuple:
     """Código aleatorio de 6 dígitos que este usuario no ha recibido nunca."""
     usados = set(historial)
     for _ in range(50):
         codigo = f"{secrets.randbelow(1_000_000):06d}"
-        huella = _huella_codigo(uid, codigo)
+        huella = _huella_codigo(uid, email, codigo)
         if huella not in usados:
             return codigo, huella
     raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "No se pudo generar el código.")
@@ -895,6 +900,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
 
     idioma = str((req.data or {}).get("idioma") or "Español")
+    email = _normalizar_email(usuario.email)
     db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
@@ -914,9 +920,11 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
                 {"motivo": "envios"},
             )
         historial = list(d.get("historial") or [])
-        codigo, huella = _generar_codigo_nuevo(uid, historial)
+        codigo, huella = _generar_codigo_nuevo(uid, email, historial)
         txn.set(ref, {
             "huella": huella,
+            # El código solo vale para este email: si el de la cuenta cambia, caduca
+            "email": email,
             "expira": ahora + CODIGO_VALIDEZ_MS,
             "intentos": 0,
             "ultimoEnvio": ahora,
@@ -963,8 +971,10 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     if not re.fullmatch(r"\d{6}", codigo):
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "El código tiene 6 dígitos.")
 
-    if auth.get_user(uid).email_verified:
+    usuario = auth.get_user(uid)
+    if usuario.email_verified:
         return {"verificado": True}
+    email = _normalizar_email(usuario.email)
 
     db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
@@ -974,12 +984,13 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     def _comprobar(txn):
         d = ref.get(transaction=txn).to_dict() or {}
         huella = d.get("huella")
-        if not huella or int(d.get("expira") or 0) < ahora:
+        # Si el email de la cuenta ya no es al que se envió el código, no vale
+        if not huella or int(d.get("expira") or 0) < ahora or not email or d.get("email") != email:
             return "caducado", 0
         intentos = int(d.get("intentos") or 0)
         if intentos >= CODIGO_MAX_INTENTOS:
             return "bloqueado", 0
-        if hmac.compare_digest(huella, _huella_codigo(uid, codigo)):
+        if hmac.compare_digest(huella, _huella_codigo(uid, email, codigo)):
             # Un solo uso: se borra la huella activa (queda en el historial)
             txn.update(ref, {"huella": firestore.DELETE_FIELD, "intentos": 0})
             return "ok", 0
