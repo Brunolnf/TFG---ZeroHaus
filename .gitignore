@@ -49,7 +49,8 @@ node_modules/
 # ─── Otros ───────────────────────────────────────────────────────────────
 .DS_Store
 *.bak
-.claude/
+.claude/*
+!.claude/agents/
 claude.exe
 # Ficha de Google Play: se versiona todo salvo credenciales de la cuenta de
 # prueba, datos de contacto personales y la política de privacidad antigua
