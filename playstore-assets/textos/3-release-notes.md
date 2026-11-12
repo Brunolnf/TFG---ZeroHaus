@@ -1,4 +1,4 @@
-# Notas de versión — 2.3.0 (versionCode 6)
+# Notas de versión — 2.3.1 (versionCode 7)
 
 Texto para «Novedades de esta versión» en Play Console (máx. 500 caracteres por idioma).
 
