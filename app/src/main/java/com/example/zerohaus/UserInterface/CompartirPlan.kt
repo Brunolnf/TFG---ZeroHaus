@@ -207,7 +207,7 @@ private fun generarPdfPlan(
     canvas.drawText(c.pdfGenerado, ancho / 2f, (alto - 10).toFloat(), paint)
 
     doc.finishPage(pagina)
-    val dir = File(context.cacheDir, "informes").apply { mkdirs() }
+    val dir = File(context.cacheDir, "compartidos").apply { mkdirs() }
     val seguro = nombreVivienda.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_').ifBlank { "vivienda" }.take(40)
     val archivo = File(dir, "plan_${seguro}.pdf")
     FileOutputStream(archivo).use { doc.writeTo(it) }

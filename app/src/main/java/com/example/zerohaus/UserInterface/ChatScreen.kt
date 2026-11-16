@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.zerohaus.Util.AdjuntosChat
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.MensajeChat
@@ -509,6 +510,10 @@ fun ChatScreen(
                         Button(
                             onClick = {
                                 archivoAmpliado = null
+                                if (!AdjuntosChat.esUrlSegura(msg.mediaUrl)) {
+                                    errorLocal = cad.sinAppParaAbrir
+                                    return@Button
+                                }
                                 try {
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
                                 } catch (_: ActivityNotFoundException) {
