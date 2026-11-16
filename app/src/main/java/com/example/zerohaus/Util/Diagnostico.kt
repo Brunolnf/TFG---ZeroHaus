@@ -11,7 +11,8 @@ import java.security.MessageDigest
  * - En depuración no se recoge nada, para no mezclar los fallos de las
  *   pruebas locales con los de los usuarios.
  * - Cada informe lleva el idioma y el tipo de usuario (nunca datos
- *   personales: ni uid, ni email, ni nombre).
+ *   personales: ni uid, ni email, ni nombre). El uid solo se envía como
+ *   SHA-256, un seudónimo: sigue siendo dato personal y así debe tratarse.
  * - Los fallos del servidor al llamar a una Cloud Function se registran como
  *   no fatales: la app los muestra al usuario y sigue, así que sin esto una
  *   función caída o sin desplegar pasaría desapercibida.
