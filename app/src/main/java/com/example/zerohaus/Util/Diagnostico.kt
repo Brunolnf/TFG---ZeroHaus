@@ -1,7 +1,9 @@
 package com.example.zerohaus.Util
 
 import com.example.zerohaus.BuildConfig
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.crashlytics.FirebaseCrashlytics
+import java.security.MessageDigest
 
 /**
  * Crashlytics con contexto y errores no fatales.
@@ -21,7 +23,25 @@ object Diagnostico {
 
     fun inicializar() {
         crashlytics?.isCrashlyticsCollectionEnabled = !BuildConfig.DEBUG
+        crashlytics?.setCustomKey("version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
         actualizarContexto()
+        // Identificador sin datos personales: se pone al iniciar sesión y se vacía al cerrarla.
+        runCatching {
+            FirebaseAuth.getInstance().addAuthStateListener { auth ->
+                crashlytics?.setUserId(identificadorAnonimo(auth.currentUser?.uid))
+            }
+        }
+    }
+
+    /**
+     * SHA-256 en hexadecimal del uid, para agrupar los informes de un mismo
+     * usuario sin exponer el uid. Cadena vacía si no hay sesión.
+     */
+    fun identificadorAnonimo(uid: String?): String {
+        if (uid.isNullOrEmpty()) return ""
+        return MessageDigest.getInstance("SHA-256")
+            .digest(uid.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 
     /** Idioma y tipo de usuario actuales; se llama al cambiar cualquiera de los dos. */
