@@ -584,10 +584,14 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
     """`emailVerificado` de /tecnicos (oculta del directorio los perfiles de
     cuentas sin verificar): solo lo escribe el servidor."""
 
-    def crear_perfil(self, uid, **datos):
-        """Simula el alta de /tecnicos/{uid} y el trigger que la sigue."""
-        self.db.docs[f"tecnicos/{uid}"] = {"id": uid, "uid": uid, "nombre": "Pro", **datos}
-        evento = SimpleNamespace(data=_RefMem(self.db, f"tecnicos/{uid}").get(), params={"tecnicoId": uid})
+    def crear_perfil(self, uid, despues=None, **datos):
+        """Simula el alta de /tecnicos/{uid} y el trigger que la sigue. `despues`:
+        cambios que el servidor hace en el documento antes de que llegue el trigger."""
+        creado = {"id": uid, "uid": uid, "nombre": "Pro", **datos}
+        self.db.docs[f"tecnicos/{uid}"] = {**creado, **(despues or {})}
+        # El documento tal como se creó (sin referencia: el trigger usa el id del evento)
+        evento = SimpleNamespace(data=SimpleNamespace(exists=True, to_dict=lambda: dict(creado)),
+                                 params={"tecnicoId": uid})
         inspect.unwrap(main.on_tecnico_creado)(evento)
         return self.db.docs[f"tecnicos/{uid}"]
 
@@ -604,9 +608,46 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
     def test_el_perfil_de_una_cuenta_que_no_existe_queda_oculto(self):
         self.assertIs(self.crear_perfil("fantasma")["emailVerificado"], False)
 
-    def test_no_pisa_el_true_que_ya_puso_la_verificacion(self):
+    def test_no_pisa_el_true_que_puso_la_verificacion_despues_del_alta(self):
         self.usuario("p1", "p1@x.es", False)   # Auth leído antes de verificar
-        self.assertIs(self.crear_perfil("p1", emailVerificado=True)["emailVerificado"], True)
+        perfil = self.crear_perfil("p1", despues={"emailVerificado": True})
+        self.assertIs(perfil["emailVerificado"], True)
+
+    def test_un_true_que_ya_venia_en_el_alta_no_se_respeta(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=True)["emailVerificado"], False)
+        self.usuario("p2", "p2@x.es", True)
+        self.assertIs(self.crear_perfil("p2", emailVerificado=True)["emailVerificado"], True)
+
+    def test_si_auth_falla_el_perfil_queda_oculto(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.auth_caido = True
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], False)
+
+    def test_la_revision_diaria_muestra_los_perfiles_de_cuentas_ya_verificadas(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.usuario("p2", "p2@x.es", False)
+        self.usuario("p3", "p3@x.es", True)
+        self.db.docs.update({
+            "tecnicos/p1": {"uid": "p1", "emailVerificado": False},
+            "tecnicos/p2": {"uid": "p2", "emailVerificado": False},
+            "tecnicos/legado": {"uid": "p3", "emailVerificado": False},   # id del documento ≠ uid
+            "tecnicos/huerfano": {"uid": "borrada", "emailVerificado": False},
+            "tecnicos/antiguo": {"uid": "p2"},                            # sin el campo: no se toca
+        })
+        self.assertEqual(main._mostrar_perfiles_verificados(self.db), 2)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+        self.assertIs(self.db.docs["tecnicos/legado"]["emailVerificado"], True)
+        self.assertIs(self.db.docs["tecnicos/p2"]["emailVerificado"], False)
+        self.assertIs(self.db.docs["tecnicos/huerfano"]["emailVerificado"], False)
+        self.assertNotIn("emailVerificado", self.db.docs["tecnicos/antiguo"])
+
+    def test_la_tarea_diaria_incluye_la_revision_de_perfiles_ocultos(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "emailVerificado": False}
+        with mock.patch("builtins.print"):   # los demás pasos no tienen datos
+            inspect.unwrap(main.revisar_suscripciones_diario)(None)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
 
     def test_al_verificar_el_codigo_el_perfil_se_hace_visible(self):
         self.usuario("p1", "p1@x.es", False)

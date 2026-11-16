@@ -5,8 +5,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Modelos.visiblesEnDirectorio
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
+
+/** Ranking por valoración con los mismos perfiles que muestra el directorio. */
+internal fun rankingPorValoracion(tecnicos: List<Tecnico>, miUid: String?): List<Tecnico> =
+    visiblesEnDirectorio(tecnicos, miUid).sortedByDescending { it.rating }
 
 /**
  * Ranking de profesionales por valoración media.
@@ -32,8 +38,9 @@ class RankingsViewModel : ViewModel() {
         if (listenerTec != null && !forzar) return
         listenerTec?.remove()
         cargando = true
+        val miUid = FirebaseAuth.getInstance().currentUser?.uid
         listenerTec = repo.escucharTecnicos { lista ->
-            ranking = lista.sortedByDescending { it.rating }
+            ranking = rankingPorValoracion(lista, miUid)
             cargando = false
         }
     }

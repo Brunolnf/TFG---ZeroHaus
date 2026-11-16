@@ -23,7 +23,8 @@ Triggers de Firestore
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
   revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
-                               autores de chats antiguos y bloqueos pendientes en Auth.
+                               autores de chats antiguos, bloqueos pendientes en Auth y perfiles
+                               profesionales ocultos de cuentas ya verificadas.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -1053,7 +1054,8 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
 def _marcar_perfil_verificado(db, uid: str) -> None:
     """Hace visible el perfil profesional de `uid` tras verificar su email.
     Siempre después de actualizar Auth (on_tecnico_creado depende de ese orden).
-    Sin perfil no hace nada; otros fallos se registran sin romper la verificación."""
+    Sin perfil no hace nada; otros fallos se registran sin romper la verificación
+    (los corrige la revisión diaria, _mostrar_perfiles_verificados)."""
     try:
         db.collection("tecnicos").document(uid).update({"emailVerificado": True})
     except NotFound:
@@ -1062,9 +1064,21 @@ def _marcar_perfil_verificado(db, uid: str) -> None:
         print(f"[VERIFICACION] No se pudo marcar el perfil de {uid}: {e}")
 
 
-def _anotar_email_verificado(db, ref, uid: str) -> None:
-    """Pone emailVerificado del perfil según Auth, en una transacción y sin pisar
-    un true que haya puesto ya la verificación del código."""
+def _email_verificado_en_auth(uid: str) -> bool:
+    """True solo si Auth confirma que la cuenta tiene el email verificado. Si
+    no existe o Auth falla, False: el perfil queda oculto y la revisión diaria
+    lo corrige cuando la cuenta esté verificada."""
+    try:
+        return auth.get_user(uid).email_verified is True
+    except Exception as e:
+        if not isinstance(e, auth.UserNotFoundError):
+            print(f"[TECNICOS] No se pudo consultar Auth para {uid}: {e}")
+        return False
+
+
+def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
+    """Pone emailVerificado del perfil según Auth, en una transacción. Con
+    `respetar_true` no pisa un true que haya puesto ya la verificación del código."""
 
     @firestore.transactional
     def _anotar(txn):
@@ -1072,12 +1086,9 @@ def _anotar_email_verificado(db, ref, uid: str) -> None:
         if not snap.exists:
             return
         actual = (snap.to_dict() or {}).get("emailVerificado")
-        if actual is True:
+        if actual is True and respetar_true:
             return
-        try:
-            verificado = auth.get_user(uid).email_verified is True
-        except auth.UserNotFoundError:
-            verificado = False
+        verificado = _email_verificado_en_auth(uid)
         if actual is not verificado:
             txn.update(ref, {"emailVerificado": verificado})
 
@@ -1090,10 +1101,28 @@ def on_tecnico_creado(event) -> None:
     verificar el email): queda oculto del directorio hasta que la cuenta lo verifica."""
     if event.data is None:
         return
-    uid = (event.data.to_dict() or {}).get("uid") or ""
+    creado = event.data.to_dict() or {}
+    uid = creado.get("uid") or ""
     if not uid:
         return  # sin cuenta asociada: solo puede crearlo el administrador
-    _anotar_email_verificado(firestore.client(), event.data.reference, uid)
+    db = firestore.client()
+    ref = db.collection("tecnicos").document(event.params["tecnicoId"])
+    # Un true que ya venía en el alta no lo puso el servidor: se decide por Auth.
+    # Solo se respeta el que apareció después (la verificación del código).
+    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True)
+
+
+def _mostrar_perfiles_verificados(db) -> int:
+    """Pone emailVerificado a true en los perfiles ocultos cuya cuenta ya tiene
+    el email verificado: cubre un fallo al marcarlo, perfiles cuyo id no es el
+    uid y verificaciones por otra vía. Devuelve cuántos."""
+    corregidos = 0
+    for d in db.collection("tecnicos").where(filter=FieldFilter("emailVerificado", "==", False)).stream():
+        uid = (d.to_dict() or {}).get("uid") or ""
+        if uid and _email_verificado_en_auth(uid):
+            d.reference.update({"emailVerificado": True})
+            corregidos += 1
+    return corregidos
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1828,8 +1857,9 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Red de seguridad por si falla o no está configurado RTDN, limpieza
     diaria (eventos de estadísticas y notificaciones antiguas), nota de los
-    profesionales recalculada con sus reseñas, autores de los chats antiguos
-    y cuentas bloqueadas desactivadas en Auth."""
+    profesionales recalculada con sus reseñas, autores de los chats antiguos,
+    cuentas bloqueadas desactivadas en Auth y perfiles profesionales ocultos
+    de cuentas que ya verificaron su email."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1879,6 +1909,12 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
     except Exception as e:
         print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
+
+    # 8) Perfiles profesionales ocultos de cuentas que ya verificaron su email
+    try:
+        print(f"[TECNICOS] Perfiles ocultos ya verificados: {_mostrar_perfiles_verificados(db)}")
+    except Exception as e:
+        print(f"[TECNICOS] No se pudieron revisar los perfiles ocultos: {e}")
 
 
 # ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══

@@ -52,6 +52,13 @@ data class Tecnico(
 fun visiblesEnDirectorio(tecnicos: List<Tecnico>, miUid: String?): List<Tecnico> =
     tecnicos.filter { it.emailVerificado != false || (!miUid.isNullOrEmpty() && it.uid == miUid) }
 
+/**
+ * Datos de un perfil leído de Firestore para guardarlo (con merge) como perfil
+ * de [uid]: sin `emailVerificado`, que solo escribe el servidor.
+ */
+fun datosPerfilReasignado(datos: Map<String, Any?>, uid: String): Map<String, Any?> =
+    datos - "emailVerificado" + mapOf("id" to uid, "uid" to uid)
+
 val Tecnico.esEmpresa: Boolean get() = tipoProfesional == Tecnico.TIPO_EMPRESA
 
 val Tecnico.esVerificado: Boolean get() = planActivo.isNotBlank() && suscripcionHasta > System.currentTimeMillis()

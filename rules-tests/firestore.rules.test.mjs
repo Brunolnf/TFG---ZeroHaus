@@ -497,6 +497,14 @@ describe("perfil profesional: alta con los campos del modelo y emailVerificado",
     await assertFails(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: true })));
     await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: true })));
     await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: "true" })));
+    await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: null })));
+  });
+
+  it("al reclamar un perfil antiguo no se puede añadir emailVerificado", async () => {
+    const db = env.authenticatedContext("nuevo", { email: "legacy@x.es", email_verified: true }).firestore();
+    await assertFails(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo", emailVerificado: true }));
+    await assertFails(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo", emailVerificado: false }));
+    await assertSucceeds(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo" }));
   });
 
   it("id y distanciaKm tienen tipo y tamaño, al crear y al editar", async () => {
@@ -516,6 +524,8 @@ describe("perfil profesional: alta con los campos del modelo y emailVerificado",
     await assertFails(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { emailVerificado: true }));
     // Reescribirlo entero con el mismo valor (reparación del panel) sí se permite
     await assertSucceeds(setDoc(doc(db, "tecnicos/oculto"), perfilOculto({ emailVerificado: false })));
+    // Y fusionando (lo que hace la app al guardar el perfil entero) el campo se conserva
+    await assertSucceeds(setDoc(doc(db, "tecnicos/oculto"), perfilOculto({ descripcion: "Nueva" }), { merge: true }));
   });
 
   it("con emailVerificado a false el dueño sigue editando su perfil como hace la app", async () => {
