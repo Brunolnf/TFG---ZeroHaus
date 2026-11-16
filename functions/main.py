@@ -1015,9 +1015,11 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         txn.update(ref, cambios)
         return "incorrecto", CODIGO_MAX_INTENTOS - intentos
 
+    caducado = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "El código ha caducado. Pide uno nuevo.", {"motivo": "caducado"})
     resultado, restantes = _comprobar(db.transaction())
     if resultado == "caducado":
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "El código ha caducado. Pide uno nuevo.", {"motivo": "caducado"})
+        raise caducado
     if resultado == "bloqueado":
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED, "Demasiados intentos. Pide un código nuevo.", {"motivo": "intentos"})
     if resultado == "incorrecto":
@@ -1030,6 +1032,11 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         )
 
     auth.update_user(uid, email_verified=True)
+    # Si el email de la cuenta cambió entre la comprobación y este momento, la
+    # verificación sería de otro correo: se deshace y el código no vale
+    if _normalizar_email(auth.get_user(uid).email) != email:
+        auth.update_user(uid, email_verified=False)
+        raise caducado
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
 

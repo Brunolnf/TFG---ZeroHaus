@@ -7,6 +7,8 @@ instaladas:
 Están fuera de functions/ para que no se suban con el despliegue.
 """
 import calendar
+import hashlib
+import hmac
 import inspect
 import json
 import os
@@ -545,6 +547,36 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
         with self.assertRaises(main.https_fn.HttpsError) as error:
             self.verificar("u1", codigo)
         self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
+        self.update_user.assert_not_called()
+
+    def test_si_el_email_cambia_mientras_se_verifica_se_deshace(self):
+        self.usuario("u1", "a@x.es", False)
+        self.db.docs["tecnicos/u1"] = {"uid": "u1", "emailVerificado": False}
+        codigo = self.pedir_codigo("u1")
+
+        def cambio_simultaneo(uid, **cambios):   # el email cambia justo al marcarlo
+            if cambios.get("email_verified"):
+                self.usuarios[uid].email = "b@x.es"
+        self.update_user.side_effect = cambio_simultaneo
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
+        self.assertEqual(error.exception.details, {"motivo": "caducado"})
+        self.assertEqual(self.update_user.call_args_list,
+                         [mock.call("u1", email_verified=True), mock.call("u1", email_verified=False)])
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+
+    def test_un_codigo_emitido_sin_email_guardado_caduca_sin_gastar_intentos(self):
+        # Códigos pedidos antes de ligar el código al email: la huella no lo incluía
+        self.usuario("u1", "a@x.es", False)
+        huella = hmac.new(main.SMTP_CLAVE.value.encode(), b"u1:123456", hashlib.sha256).hexdigest()
+        self.db.docs["verificaciones_email/u1"] = {
+            "huella": huella, "expira": main._ahora_ms() + 60_000, "intentos": 0,
+        }
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", "123456")
+        self.assertEqual(error.exception.details, {"motivo": "caducado"})
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["intentos"], 0)
         self.update_user.assert_not_called()
 
 
