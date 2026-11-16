@@ -220,7 +220,19 @@ def _purgar_usuario(db, uid: str) -> dict:
     stats["mensajes"] = mensajes_borrados
     stats["archivos"] = archivos_borrados + _borrar_storage(f"perfiles/{uid}/")
 
-    stats["eventos"] = _borrar_subcoleccion(db, db.collection("tecnicos").document(uid), "eventos")
+    # Perfiles profesionales: el de id = uid (se borra con DOCS_POR_ID) y los
+    # antiguos reclamados con otro id, que llevan el uid en el campo `uid`
+    perfiles = {uid} | {
+        d.id for d in db.collection("tecnicos").where(filter=FieldFilter("uid", "==", uid)).stream()
+    }
+    eventos = 0
+    for perfil_id in perfiles:
+        ref = db.collection("tecnicos").document(perfil_id)
+        eventos += _borrar_subcoleccion(db, ref, "eventos")
+        if perfil_id != uid:
+            ref.delete()
+    stats["eventos"] = eventos
+    stats["perfilesOtroId"] = len(perfiles - {uid})
 
     for col in DOCS_POR_ID:
         try:
@@ -783,22 +795,18 @@ def _recalcular_todos_los_ratings(db) -> int:
 
 
 def _recalcular_rating(db, tecnico_id: str) -> None:
-    """Recalcula `rating` y `opiniones` del profesional a partir de todas sus reseñas."""
+    """Recalcula `rating` y `opiniones` del profesional a partir de todas sus reseñas.
+    Solo actualiza un perfil que existe: si la cuenta se borró antes de que
+    llegara el trigger de la reseña, no se recrea un perfil vacío."""
     q = db.collection("resenas").where(filter=FieldFilter("tecnicoId", "==", tecnico_id))
     docs = list(q.stream())
     n = len(docs)
-    if n == 0:
-        db.collection("tecnicos").document(tecnico_id).set(
-            {"rating": 0.0, "opiniones": 0},
-            merge=True,
-        )
-        return
     total = sum((d.to_dict() or {}).get("puntuacion", 0) for d in docs)
-    promedio = round(total / n, 2)
-    db.collection("tecnicos").document(tecnico_id).set(
-        {"rating": promedio, "opiniones": n},
-        merge=True,
-    )
+    promedio = round(total / n, 2) if n else 0.0
+    try:
+        db.collection("tecnicos").document(tecnico_id).update({"rating": promedio, "opiniones": n})
+    except NotFound:
+        pass
 
 
 # ════════════════════════════════════════════════════════════════════════

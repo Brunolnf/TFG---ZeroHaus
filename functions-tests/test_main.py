@@ -399,25 +399,34 @@ class _RefMem:
         if self.ruta not in self._db.docs:
             raise NotFound(f"No existe {self.ruta}")
         self._db.docs[self.ruta] = _sin_borrados({**self._db.docs[self.ruta], **datos})
+    def delete(self):
+        self._comprobar()
+        self._db.docs.pop(self.ruta, None)
+    def collection(self, nombre): return _ConsultaMem(self._db, f"{self.ruta}/{nombre}")
 
 
-_OPERADORES = {"==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b}
+_OPERADORES = {
+    "==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b,
+    "array_contains": lambda a, b: isinstance(a, list) and b in a,
+}
 
 
 class _ConsultaMem:
-    """Colección de primer nivel con filtros where(filter=FieldFilter(...))."""
-    def __init__(self, db, nombre, filtros=()):
-        self._db, self._nombre, self._filtros = db, nombre, list(filtros)
+    """Colección (o subcolección) con filtros where(filter=FieldFilter(...)) y limit."""
+    def __init__(self, db, nombre, filtros=(), limite=None):
+        self._db, self._nombre, self._filtros, self._limite = db, nombre, list(filtros), limite
     def document(self, doc_id): return _RefMem(self._db, f"{self._nombre}/{doc_id}")
-    def where(self, filter): return _ConsultaMem(self._db, self._nombre, self._filtros + [filter])
+    def where(self, filter): return _ConsultaMem(self._db, self._nombre, self._filtros + [filter], self._limite)
+    def limit(self, n): return _ConsultaMem(self._db, self._nombre, self._filtros, n)
     def stream(self):
         prefijo = f"{self._nombre}/"
-        for ruta, datos in list(self._db.docs.items()):
-            if not ruta.startswith(prefijo) or "/" in ruta[len(prefijo):]:
-                continue
-            if all(f.field_path in datos and _OPERADORES[f.op_string](datos[f.field_path], f.value)
-                   for f in self._filtros):
-                yield _RefMem(self._db, ruta).get()
+        encontrados = [
+            _RefMem(self._db, ruta).get() for ruta, datos in list(self._db.docs.items())
+            if ruta.startswith(prefijo) and "/" not in ruta[len(prefijo):]
+            and all(f.field_path in datos and _OPERADORES[f.op_string](datos[f.field_path], f.value)
+                    for f in self._filtros)
+        ]
+        return iter(encontrados if self._limite is None else encontrados[:self._limite])
 
 
 class _FirestoreMem:
@@ -425,6 +434,8 @@ class _FirestoreMem:
         self.docs = {}
         self.fallos = set()   # rutas cuya escritura falla (Firestore no responde)
     def collection(self, nombre): return _ConsultaMem(self, nombre)
+    def batch(self):
+        return SimpleNamespace(delete=lambda ref: ref.delete(), commit=lambda: None)
     def transaction(self):
         return SimpleNamespace(set=lambda ref, datos, merge=False: ref.set(datos, merge=merge),
                                update=lambda ref, datos: ref.update(datos))
@@ -797,6 +808,65 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
         self.usuario("c1", "c1@x.es", False)
         self.assertEqual(llamar(main.marcar_email_verificado, "admin", admin=True, uid="c1"), {"ok": True})
         self.assertNotIn("tecnicos/c1", self.db.docs)
+
+
+def evento_resena(antes, despues, resena_id="r1"):
+    """Evento de on_resena_changed: reseña antes y después (None si no existe)."""
+    def snap(datos):
+        return None if datos is None else SimpleNamespace(exists=True, to_dict=lambda: dict(datos))
+    return SimpleNamespace(id=f"ev_{resena_id}", params={"resenaId": resena_id},
+                           data=SimpleNamespace(before=snap(antes), after=snap(despues)))
+
+
+class _ConPurga(_ConServiciosFalsos):
+    """Además, el borrado de Auth y de Storage simulados."""
+
+    def setUp(self):
+        super().setUp()
+        self.delete_user = mock.Mock()
+        for parche in (
+            mock.patch.object(main.auth, "delete_user", self.delete_user),
+            mock.patch.object(main, "_borrar_storage", lambda prefijo: 0),
+        ):
+            parche.start()
+            self.addCleanup(parche.stop)
+
+
+class PurgaTest(_ConPurga):
+
+    def test_borra_tambien_los_perfiles_antiguos_con_otro_id(self):
+        self.db.docs.update({
+            "tecnicos/p1": {"uid": "p1"},
+            "tecnicos/p1/eventos/e1": {"tipo": "visita"},
+            "tecnicos/legado": {"uid": "p1", "telefono": "600000000"},   # reclamado con otro id
+            "tecnicos/legado/eventos/e2": {"tipo": "chat"},
+            "tecnicos/otro": {"uid": "p2"},
+            "tecnicos/otro/eventos/e3": {"tipo": "visita"},
+            "usuarios/p1": {"nombre": "Pro"},
+        })
+        main._purgar_usuario(self.db, "p1")
+        self.assertEqual(sorted(self.db.docs), ["tecnicos/otro", "tecnicos/otro/eventos/e3"])
+        self.delete_user.assert_called_once_with("p1")
+
+
+class ValoracionesTest(_ConPurga):
+
+    def test_la_nota_se_recalcula_si_el_perfil_existe(self):
+        self.db.docs.update({
+            "tecnicos/p1": {"uid": "p1", "nombre": "Pro"},
+            "resenas/a": {"tecnicoId": "p1", "puntuacion": 5},
+            "resenas/b": {"tecnicoId": "p1", "puntuacion": 4},
+        })
+        main._recalcular_rating(self.db, "p1")
+        self.assertEqual(self.db.docs["tecnicos/p1"], {"uid": "p1", "nombre": "Pro", "rating": 4.5, "opiniones": 2})
+
+    def test_una_resena_que_llega_tras_borrar_la_cuenta_no_recrea_el_perfil(self):
+        resena = {"uid": "c1", "tecnicoId": "p1", "puntuacion": 5, "nombreUsuario": "Ana"}
+        self.db.docs.update({"tecnicos/p1": {"uid": "p1"}, "resenas/r1": dict(resena)})
+        main._purgar_usuario(self.db, "p1")   # borra la reseña y después el perfil
+        # El trigger de la reseña borrada se ejecuta después de la purga
+        inspect.unwrap(main.on_resena_changed)(evento_resena(resena, None))
+        self.assertNotIn("tecnicos/p1", self.db.docs)
 
 
 if __name__ == "__main__":
