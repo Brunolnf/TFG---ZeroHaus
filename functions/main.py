@@ -16,7 +16,7 @@ Callables (se invocan desde la app con Firebase Functions)
 
 Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
-  on_resena_changed            Reseña creada/editada/borrada → recalcula la nota.
+  on_resena_changed            Reseña creada/editada/borrada → recalcula la nota y pone el nombre real.
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
   on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
 
@@ -677,13 +677,19 @@ def _nombre_real(db, uid: str, respaldo: str) -> str:
     No se usa el nombre que viene en el mensaje o en la reseña: lo escribe el
     móvil y podía ser cualquiera («ZeroHaus Soporte»), y el servidor lo ponía
     en el push y en el email que se envían desde la cuenta de ZeroHaus."""
-    nombre = ""
-    if uid:
-        try:
-            nombre = str((db.collection("usuarios").document(uid).get().to_dict() or {}).get("nombre") or "")
-        except Exception as e:
-            print(f"[NOMBRE] No se pudo leer el perfil de {uid}: {e}")
-    return (nombre.strip() or str(respaldo).strip() or "ZeroHaus")[:60]
+    return (_nombre_perfil(db, uid) or str(respaldo).strip() or "ZeroHaus")[:60]
+
+
+def _nombre_perfil(db, uid: str) -> str:
+    """Nombre de /usuarios/{uid} (60 caracteres como mucho), o "" si no lo hay."""
+    if not uid:
+        return ""
+    try:
+        nombre = str((db.collection("usuarios").document(uid).get().to_dict() or {}).get("nombre") or "")
+    except Exception as e:
+        print(f"[NOMBRE] No se pudo leer el perfil de {uid}: {e}")
+        return ""
+    return nombre.strip()[:60]
 
 
 # Nombre de los adjuntos sin texto (foto, archivo) en los 14 idiomas
@@ -720,28 +726,30 @@ def _resumen_mensaje(msg: dict, idioma: str) -> str:
     secrets=[SMTP_USUARIO, SMTP_CLAVE],
 )
 def on_resena_changed(event) -> None:
-    """Reseña creada, editada o borrada: recalcula la nota del profesional y, si es
-    nueva, le avisa (notificación, push y/o email según sus ajustes)."""
+    """Reseña creada, editada o borrada: recalcula la nota del profesional si
+    cambian la puntuación o el profesional, pone en la reseña el nombre del
+    perfil de su autor y, si es nueva, avisa al profesional (notificación,
+    push y/o email según sus ajustes)."""
     before = event.data.before
     after = event.data.after
-
-    tecnicos_afectados = set()
-    if before is not None and before.exists:
-        tid = (before.to_dict() or {}).get("tecnicoId")
-        if tid:
-            tecnicos_afectados.add(tid)
-    if after is not None and after.exists:
-        tid = (after.to_dict() or {}).get("tecnicoId")
-        if tid:
-            tecnicos_afectados.add(tid)
+    antes = (before.to_dict() or {}) if before is not None and before.exists else None
+    despues = (after.to_dict() or {}) if after is not None and after.exists else None
 
     db = firestore.client()
-    for tecnico_id in tecnicos_afectados:
-        _recalcular_rating(db, tecnico_id)
+    # La nota solo depende del profesional y la puntuación: otras ediciones
+    # (como la corrección del nombre de abajo) no la recalculan
+    def nota(d):
+        return d.get("tecnicoId"), d.get("puntuacion")
+    if antes is None or despues is None or nota(antes) != nota(despues):
+        for tecnico_id in {d.get("tecnicoId") for d in (antes, despues) if d and d.get("tecnicoId")}:
+            _recalcular_rating(db, tecnico_id)
 
-    es_creacion = (before is None or not before.exists) and after is not None and after.exists
+    if despues is not None:
+        _corregir_nombre_resena(db, event.params["resenaId"], despues)
+
+    es_creacion = antes is None and despues is not None
     if es_creacion:
-        data = after.to_dict() or {}
+        data = despues
         tecnico_id = data.get("tecnicoId", "")
         nombre_usuario = _nombre_real(db, data.get("uid", ""), data.get("nombreUsuario", ""))
         puntuacion = int(data.get("puntuacion", 5))
@@ -770,6 +778,22 @@ def on_resena_changed(event) -> None:
                         db, tecnico_id, pref["idioma"], "valoracion",
                         nombre=nombre_usuario, n=puntuacion,
                     )
+
+
+def _corregir_nombre_resena(db, resena_id: str, resena: dict) -> None:
+    """La lista pública de reseñas muestra `nombreUsuario`, que escribe el
+    móvil: se sustituye por el nombre del perfil del autor. Solo se escribe si
+    es distinto; esa escritura vuelve a disparar on_resena_changed, que ya lo
+    encuentra bien y no recalcula ni avisa. Sin nombre en el perfil no se toca."""
+    nombre = _nombre_perfil(db, resena.get("uid") or "")
+    if not nombre or resena.get("nombreUsuario") == nombre:
+        return
+    try:
+        db.collection("resenas").document(resena_id).update({"nombreUsuario": nombre})
+    except NotFound:
+        pass   # la reseña se borró mientras tanto
+    except Exception as e:
+        print(f"[RESENAS] No se pudo corregir el nombre de la reseña {resena_id}: {e}")
 
 
 def _recalcular_rating(db, tecnico_id: str) -> None:

@@ -1112,5 +1112,49 @@ class ValoracionesTest(_ConPurga):
         self.assertNotIn("tecnicos/p1", self.db.docs)
 
 
+class NombreEnResenasTest(_ConServiciosFalsos):
+    """La reseña muestra el nombre del perfil de su autor, no el que puso el móvil."""
+
+    RESENA = {"uid": "c1", "tecnicoId": "p1", "puntuacion": 5, "nombreUsuario": "ZeroHaus Soporte"}
+
+    def setUp(self):
+        super().setUp()
+        self.db.docs.update({"usuarios/c1": {"nombre": "Ana López"}, "tecnicos/p1": {"uid": "p1"}})
+
+    def cambio(self, antes, despues):
+        if despues is not None:
+            self.db.docs["resenas/r1"] = dict(despues)
+        inspect.unwrap(main.on_resena_changed)(evento_resena(antes, despues))
+
+    def notificaciones(self):
+        return [d for ruta, d in self.db.docs.items() if ruta.startswith("notificaciones/")]
+
+    def test_al_crearla_se_pone_el_nombre_del_perfil(self):
+        self.cambio(None, self.RESENA)
+        self.assertEqual(self.db.docs["resenas/r1"]["nombreUsuario"], "Ana López")
+        self.assertEqual(len(self.notificaciones()), 1)
+        self.assertIn("Ana López", self.notificaciones()[0]["detalle"])
+
+    def test_la_correccion_no_vuelve_a_avisar_ni_a_recalcular(self):
+        corregida = {**self.RESENA, "nombreUsuario": "Ana López"}
+        with mock.patch.object(main, "_recalcular_rating") as recalcular:
+            self.cambio(self.RESENA, corregida)   # el trigger de la propia corrección
+        recalcular.assert_not_called()
+        self.assertEqual(self.db.docs["resenas/r1"], corregida)
+        self.assertEqual(self.notificaciones(), [])
+
+    def test_al_editarla_se_recalcula_la_nota_y_se_corrige_el_nombre(self):
+        antes = {**self.RESENA, "nombreUsuario": "Ana López"}
+        self.cambio(antes, {**self.RESENA, "puntuacion": 3, "nombreUsuario": "Otra persona"})
+        self.assertEqual(self.db.docs["resenas/r1"]["nombreUsuario"], "Ana López")
+        self.assertEqual(self.db.docs["tecnicos/p1"]["rating"], 3.0)
+        self.assertEqual(self.notificaciones(), [])
+
+    def test_sin_nombre_en_el_perfil_no_se_toca(self):
+        del self.db.docs["usuarios/c1"]
+        self.cambio(None, self.RESENA)
+        self.assertEqual(self.db.docs["resenas/r1"]["nombreUsuario"], "ZeroHaus Soporte")
+
+
 if __name__ == "__main__":
     unittest.main()
