@@ -6,6 +6,7 @@ instaladas:
 
 Están fuera de functions/ para que no se suban con el despliegue.
 """
+import calendar
 import inspect
 import json
 import os
@@ -350,6 +351,10 @@ class _SnapMem:
     def to_dict(self): return None if self._datos is None else dict(self._datos)
 
 
+def _sin_borrados(datos):
+    return {k: v for k, v in datos.items() if v is not main.firestore.DELETE_FIELD}
+
+
 class _RefMem:
     def __init__(self, db, ruta):
         self._db, self.ruta, self.id = db, ruta, ruta.rsplit("/", 1)[-1]
@@ -357,18 +362,35 @@ class _RefMem:
     def set(self, datos, merge=False):
         base = dict(self._db.docs.get(self.ruta) or {}) if merge else {}
         base.update(datos)
-        self._db.docs[self.ruta] = base
+        self._db.docs[self.ruta] = _sin_borrados(base)
     def update(self, datos):
         if self.ruta not in self._db.docs:
             raise NotFound(f"No existe {self.ruta}")
-        base = {**self._db.docs[self.ruta], **datos}
-        self._db.docs[self.ruta] = {k: v for k, v in base.items() if v is not main.firestore.DELETE_FIELD}
+        self._db.docs[self.ruta] = _sin_borrados({**self._db.docs[self.ruta], **datos})
+
+
+_OPERADORES = {"==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b}
+
+
+class _ConsultaMem:
+    """Colección de primer nivel con filtros where(filter=FieldFilter(...))."""
+    def __init__(self, db, nombre, filtros=()):
+        self._db, self._nombre, self._filtros = db, nombre, list(filtros)
+    def document(self, doc_id): return _RefMem(self._db, f"{self._nombre}/{doc_id}")
+    def where(self, filter): return _ConsultaMem(self._db, self._nombre, self._filtros + [filter])
+    def stream(self):
+        prefijo = f"{self._nombre}/"
+        for ruta, datos in list(self._db.docs.items()):
+            if not ruta.startswith(prefijo) or "/" in ruta[len(prefijo):]:
+                continue
+            if all(f.field_path in datos and _OPERADORES[f.op_string](datos[f.field_path], f.value)
+                   for f in self._filtros):
+                yield _RefMem(self._db, ruta).get()
 
 
 class _FirestoreMem:
     def __init__(self): self.docs = {}
-    def collection(self, nombre):
-        return SimpleNamespace(document=lambda doc_id: _RefMem(self, f"{nombre}/{doc_id}"))
+    def collection(self, nombre): return _ConsultaMem(self, nombre)
     def transaction(self):
         return SimpleNamespace(set=lambda ref, datos, merge=False: ref.set(datos, merge=merge),
                                update=lambda ref, datos: ref.update(datos))
@@ -383,6 +405,7 @@ class _ConServiciosFalsos(unittest.TestCase):
         self.correos = []          # destinatarios de los avisos enviados
         self.codigos = []          # (destino, código) de los emails de verificación
         self.update_user = mock.Mock()
+        self.auth_caido = False     # True: Auth responde con un error inesperado
         for parche in (
             mock.patch.object(main.firestore, "transactional", lambda f: f),
             mock.patch.object(main.firestore, "client", lambda: self.db),
@@ -395,6 +418,8 @@ class _ConServiciosFalsos(unittest.TestCase):
             self.addCleanup(parche.stop)
 
     def _get_user(self, uid):
+        if self.auth_caido:
+            raise RuntimeError("Auth no responde")
         if uid not in self.usuarios:
             raise main.auth.UserNotFoundError(f"No existe {uid}")
         return self.usuarios[uid]
@@ -448,6 +473,45 @@ class CupoCorreosTest(_ConServiciosFalsos):
         self.db.docs["avisos_email/dest"] = {"dia": "20000101", "enviadosHoy": 20}
         self.aviso("dest")
         self.assertEqual(self.correos, ["dest@x.es"])
+
+    def test_los_cupos_cambian_de_dia_a_medianoche_utc(self):
+        reloj = [calendar.timegm((2026, 11, 16, 23, 59, 0)) * 1000]   # 23:59 UTC
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["limites_correo/20261116"] = {"enviados": 150, "avisos": 150}
+        self.db.docs["avisos_email/dest"] = {"dia": "20261116", "enviadosHoy": 3}
+        with mock.patch.object(main, "_ahora_ms", lambda: reloj[0]):
+            self.aviso("dest")
+            self.assertEqual(self.correos, [])
+            reloj[0] += 2 * 60 * 1000   # 00:01 UTC del día siguiente
+            self.aviso("dest", chat="c2")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        self.assertEqual(self.db.docs["limites_correo/20261117"], {"enviados": 1, "avisos": 1})
+        self.assertEqual(self.db.docs["avisos_email/dest"]["dia"], "20261117")
+        self.assertEqual(self.db.docs["avisos_email/dest"]["enviadosHoy"], 1)
+
+    def test_un_chat_avisa_como_mucho_una_vez_cada_30_minutos(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.aviso("dest", chat="c1")
+        self.aviso("dest", chat="c1")
+        self.assertEqual(self.correos, ["dest@x.es"])
+
+    def test_con_el_tope_de_la_persona_gastado_no_se_anota_el_chat(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["avisos_email/dest"] = {"dia": self.hoy(), "enviadosHoy": 20}
+        self.aviso("dest", chat="c9")
+        self.assertEqual(self.correos, [])
+        self.assertNotIn("chat_c9", self.db.docs["avisos_email/dest"])
+
+    def test_al_anotar_un_chat_se_borran_las_esperas_ya_vencidas(self):
+        self.usuario("dest", "dest@x.es", True)
+        ahora = main._ahora_ms()
+        self.db.docs["avisos_email/dest"] = {
+            "chat_viejo": ahora - 31 * 60 * 1000, "chat_reciente": ahora - 5 * 60 * 1000,
+        }
+        self.aviso("dest", chat="nuevo")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        claves = {k for k in self.db.docs["avisos_email/dest"] if k.startswith("chat_")}
+        self.assertEqual(claves, {"chat_reciente", "chat_nuevo"})
 
 
 def llamar(funcion, quien, admin=False, **datos):

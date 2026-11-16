@@ -408,7 +408,8 @@ AVISOS_MAX_DIA_USUARIO = int(os.environ.get("AVISOS_MAX_DIA_USUARIO", "20"))
 
 
 def _hoy_utc() -> str:
-    return time.strftime("%Y%m%d", time.gmtime())
+    """Día UTC (AAAAMMDD) del reloj de _ahora_ms: con él cambian los cupos diarios."""
+    return time.strftime("%Y%m%d", time.gmtime(_ahora_ms() / 1000))
 
 
 def _reservar_cupo_correo(db, aviso: bool = False) -> bool:
@@ -430,19 +431,32 @@ def _reservar_cupo_correo(db, aviso: bool = False) -> bool:
     return _reservar(db.transaction())
 
 
-def _reservar_aviso_usuario(db, uid: str) -> bool:
-    """Gasta uno de los AVISOS_MAX_DIA_USUARIO avisos diarios de este
-    destinatario (/avisos_email/{uid}: dia, enviadosHoy). False si ya no quedan."""
+def _reservar_aviso_usuario(db, uid: str, clave_limite: str = "") -> bool:
+    """Reserva un aviso para este destinatario en /avisos_email/{uid}, en una
+    transacción: con `clave_limite` (chat_{id}) como mucho uno por chat cada
+    AVISO_CHAT_ESPERA_MS, y AVISOS_MAX_DIA_USUARIO al día (dia, enviadosHoy).
+    Si no toca enviar, no escribe nada. Al escribir borra las esperas de chat
+    ya vencidas, para que el documento no crezca sin límite. False si no toca."""
     ref = db.collection("avisos_email").document(uid)
+    ahora = _ahora_ms()
     hoy = _hoy_utc()
 
     @firestore.transactional
     def _reservar(txn):
         d = ref.get(transaction=txn).to_dict() or {}
+        if clave_limite and ahora - int(d.get(clave_limite) or 0) < AVISO_CHAT_ESPERA_MS:
+            return False
         enviados_hoy = int(d.get("enviadosHoy") or 0) if d.get("dia") == hoy else 0
         if enviados_hoy >= AVISOS_MAX_DIA_USUARIO:
             return False
-        txn.set(ref, {"dia": hoy, "enviadosHoy": enviados_hoy + 1}, merge=True)
+        cambios = {
+            k: firestore.DELETE_FIELD for k, v in d.items()
+            if k.startswith("chat_") and (not isinstance(v, (int, float)) or ahora - v >= AVISO_CHAT_ESPERA_MS)
+        }
+        cambios.update({"dia": hoy, "enviadosHoy": enviados_hoy + 1})
+        if clave_limite:
+            cambios[clave_limite] = ahora
+        txn.set(ref, cambios, merge=True)
         return True
 
     return _reservar(db.transaction())
@@ -450,20 +464,17 @@ def _reservar_aviso_usuario(db, uid: str) -> bool:
 
 def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str = "", **campos) -> None:
     """Aviso por email (tipo 'mensaje' o 'valoracion') a un usuario con el email
-    verificado. Nunca rompe el trigger: los fallos solo se registran."""
+    verificado. Nunca rompe el trigger: los fallos solo se registran.
+
+    Primero se reserva el aviso de la persona (espera del chat y tope diario) y
+    después el cupo común. Si el común está agotado, el aviso no sale pero ya
+    cuenta en la espera del chat y en el tope de la persona; si falla el SMTP,
+    cuenta además en el cupo común. Así un fallo nunca provoca reintentos."""
     try:
-        if clave_limite:
-            ref = db.collection("avisos_email").document(uid)
-            ultimo = int(((ref.get().to_dict() or {}).get(clave_limite)) or 0)
-            if _ahora_ms() - ultimo < AVISO_CHAT_ESPERA_MS:
-                return
-            ref.set({clave_limite: _ahora_ms()}, merge=True)
         usuario = auth.get_user(uid)
         if not usuario.email or not usuario.email_verified:
             return
-        # Primero el tope de la persona: así no se gasta cupo común en balde
-        if not _reservar_aviso_usuario(db, uid):
-            print(f"[EMAIL] Tope diario de avisos de {uid} alcanzado: sin aviso '{tipo}'")
+        if not _reservar_aviso_usuario(db, uid, clave_limite):
             return
         if not _reservar_cupo_correo(db, aviso=True):
             print(f"[EMAIL] Tope diario de correos alcanzado: sin aviso '{tipo}' a {uid}")
