@@ -14,6 +14,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
+import java.io.File
 
 /**
  * Clase Application: inicialización global antes de cualquier pantalla,
@@ -38,6 +39,14 @@ class ZeroHausApp : Application() {
 
         AppEstado.inicializar(AppPreferencias.de(this))
         Diagnostico.inicializar()
+
+        // Limpieza única: carpetas de caché de versiones anteriores (ahora todo va a cache/compartidos)
+        Thread {
+            runCatching {
+                File(cacheDir, "factura").deleteRecursively()
+                File(cacheDir, "informes").deleteRecursively()
+            }
+        }.start()
 
         // 2. Canales de notificación.
         NotificacionesLocales.crearCanales(this)

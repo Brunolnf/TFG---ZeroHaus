@@ -22,8 +22,8 @@ data class AjustesEstado(
     val guardando: Boolean = false,
     val cambiandoPassword: Boolean = false,
     val eliminandoCuenta: Boolean = false,
-    /** Profesional con un plan vigente: al borrar la cuenta pierde el periodo pagado. */
-    val planVigente: Boolean = false,
+    /** Profesional con plan vigente (null = aún sin saber: se muestra el aviso por defecto). */
+    val planVigente: Boolean? = null,
     val mensajeToast: String? = null,
     val error: String? = null
 )
@@ -43,6 +43,8 @@ class AjustesViewModel : ViewModel() {
     }
 
     private fun cargarPlan() {
+        val profesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
+        if (!profesional) return
         RepositorioTecnicos().obtenerMiPerfilTecnico { t ->
             estado = estado.copy(planVigente = t?.esVerificado == true)
         }

@@ -394,7 +394,7 @@ fun AjustesScreen(
                     val esProfesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
                     if (esProfesional) {
                         Text(c.ajustesEliminarAvisoSuscripcion, color = rojo, fontSize = 13.sp)
-                        if (estado.planVigente) {
+                        if (estado.planVigente != false) {
                             Text(c.ajustesEliminarPerdidaPeriodo, color = rojo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
                         TextButton(

@@ -380,7 +380,7 @@ fun ChatScreen(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = url,
+                    model = url.takeIf { AdjuntosChat.esUrlSegura(it) },
                     contentDescription = cad.chatImagen,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -449,7 +449,7 @@ fun ChatScreen(
                 if (esImagen) {
                     // Imagen a pantalla completa con zoom
                     AsyncImage(
-                        model = msg.mediaUrl,
+                        model = msg.mediaUrl.takeIf { AdjuntosChat.esUrlSegura(it) },
                         contentDescription = msg.mediaNombre,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -652,7 +652,7 @@ private fun BurbujaMensaje(
             ) {
                 Column {
                     AsyncImage(
-                        model = msg.mediaUrl,
+                        model = msg.mediaUrl.takeIf { AdjuntosChat.esUrlSegura(it) },
                         contentDescription = cad.chatImagen,
                         modifier = Modifier
                             .fillMaxWidth()
