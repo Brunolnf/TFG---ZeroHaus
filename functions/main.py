@@ -1574,18 +1574,36 @@ TIPOS_EVENTO = {"visita", "chat", "llamada"}
 )
 def on_evento_perfil(event) -> None:
     """Suma una visita o un contacto a las estadísticas del profesional
-    (/estadisticas/{tecnicoId}), por tipo y por día."""
+    (/estadisticas/{tecnicoId}), por tipo y por día.
+
+    Idempotente: Firestore puede entregar el mismo evento más de una vez. En
+    una transacción se suma solo si el evento no está marcado `contado`, y se
+    marca a la vez."""
     datos = event.data.to_dict() if event.data else {}
     tipo = datos.get("tipo")
     dia = str(datos.get("dia") or "")
     if tipo not in TIPOS_EVENTO or len(dia) != 8:
         return
     tecnico_id = event.params["tecnicoId"]
-    firestore.client().collection("estadisticas").document(tecnico_id).set({
-        "total": {tipo: firestore.Increment(1)},
-        "dias": {dia: {tipo: firestore.Increment(1)}},
-        "actualizado": _ahora_ms(),
-    }, merge=True)
+    db = firestore.client()
+    evento_ref = (
+        db.collection("tecnicos").document(tecnico_id).collection("eventos").document(event.params["eventoId"])
+    )
+    estadisticas_ref = db.collection("estadisticas").document(tecnico_id)
+
+    @firestore.transactional
+    def _contar(txn):
+        snap = evento_ref.get(transaction=txn)
+        if not snap.exists or (snap.to_dict() or {}).get("contado") is True:
+            return
+        txn.set(estadisticas_ref, {
+            "total": {tipo: firestore.Increment(1)},
+            "dias": {dia: {tipo: firestore.Increment(1)}},
+            "actualizado": _ahora_ms(),
+        }, merge=True)
+        txn.update(evento_ref, {"contado": True})
+
+    _contar(db.transaction())
 
 
 NOTIFICACIONES_DIAS = 90

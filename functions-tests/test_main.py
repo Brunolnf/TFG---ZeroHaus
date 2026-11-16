@@ -408,6 +408,23 @@ def _sin_borrados(datos):
     return {k: v for k, v in datos.items() if v is not main.firestore.DELETE_FIELD}
 
 
+def _fusionar(base, cambios):
+    """set(merge=True) de Firestore: mapas anidados fusionados, Increment sumado
+    y DELETE_FIELD borrado."""
+    resultado = dict(base)
+    for clave, valor in cambios.items():
+        if valor is main.firestore.DELETE_FIELD:
+            resultado.pop(clave, None)
+        elif isinstance(valor, main.firestore.Increment):
+            resultado[clave] = (resultado.get(clave) or 0) + valor.value
+        elif isinstance(valor, dict):
+            anterior = resultado.get(clave)
+            resultado[clave] = _fusionar(anterior if isinstance(anterior, dict) else {}, valor)
+        else:
+            resultado[clave] = valor
+    return resultado
+
+
 class _RefMem:
     def __init__(self, db, ruta):
         self._db, self.ruta, self.id = db, ruta, ruta.rsplit("/", 1)[-1]
@@ -417,9 +434,10 @@ class _RefMem:
     def get(self, transaction=None): return _SnapMem(self, self._db.docs.get(self.ruta))
     def set(self, datos, merge=False):
         self._comprobar()
-        base = dict(self._db.docs.get(self.ruta) or {}) if merge else {}
-        base.update(datos)
-        self._db.docs[self.ruta] = _sin_borrados(base)
+        if merge:
+            self._db.docs[self.ruta] = _fusionar(self._db.docs.get(self.ruta) or {}, datos)
+        else:
+            self._db.docs[self.ruta] = _sin_borrados(dict(datos))
     def update(self, datos):
         self._comprobar()
         if self.ruta not in self._db.docs:
@@ -888,6 +906,37 @@ class CupoIATest(_ConServiciosFalsos):
             respuesta = inspect.unwrap(main.generar_sugerencias_ia)(peticion)
         self.assertEqual(respuesta["idioma"], "Español")
         self.assertIn("«Español»", prompts[0])
+
+
+class EstadisticasPerfilTest(_ConServiciosFalsos):
+    """on_evento_perfil suma cada visita o contacto una sola vez."""
+
+    def evento(self, evento_id, tipo="visita", dia="20261116"):
+        """Crea tecnicos/p1/eventos/{evento_id} y devuelve el evento del trigger."""
+        datos = {"tipo": tipo, "dia": dia}
+        self.db.docs[f"tecnicos/p1/eventos/{evento_id}"] = dict(datos)
+        return SimpleNamespace(data=SimpleNamespace(to_dict=lambda: dict(datos)),
+                               params={"tecnicoId": "p1", "eventoId": evento_id})
+
+    def entregar(self, evento):
+        inspect.unwrap(main.on_evento_perfil)(evento)
+
+    def test_un_evento_entregado_dos_veces_cuenta_una(self):
+        evento = self.evento("c1_20261116_visita")
+        self.entregar(evento)
+        self.entregar(evento)   # Firestore puede reentregar el mismo evento
+        estadisticas = self.db.docs["estadisticas/p1"]
+        self.assertEqual(estadisticas["total"], {"visita": 1})
+        self.assertEqual(estadisticas["dias"], {"20261116": {"visita": 1}})
+        self.assertIs(self.db.docs["tecnicos/p1/eventos/c1_20261116_visita"]["contado"], True)
+
+    def test_eventos_distintos_suman_por_tipo_y_dia(self):
+        self.entregar(self.evento("c1_20261116_visita"))
+        self.entregar(self.evento("c2_20261116_visita"))
+        self.entregar(self.evento("c1_20261117_chat", tipo="chat", dia="20261117"))
+        estadisticas = self.db.docs["estadisticas/p1"]
+        self.assertEqual(estadisticas["total"], {"visita": 2, "chat": 1})
+        self.assertEqual(estadisticas["dias"], {"20261116": {"visita": 2}, "20261117": {"chat": 1}})
 
 
 def evento_resena(antes, despues, resena_id="r1"):
