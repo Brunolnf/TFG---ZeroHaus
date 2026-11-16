@@ -360,12 +360,17 @@ def _sin_borrados(datos):
 class _RefMem:
     def __init__(self, db, ruta):
         self._db, self.ruta, self.id = db, ruta, ruta.rsplit("/", 1)[-1]
+    def _comprobar(self):
+        if self.ruta in self._db.fallos:
+            raise RuntimeError(f"Firestore no responde para {self.ruta}")
     def get(self, transaction=None): return _SnapMem(self, self._db.docs.get(self.ruta))
     def set(self, datos, merge=False):
+        self._comprobar()
         base = dict(self._db.docs.get(self.ruta) or {}) if merge else {}
         base.update(datos)
         self._db.docs[self.ruta] = _sin_borrados(base)
     def update(self, datos):
+        self._comprobar()
         if self.ruta not in self._db.docs:
             raise NotFound(f"No existe {self.ruta}")
         self._db.docs[self.ruta] = _sin_borrados({**self._db.docs[self.ruta], **datos})
@@ -391,7 +396,9 @@ class _ConsultaMem:
 
 
 class _FirestoreMem:
-    def __init__(self): self.docs = {}
+    def __init__(self):
+        self.docs = {}
+        self.fallos = set()   # rutas cuya escritura falla (Firestore no responde)
     def collection(self, nombre): return _ConsultaMem(self, nombre)
     def transaction(self):
         return SimpleNamespace(set=lambda ref, datos, merge=False: ref.set(datos, merge=merge),
@@ -406,18 +413,27 @@ class _ConServiciosFalsos(unittest.TestCase):
         self.usuarios = {}         # uid → SimpleNamespace(email, email_verified)
         self.correos = []          # destinatarios de los avisos enviados
         self.codigos = []          # (destino, código) de los emails de verificación
+        self.idiomas_codigo = []   # idioma con el que salió cada email de verificación
         self.update_user = mock.Mock()
+        self.revoke = mock.Mock()  # auth.revoke_refresh_tokens
+        self.lotes_get_users = []  # tamaño de cada consulta a auth.get_users
         self.auth_caido = False     # True: Auth responde con un error inesperado
         for parche in (
             mock.patch.object(main.firestore, "transactional", lambda f: f),
             mock.patch.object(main.firestore, "client", lambda: self.db),
             mock.patch.object(main.auth, "get_user", self._get_user),
+            mock.patch.object(main.auth, "get_users", self._get_users),
             mock.patch.object(main.auth, "update_user", self.update_user),
+            mock.patch.object(main.auth, "revoke_refresh_tokens", self.revoke),
             mock.patch.object(main, "_enviar_email", lambda destino, *a, **k: self.correos.append(destino)),
-            mock.patch.object(main, "_enviar_email_codigo", lambda destino, codigo, idioma: self.codigos.append((destino, codigo))),
+            mock.patch.object(main, "_enviar_email_codigo", self._enviar_email_codigo),
         ):
             parche.start()
             self.addCleanup(parche.stop)
+
+    def _enviar_email_codigo(self, destino, codigo, idioma):
+        self.codigos.append((destino, codigo))
+        self.idiomas_codigo.append(idioma)
 
     def _get_user(self, uid):
         if self.auth_caido:
@@ -425,6 +441,16 @@ class _ConServiciosFalsos(unittest.TestCase):
         if uid not in self.usuarios:
             raise main.auth.UserNotFoundError(f"No existe {uid}")
         return self.usuarios[uid]
+
+    def _get_users(self, identificadores):
+        if len(identificadores) > 100:
+            raise ValueError("Como mucho 100 identificadores")   # como el SDK real
+        if self.auth_caido:
+            raise RuntimeError("Auth no responde")
+        self.lotes_get_users.append(len(identificadores))
+        uids = [i.uid for i in identificadores]
+        return SimpleNamespace(users=[self.usuarios[u] for u in uids if u in self.usuarios],
+                               not_found=[i for i in identificadores if i.uid not in self.usuarios])
 
     def usuario(self, uid, email, verificado):
         self.usuarios[uid] = SimpleNamespace(uid=uid, email=email, email_verified=verificado)
@@ -566,6 +592,60 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
                          [mock.call("u1", email_verified=True), mock.call("u1", email_verified=False)])
         self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
 
+    def test_al_deshacer_la_verificacion_se_cierran_sus_sesiones(self):
+        self.usuario("u1", "a@x.es", False)
+        codigo = self.pedir_codigo("u1")
+
+        def cambio_simultaneo(uid, **cambios):
+            if cambios.get("email_verified"):
+                self.usuarios[uid].email = "b@x.es"
+        self.update_user.side_effect = cambio_simultaneo
+        with mock.patch("builtins.print") as log, self.assertRaises(main.https_fn.HttpsError):
+            self.verificar("u1", codigo)
+        self.revoke.assert_called_once_with("u1")
+        self.assertTrue(any("[SEGURIDAD]" in str(c) for c in log.call_args_list))
+
+    def test_si_auth_no_responde_al_comprobar_la_verificacion_se_deshace(self):
+        self.usuario("u1", "a@x.es", False)
+        self.db.docs["tecnicos/u1"] = {"uid": "u1", "emailVerificado": False}
+        codigo = self.pedir_codigo("u1")
+
+        def caida(uid, **cambios):   # Auth deja de responder justo después de marcarlo
+            if cambios.get("email_verified"):
+                self.auth_caido = True
+        self.update_user.side_effect = caida
+        with mock.patch("builtins.print"), self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.assertEqual(self.update_user.call_args_list,
+                         [mock.call("u1", email_verified=True), mock.call("u1", email_verified=False)])
+        self.revoke.assert_called_once_with("u1")
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+
+    def test_si_no_se_puede_deshacer_devuelve_error_sin_mostrar_el_perfil(self):
+        self.usuario("u1", "a@x.es", False)
+        self.db.docs["tecnicos/u1"] = {"uid": "u1", "emailVerificado": False}
+        codigo = self.pedir_codigo("u1")
+
+        def cambio_y_fallo(uid, **cambios):
+            if cambios.get("email_verified"):
+                self.usuarios[uid].email = "b@x.es"
+            else:
+                raise RuntimeError("Auth no responde")
+        self.update_user.side_effect = cambio_y_fallo
+        with mock.patch("builtins.print"), self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.revoke.assert_called_once_with("u1")
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+
+    def test_los_envios_del_dia_cuentan_con_el_reloj_utc_de_los_cupos(self):
+        self.usuario("u1", "a@x.es", False)
+        instante = calendar.timegm((2020, 1, 1, 23, 59, 0)) * 1000
+        with mock.patch.object(main, "_ahora_ms", lambda: instante):
+            self.pedir_codigo("u1")
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["dia"], "20200101")
+
     def test_un_codigo_emitido_sin_email_guardado_caduca_sin_gastar_intentos(self):
         # Códigos pedidos antes de ligar el código al email: la huella no lo incluía
         self.usuario("u1", "a@x.es", False)
@@ -641,6 +721,26 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
         self.assertIs(self.db.docs["tecnicos/p2"]["emailVerificado"], False)
         self.assertIs(self.db.docs["tecnicos/huerfano"]["emailVerificado"], False)
         self.assertNotIn("emailVerificado", self.db.docs["tecnicos/antiguo"])
+
+    def test_la_revision_diaria_consulta_auth_en_lotes_y_sigue_si_falla_un_perfil(self):
+        for i in range(150):
+            self.usuario(f"p{i}", f"p{i}@x.es", True)
+            self.db.docs[f"tecnicos/p{i}"] = {"uid": f"p{i}", "emailVerificado": False}
+        self.db.fallos.add("tecnicos/p7")
+        with mock.patch("builtins.print"):
+            self.assertEqual(main._mostrar_perfiles_verificados(self.db), 149)
+        self.assertEqual(sorted(self.lotes_get_users), [50, 100])
+        self.assertIs(self.db.docs["tecnicos/p7"]["emailVerificado"], False)
+        self.assertIs(self.db.docs["tecnicos/p149"]["emailVerificado"], True)
+
+    def test_si_la_cuenta_ya_estaba_verificada_el_perfil_se_hace_visible(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "emailVerificado": False}
+        self.assertEqual(llamar(main.enviar_codigo_verificacion, "p1", idioma="Español"), {"verificado": True})
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+        self.db.docs["tecnicos/p1"]["emailVerificado"] = False
+        self.assertEqual(llamar(main.verificar_codigo_email, "p1", codigo="123456"), {"verificado": True})
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
 
     def test_la_tarea_diaria_incluye_la_revision_de_perfiles_ocultos(self):
         self.usuario("p1", "p1@x.es", True)

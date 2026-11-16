@@ -909,17 +909,19 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
     uid = req.auth.uid
     usuario = auth.get_user(uid)
+    db = firestore.client()
     if usuario.email_verified:
+        # Verificada por otra vía o tras un fallo al marcar el perfil: se muestra
+        _marcar_perfil_verificado(db, uid)
         return {"verificado": True}
     if not usuario.email:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
 
     idioma = str((req.data or {}).get("idioma") or "Español")
     email = _normalizar_email(usuario.email)
-    db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
-    hoy = time.strftime("%Y%m%d", time.gmtime())
+    hoy = _hoy_utc()
 
     @firestore.transactional
     def _reservar(txn):
@@ -987,11 +989,12 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "El código tiene 6 dígitos.")
 
     usuario = auth.get_user(uid)
+    db = firestore.client()
     if usuario.email_verified:
+        _marcar_perfil_verificado(db, uid)
         return {"verificado": True}
     email = _normalizar_email(usuario.email)
 
-    db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
 
@@ -1032,14 +1035,42 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
             {"restantes": restantes},
         )
 
-    auth.update_user(uid, email_verified=True)
+    no_confirmada = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo verificar el email. Pide un código nuevo en unos minutos.")
     # Si el email de la cuenta cambió entre la comprobación y este momento, la
-    # verificación sería de otro correo: se deshace y el código no vale
-    if _normalizar_email(auth.get_user(uid).email) != email:
-        auth.update_user(uid, email_verified=False)
+    # verificación sería de otro correo: se deshace y el código no vale. Si no
+    # se puede confirmar (Auth no responde), también: falla en cerrado.
+    try:
+        auth.update_user(uid, email_verified=True)
+        email_actual = _normalizar_email(auth.get_user(uid).email)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo confirmar la verificación de {uid}: {e}")
+        _deshacer_verificacion(uid)
+        raise no_confirmada
+    if email_actual != email:
+        print(f"[SEGURIDAD] El email de {uid} cambió mientras se verificaba: se deshace")
+        if not _deshacer_verificacion(uid):
+            raise no_confirmada
         raise caducado
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
+
+
+def _deshacer_verificacion(uid: str) -> bool:
+    """Quita la marca de email verificado y cierra las sesiones de la cuenta
+    (un token emitido mientras estaba marcada ya no se renueva). True si la
+    marca se quitó; los fallos quedan en el registro con [SEGURIDAD]."""
+    deshecha = True
+    try:
+        auth.update_user(uid, email_verified=False)
+    except Exception as e:
+        deshecha = False
+        print(f"[SEGURIDAD] No se pudo deshacer la verificación de {uid}: {e}")
+    try:
+        auth.revoke_refresh_tokens(uid)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudieron cerrar las sesiones de {uid}: {e}")
+    return deshecha
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1112,16 +1143,36 @@ def on_tecnico_creado(event) -> None:
     _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True)
 
 
+AUTH_LOTE = 100   # máximo de identificadores por llamada a auth.get_users
+
+
 def _mostrar_perfiles_verificados(db) -> int:
     """Pone emailVerificado a true en los perfiles ocultos cuya cuenta ya tiene
     el email verificado: cubre un fallo al marcarlo, perfiles cuyo id no es el
-    uid y verificaciones por otra vía. Devuelve cuántos."""
-    corregidos = 0
+    uid y verificaciones por otra vía. Consulta Auth por lotes y un fallo (de
+    un lote o de un perfil) no detiene el resto. Devuelve cuántos."""
+    ocultos = []
     for d in db.collection("tecnicos").where(filter=FieldFilter("emailVerificado", "==", False)).stream():
         uid = (d.to_dict() or {}).get("uid") or ""
-        if uid and _email_verificado_en_auth(uid):
-            d.reference.update({"emailVerificado": True})
-            corregidos += 1
+        if uid:
+            ocultos.append((d, uid))
+    corregidos = 0
+    for i in range(0, len(ocultos), AUTH_LOTE):
+        lote = ocultos[i:i + AUTH_LOTE]
+        try:
+            resultado = auth.get_users([auth.UidIdentifier(u) for u in sorted({uid for _, uid in lote})])
+            verificados = {u.uid for u in resultado.users if u.email_verified is True}
+        except Exception as e:
+            print(f"[TECNICOS] No se pudo consultar Auth para un lote de perfiles: {e}")
+            continue
+        for d, uid in lote:
+            if uid not in verificados:
+                continue
+            try:
+                d.reference.update({"emailVerificado": True})
+                corregidos += 1
+            except Exception as e:
+                print(f"[TECNICOS] No se pudo mostrar el perfil {d.id}: {e}")
     return corregidos
 
 
