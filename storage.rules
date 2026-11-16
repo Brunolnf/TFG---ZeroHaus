@@ -8,6 +8,12 @@ service firebase.storage {
       return request.auth != null && request.auth.token.email_verified == true;
     }
 
+    // Tipos de imagen admitidos (la app sube siempre JPEG). Lista cerrada: el
+    // tipo lo declara el cliente y con «image/.*» entraban SVG con scripts.
+    function imagenPermitida() {
+      return request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
     // Imágenes y archivos del chat — solo participantes del chat
     // Usamos cross-service rules para consultar la membresía en Firestore.
     match /chats/{chatId}/{archivo=**} {
@@ -27,19 +33,26 @@ service firebase.storage {
                          /databases/(default)/documents/chats/$(chatId)
                        ).data.participantes
                     && request.resource.size < 15 * 1024 * 1024
-                    && (request.resource.contentType.matches('image/.*')
+                    && (imagenPermitida()
                         || (request.resource.contentType == 'application/pdf'
                             && request.resource.name.lower().matches('.+[.]pdf')));
       allow update, delete: if false;
     }
 
-    // Fotos de perfil — lectura por usuarios verificados, escritura solo del
-    // propio uid, solo imágenes de hasta 5 MB
+    // Fotos de perfil — lectura por usuarios verificados. El dueño puede
+    // borrar lo suyo (antes la regla de escritura lo impedía porque exigía
+    // un archivo nuevo con tipo y tamaño).
     match /perfiles/{uid}/{archivo=**} {
-      allow read:  if verificado();
-      allow write: if verificado() && request.auth.uid == uid
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
+      allow read:   if verificado();
+      allow delete: if verificado() && request.auth.uid == uid;
+    }
+
+    // Subir o cambiar la foto solo con el nombre que usa la app: una foto por
+    // usuario, de hasta 5 MB, en vez de archivos sin límite en su carpeta.
+    match /perfiles/{uid}/foto_perfil {
+      allow create, update: if verificado() && request.auth.uid == uid
+                            && request.resource.size < 5 * 1024 * 1024
+                            && imagenPermitida();
     }
 
     // Cualquier otra ruta (incluidos los certificados de la función ya

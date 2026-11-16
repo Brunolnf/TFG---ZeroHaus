@@ -8,7 +8,7 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import { doc, setDoc } from "firebase/firestore";
-import { deleteObject, getMetadata, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getMetadata, ref, updateMetadata, uploadBytes } from "firebase/storage";
 
 let env;
 
@@ -91,5 +91,42 @@ describe("fotos de perfil", () => {
   it("la foto de perfil tiene que ser una imagen", async () => {
     await assertFails(uploadBytes(ref(verificado("cliente"), "perfiles/cliente/foto_perfil"),
       imagen, { contentType: "application/x-msdownload" }));
+  });
+});
+
+// Quinta auditoría (2026-11): tipos de imagen, borrado y nombre de la foto de perfil
+describe("imágenes: tipos permitidos, borrado y ruta de la foto de perfil", () => {
+  const svg = { contentType: "image/svg+xml" };
+
+  it("se aceptan fotos jpeg, png y webp en el chat y en el perfil", async () => {
+    const st = verificado("cliente");
+    for (const [i, tipo] of ["image/jpeg", "image/png", "image/webp"].entries()) {
+      await assertSucceeds(uploadBytes(ref(st, `chats/c1/f${i}.jpg`), imagen, { contentType: tipo }));
+      await assertSucceeds(uploadBytes(ref(st, "perfiles/cliente/foto_perfil"), imagen, { contentType: tipo }));
+    }
+  });
+
+  it("no se aceptan SVG ni otros tipos de imagen", async () => {
+    const st = verificado("cliente");
+    await assertFails(uploadBytes(ref(st, "chats/c1/m8.svg"), imagen, svg));
+    await assertFails(uploadBytes(ref(st, "chats/c1/m9.jpg"), imagen, { contentType: "image/x-icon" }));
+    await assertFails(uploadBytes(ref(st, "perfiles/cliente/foto_perfil"), imagen, svg));
+    // Tampoco cambiando el tipo de una foto ya subida
+    await uploadBytes(ref(st, "perfiles/cliente/foto_perfil"), imagen, jpeg);
+    await assertFails(updateMetadata(ref(st, "perfiles/cliente/foto_perfil"), svg));
+  });
+
+  it("el dueño puede borrar su foto de perfil, pero no la de otro", async () => {
+    await uploadBytes(ref(verificado("cliente"), "perfiles/cliente/foto_perfil"), imagen, jpeg);
+    await assertFails(deleteObject(ref(verificado("pro"), "perfiles/cliente/foto_perfil")));
+    await assertFails(deleteObject(ref(sinVerificar("cliente"), "perfiles/cliente/foto_perfil")));
+    await assertSucceeds(deleteObject(ref(verificado("cliente"), "perfiles/cliente/foto_perfil")));
+  });
+
+  it("la foto de perfil solo se guarda con el nombre que usa la app", async () => {
+    const st = verificado("cliente");
+    await assertFails(uploadBytes(ref(st, "perfiles/cliente/otra.jpg"), imagen, jpeg));
+    await assertFails(uploadBytes(ref(st, "perfiles/cliente/copias/1.jpg"), imagen, jpeg));
+    await assertSucceeds(uploadBytes(ref(st, "perfiles/cliente/foto_perfil"), imagen, jpeg));
   });
 });
