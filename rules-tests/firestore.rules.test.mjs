@@ -535,3 +535,68 @@ describe("perfil profesional: alta con los campos del modelo y emailVerificado",
     }));
   });
 });
+
+const MINUTO = 60 * 1000;
+const DIA = 24 * 60 * MINUTO;
+
+// Quinta auditoría (2026-11): campos de las reseñas y autovaloración
+describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
+  // Lo que escribe la app (el objeto Resena entero, versión 2.3)
+  const resenaApp = (extra = {}) => ({
+    id: "cliente_pro", tecnicoId: "pro", uid: "cliente", nombreUsuario: "Cliente",
+    puntuacion: 5, comentario: "Genial", chatId: "con_mensajes", fecha: Date.now(), ...extra,
+  });
+
+  it("la app publica y vuelve a valorar con el objeto entero", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp()));
+    // Volver a valorar sobrescribe la reseña con la fecha nueva
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ puntuacion: 3, comentario: "Regular" })));
+    // Un reloj de móvil algo adelantado sigue valiendo
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + MINUTO })));
+  });
+
+  it("no admite campos fuera del modelo ni otro id", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ relleno: "x".repeat(10000) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ id: "otro_pro" })));
+  });
+
+  it("el nombre del autor es un texto de hasta 60 caracteres", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(61) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: 7 })));
+    const { nombreUsuario, ...sinNombre } = resenaApp();
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinNombre));
+  });
+
+  it("la fecha es un número y no puede estar en el futuro", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: "9999999999999" })));
+    const { fecha, ...sinFecha } = resenaApp();
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinFecha));
+  });
+
+  it("al editar se aplican los mismos límites", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "resenas/cliente_pro"), resenaApp()));
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { nombreUsuario: "x".repeat(61) }));
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { fecha: Date.now() + DIA }));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
+    await assertSucceeds(updateDoc(doc(db, "resenas/cliente_pro"), { puntuacion: 4, fecha: Date.now() }));
+  });
+
+  it("el dueño de un perfil antiguo (id distinto del uid) no puede valorarse a sí mismo", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "tecnicos/antiguo"), {
+        uid: "cliente", nombre: "Antiguo", rating: 0, opiniones: 0, proyectosCompletados: 0,
+        tipoProfesional: "TECNICO", emailContacto: "cliente@x.es",
+      }));
+    await assertFails(setDoc(doc(verificado("cliente"), "resenas/cliente_antiguo"),
+      resenaApp({ id: "cliente_antiguo", tecnicoId: "antiguo" })));
+  });
+});

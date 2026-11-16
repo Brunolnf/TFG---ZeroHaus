@@ -264,13 +264,46 @@ service cloud.firestore {
     // real: los dos han escrito en el chat, o sea, el profesional ha
     // contestado. `escribieron` solo lo pone la Cloud Function de mensajes
     // (antes bastaba con abrir un chat o escribirle uno mismo).
+    // En perfiles antiguos el id no es el uid: además de tecnicoId != uid()
+    // hace falta que el dueño del perfil no sea quien valora.
     function conversacionReal(chatId, tecnicoId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId)).data;
       let prof = get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data;
-      return uid() in chat.participantes
+      return prof.uid != uid()
+          && uid() in chat.participantes
           && prof.uid in chat.participantes
           && uid() in chat.get('escribieron', [])
           && prof.uid in chat.get('escribieron', []);
+    }
+
+    // Fechas escritas con el reloj del móvil: como mucho 5 minutos por delante
+    // del servidor (margen para relojes algo adelantados). Sin límite inferior.
+    function fechaNoFutura(fecha) {
+      return fecha is int && fecha <= request.time.toMillis() + 5 * 60 * 1000;
+    }
+    // Campos del modelo Resena de la app (lo que escribe al serializarlo entero)
+    function camposModeloResena() {
+      return ['id', 'tecnicoId', 'uid', 'nombreUsuario', 'puntuacion', 'comentario', 'chatId', 'fecha'];
+    }
+    // La lista de reseñas es pública: solo los campos del modelo, el nombre
+    // con tope y una fecha que no se adelante para salir la primera (la app
+    // ordena por fecha; sin el campo, al leerla toma la hora actual).
+    function resenaValida(docId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(camposModeloResena())
+          && d.keys().hasAll(['nombreUsuario', 'fecha'])
+          && d.get('id', docId) == docId
+          && d.nombreUsuario is string
+          && d.nombreUsuario.size() <= 60
+          && fechaNoFutura(d.fecha)
+          && d.get('chatId', '') is string
+          && d.get('chatId', '').size() <= 128
+          && d.puntuacion is number
+          && d.puntuacion >= 1
+          && d.puntuacion <= 5
+          && d.puntuacion == int(d.puntuacion)
+          && (!('comentario' in d.keys())
+              || (d.comentario is string && d.comentario.size() <= 1000));
     }
 
     match /resenas/{docId} {
@@ -284,14 +317,8 @@ service cloud.firestore {
                     && request.resource.data.tecnicoId != uid()
                     && docId == uid() + '_' + request.resource.data.tecnicoId
                     && request.resource.data.chatId is string
-                    && conversacionReal(request.resource.data.chatId, request.resource.data.tecnicoId)
-                    && request.resource.data.puntuacion is number
-                    && request.resource.data.puntuacion >= 1
-                    && request.resource.data.puntuacion <= 5
-                    && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
-                    && (!('comentario' in request.resource.data.keys())
-                        || (request.resource.data.comentario is string
-                            && request.resource.data.comentario.size() <= 1000)))
+                    && resenaValida(docId)
+                    && conversacionReal(request.resource.data.chatId, request.resource.data.tecnicoId))
                     || esAdmin();
       allow update: if esAdmin()
                     || (logueado()
@@ -301,13 +328,7 @@ service cloud.firestore {
                         && noMuta('tecnicoId')
                         && request.resource.data.diff(resource.data).affectedKeys()
                              .hasOnly(['puntuacion', 'comentario', 'fecha', 'nombreUsuario', 'chatId', 'id'])
-                        && request.resource.data.puntuacion is number
-                        && request.resource.data.puntuacion >= 1
-                        && request.resource.data.puntuacion <= 5
-                        && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
-                        && (!('comentario' in request.resource.data.keys())
-                            || (request.resource.data.comentario is string
-                                && request.resource.data.comentario.size() <= 1000)));
+                        && resenaValida(docId));
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
