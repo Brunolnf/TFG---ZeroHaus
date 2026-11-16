@@ -156,42 +156,35 @@ class NombreRealTest(unittest.TestCase):
         self.assertEqual(main._nombre_real(_DBFalsa({}), "", ""), "ZeroHaus")
 
 
-class _Ref:
-    def __init__(self, cambios, doc_id): self._cambios, self._id = cambios, doc_id
-    def update(self, datos): self._cambios[self._id] = datos
+class TareaDiariaTest(unittest.TestCase):
 
+    def test_pasos_en_orden_y_cada_uno_aunque_falle_el_anterior(self):
+        orden = []
 
-class _Snap:
-    def __init__(self, doc_id, datos, cambios):
-        self.id, self._datos, self.reference = doc_id, datos, _Ref(cambios, doc_id)
-    def to_dict(self): return self._datos
+        def paso(nombre, falla=False):
+            def ejecutar(db):
+                orden.append(nombre)
+                if falla:
+                    raise RuntimeError(f"{nombre} falla")
+                return 0
+            return ejecutar
+        with mock.patch.object(main.firestore, "client", lambda: None), \
+                mock.patch.object(main, "_sincronizar_bloqueados", paso("bloqueos", falla=True)), \
+                mock.patch.object(main, "_revisar_suscripciones", paso("suscripciones", falla=True)), \
+                mock.patch.object(main, "_mostrar_perfiles_verificados", paso("perfiles", falla=True)), \
+                mock.patch.object(main, "_purgar_eventos_antiguos", paso("eventos", falla=True)), \
+                mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones")), \
+                mock.patch("builtins.print"):
+            inspect.unwrap(main.revisar_suscripciones_diario)(None)
+        self.assertEqual(orden, ["bloqueos", "suscripciones", "perfiles", "eventos", "notificaciones"])
 
+    def test_tiene_el_tiempo_maximo_de_una_tarea_programada(self):
+        self.assertEqual(main.revisar_suscripciones_diario.__firebase_endpoint__.timeoutSeconds, 540)
 
-class _DBColecciones:
-    """Lo justo de Firestore para recorrer colecciones y actualizar documentos."""
-    def __init__(self, colecciones):
-        self._colecciones, self.cambios = colecciones, {}
-    def collection(self, nombre):
-        docs = self._colecciones.get(nombre, {})
-        cambios = self.cambios
-        class _Col:
-            def stream(self_):
-                return [_Snap(i, d, cambios) for i, d in docs.items()]
-        return _Col()
-
-
-class RecalcularRatingsTest(unittest.TestCase):
-
-    def test_corrige_notas_que_no_salen_de_resenas(self):
-        db = _DBColecciones({
-            "resenas": {"a": {"tecnicoId": "t1", "puntuacion": 5}, "b": {"tecnicoId": "t1", "puntuacion": 4}},
-            "tecnicos": {
-                "t1": {"rating": 4.5, "opiniones": 2},    # ya correcto: no se toca
-                "t2": {"rating": 4.8, "opiniones": 12},   # perfil de pruebas sin reseñas
-            },
-        })
-        self.assertEqual(main._recalcular_todos_los_ratings(db), 1)
-        self.assertEqual(db.cambios, {"t2": {"rating": 0.0, "opiniones": 0}})
+    def test_ya_no_hace_los_rellenos_de_datos_antiguos(self):
+        self.assertFalse(hasattr(main, "_recalcular_todos_los_ratings"))
+        self.assertFalse(hasattr(main, "_rellenar_escribieron_antiguos"))
+        self.assertTrue(callable(main._rellenar_escribieron_chat))   # lo sigue usando on_message_created
 
 
 class EnviarPushTest(unittest.TestCase):

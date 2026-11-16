@@ -22,9 +22,9 @@ Triggers de Firestore
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
-  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
-                               autores de chats antiguos, bloqueos pendientes en Auth y perfiles
-                               profesionales ocultos de cuentas ya verificadas.
+  revisar_suscripciones_diario Bloqueos pendientes en Auth, respaldo diario de suscripciones,
+                               perfiles profesionales ocultos de cuentas ya verificadas y
+                               limpieza de eventos y notificaciones.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -659,17 +659,6 @@ def _rellenar_escribieron_chat(chat_snap) -> None:
     chat_snap.reference.update({"escribieron": _autores_del_chat(mensajes, participantes)})
 
 
-def _rellenar_escribieron_antiguos(db) -> int:
-    """Chats con mensajes de antes del campo `escribieron` (los que no reciben
-    mensajes nuevos no pasan por on_message_created). Devuelve cuántos."""
-    rellenados = 0
-    for chat in db.collection("chats").where(filter=FieldFilter("fechaUltimoMensaje", ">", 0)).stream():
-        if "escribieron" not in (chat.to_dict() or {}):
-            _rellenar_escribieron_chat(chat)
-            rellenados += 1
-    return rellenados
-
-
 def _nombre_real(db, uid: str, respaldo: str) -> str:
     """Nombre de una persona tal como está en su perfil (/usuarios).
 
@@ -769,29 +758,6 @@ def on_resena_changed(event) -> None:
                         db, tecnico_id, pref["idioma"], "valoracion",
                         nombre=nombre_usuario, n=puntuacion,
                     )
-
-
-def _recalcular_todos_los_ratings(db) -> int:
-    """Pone `rating` y `opiniones` de cada profesional según sus reseñas reales.
-
-    on_resena_changed los mantiene al día; esto corrige perfiles antiguos (de
-    pruebas, o de antes del trigger) cuya nota no sale de reseñas. La app se
-    fía de estos campos y ya no descarga todas las reseñas en cada móvil.
-    Devuelve cuántos perfiles se han corregido."""
-    notas = {}
-    for r in db.collection("resenas").stream():
-        d = r.to_dict() or {}
-        if d.get("tecnicoId"):
-            notas.setdefault(d["tecnicoId"], []).append(int(d.get("puntuacion") or 0))
-    corregidos = 0
-    for t in db.collection("tecnicos").stream():
-        lista = notas.get(t.id, [])
-        rating = round(sum(lista) / len(lista), 2) if lista else 0.0
-        actual = t.to_dict() or {}
-        if actual.get("rating") != rating or actual.get("opiniones") != len(lista):
-            t.reference.update({"rating": rating, "opiniones": len(lista)})
-            corregidos += 1
-    return corregidos
 
 
 def _recalcular_rating(db, tecnico_id: str) -> None:
@@ -1921,28 +1887,21 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
     _sincronizar_token(firestore.client(), token)
 
 
-@scheduler_fn.on_schedule(
-    schedule="every day 05:00",
-    timezone=scheduler_fn.Timezone("Europe/Madrid"),
-    region=REGION,
-)
-def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
-    """Red de seguridad por si falla o no está configurado RTDN, limpieza
-    diaria (eventos de estadísticas y notificaciones antiguas), nota de los
-    profesionales recalculada con sus reseñas, autores de los chats antiguos,
-    cuentas bloqueadas desactivadas en Auth y perfiles profesionales ocultos
-    de cuentas que ya verificaron su email."""
-    db = firestore.client()
+def _revisar_suscripciones(db) -> int:
+    """Re-sincroniza con Play las suscripciones que caducan pronto o ya
+    caducaron y recalcula el plan visible de los profesionales con el plan
+    vencido (p. ej. caducó el destacado pero sigue vigente el verificado).
+    Un fallo con una suscripción no detiene el resto. Devuelve cuántas se revisaron."""
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
-
-    # 1) Suscripciones que caducan pronto o ya caducaron: re-sincronizar con Play
+    revisadas = 0
     for d in db.collection("suscripciones").where(filter=FieldFilter("activa", "==", True)).stream():
         if int((d.to_dict() or {}).get("fechaFin") or 0) < limite:
-            _sincronizar_token(db, d.id)
-
-    # 2) Profesionales con el plan visible vencido (p. ej. caducó el destacado
-    #    pero sigue vigente el verificado): recalcular
+            try:
+                _sincronizar_token(db, d.id)
+                revisadas += 1
+            except Exception as e:
+                print(f"[SUSCRIPCION] No se pudo revisar {d.id[:12]}…: {e}")
     vencidos = (
         db.collection("tecnicos")
         .where(filter=FieldFilter("suscripcionHasta", ">", 0))
@@ -1950,43 +1909,42 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         .stream()
     )
     for d in vencidos:
-        _recalcular_plan(db, d.id)
+        try:
+            _recalcular_plan(db, d.id)
+        except Exception as e:
+            print(f"[SUSCRIPCION] No se pudo recalcular el plan de {d.id}: {e}")
+    return revisadas
 
-    # 3) Privacidad: eventos individuales de estadísticas de más de 48 h
-    try:
-        print(f"[ESTADISTICAS] Eventos antiguos borrados: {_purgar_eventos_antiguos(db)}")
-    except Exception as e:
-        print(f"[ESTADISTICAS] No se pudieron purgar eventos: {e}")
 
-    # 4) Notificaciones antiguas (el historial de la app muestra las últimas)
-    try:
-        print(f"[NOTIFICACIONES] Antiguas borradas: {_purgar_notificaciones_antiguas(db)}")
-    except Exception as e:
-        print(f"[NOTIFICACIONES] No se pudieron purgar: {e}")
-
-    # 5) Nota de los profesionales = la de sus reseñas reales
-    try:
-        print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
-    except Exception as e:
-        print(f"[VALORACIONES] No se pudieron recalcular: {e}")
-
-    # 6) Quién ha escrito en los chats antiguos (requisito de las reseñas)
-    try:
-        print(f"[CHAT] Chats antiguos con autores anotados: {_rellenar_escribieron_antiguos(db)}")
-    except Exception as e:
-        print(f"[CHAT] No se pudieron anotar los autores: {e}")
-
-    # 7) Usuarios bloqueados con la cuenta de Auth aún activa
-    try:
-        print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
-    except Exception as e:
-        print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
-
-    # 8) Perfiles profesionales ocultos de cuentas que ya verificaron su email
-    try:
-        print(f"[TECNICOS] Perfiles ocultos ya verificados: {_mostrar_perfiles_verificados(db)}")
-    except Exception as e:
-        print(f"[TECNICOS] No se pudieron revisar los perfiles ocultos: {e}")
+@scheduler_fn.on_schedule(
+    schedule="every day 05:00",
+    timezone=scheduler_fn.Timezone("Europe/Madrid"),
+    region=REGION,
+    # Máximo de una tarea programada: con los 60 s por defecto, al crecer los
+    # datos se cortaba antes de llegar a los últimos pasos
+    timeout_sec=540,
+)
+def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
+    """Revisión diaria. Primero lo que afecta a la seguridad y a los pagos:
+    cuentas bloqueadas desactivadas en Auth, suscripciones (red de seguridad
+    por si falla o no está configurado RTDN) y perfiles profesionales ocultos
+    de cuentas ya verificadas; después, la limpieza (eventos de estadísticas y
+    notificaciones antiguas). Cada paso va aparte: un fallo no detiene los demás."""
+    db = firestore.client()
+    pasos = (
+        ("[ADMIN] Cuentas bloqueadas desactivadas en Auth", _sincronizar_bloqueados),
+        ("[SUSCRIPCION] Suscripciones revisadas con Play", _revisar_suscripciones),
+        ("[TECNICOS] Perfiles ocultos ya verificados", _mostrar_perfiles_verificados),
+        # Privacidad: eventos individuales de estadísticas de más de 48 h
+        ("[ESTADISTICAS] Eventos antiguos borrados", _purgar_eventos_antiguos),
+        # El historial de la app muestra las últimas
+        ("[NOTIFICACIONES] Notificaciones antiguas borradas", _purgar_notificaciones_antiguas),
+    )
+    for texto, paso in pasos:
+        try:
+            print(f"{texto}: {paso(db)}")
+        except Exception as e:
+            print(f"{texto}: no se pudo completar: {e}")
 
 
 # ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══
