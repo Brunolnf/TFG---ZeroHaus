@@ -424,6 +424,12 @@ _AVISOS_EMAIL = {
     "Polski": ("Nowa wiadomość od {nombre}", "{nombre} napisał(a) do Ciebie w ZeroHaus:\n„{texto}”\n\nOtwórz aplikację, aby odpowiedzieć.", "Otrzymałeś ocenę", "{nombre} ocenił(a) Cię na {n}/5 w ZeroHaus.", "Otrzymujesz tę wiadomość, bo masz włączone powiadomienia e-mail. Możesz je wyłączyć w Ustawienia › Powiadomienia."),
 }
 
+def _idioma_conocido(idioma) -> str:
+    """El idioma que manda la app si es uno de los 14 conocidos; si no,
+    «Español». Va escrito dentro del prompt de la IA: nunca texto libre."""
+    return idioma if isinstance(idioma, str) and idioma in _AVISOS_EMAIL else "Español"
+
+
 AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación cada 30 min
 # Tope de correos al día entre todos (códigos y avisos): la cuenta de Gmail
 # admite unos 500 y, si se pasa, Google la bloquea y nadie recibe su código.
@@ -908,7 +914,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     if not usuario.email:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
 
-    idioma = str((req.data or {}).get("idioma") or "Español")
+    idioma = _idioma_conocido((req.data or {}).get("idioma"))
     email = _normalizar_email(usuario.email)
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
@@ -1186,6 +1192,14 @@ def _mostrar_perfiles_verificados(db) -> int:
 GEMINI_MODELOS = [m for m in os.environ.get("GEMINI_MODEL", "gemini-3.5-flash,gemini-3.8-flash").split(",") if m]
 GEMINI_UBICACIONES = ["europe-west1", "global"]
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "10"))
+# Tope de consultas a la IA al día entre todos los usuarios: acota el coste
+# aunque alguien use muchas cuentas
+IA_LIMITE_GLOBAL_DIARIO = int(os.environ.get("IA_LIMITE_GLOBAL_DIARIO", "500"))
+# Lo que escribe el usuario (informe y vivienda) entra recortado en el prompt
+IA_TEXTO_MAX = 200
+IA_RECOMENDACIONES_MAX = 12
+IA_PROMPT_MAX = 8000
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 _ESQUEMA_IA = {
     "type": "OBJECT",
@@ -1217,26 +1231,57 @@ _CAMPOS_VIVIENDA_IA = [
 ]
 
 
+def _dato_ia(valor):
+    """Un dato del usuario tal como entra en el prompt: los números tal cual y
+    el resto como texto de IA_TEXTO_MAX caracteres, sin caracteres de control."""
+    if valor is None or isinstance(valor, (bool, int, float)):
+        return valor
+    return _CONTROL.sub(" ", str(valor)[:IA_TEXTO_MAX])
+
+
 def _prompt_ia(informe: dict, vivienda: dict, idioma: str) -> str:
     """Construye el prompt para Gemini SIN datos personales (ni nombre, ni
-    dirección, ni email): solo características técnicas y resultados."""
-    datos_vivienda = {k: vivienda.get(k) for k in _CAMPOS_VIVIENDA_IA if vivienda.get(k) not in (None, "", 0)}
+    dirección, ni email): solo características técnicas y resultados.
+
+    Los campos los escribe el usuario en Firestore: cada texto se recorta a
+    IA_TEXTO_MAX caracteres, van como mucho IA_RECOMENDACIONES_MAX mejoras y
+    el prompt no pasa de IA_PROMPT_MAX caracteres (si hace falta, sobran antes
+    las mejoras, que ya están en el informe, que los datos de la vivienda)."""
+    idioma = _idioma_conocido(idioma)
+    datos_vivienda = {
+        k: _dato_ia(vivienda.get(k)) for k in _CAMPOS_VIVIENDA_IA if vivienda.get(k) not in (None, "", 0)
+    }
+    mejoras = informe.get("recomendaciones")
     recomendaciones = [
-        {"mejora": r.get("titulo"), "ahorro_eur_anio": r.get("ahorroEuros"), "ahorro_pct": r.get("ahorroEstimado")}
-        for r in (informe.get("recomendaciones") or [])
-    ]
+        {"mejora": _dato_ia(r.get("titulo")), "ahorro_eur_anio": _dato_ia(r.get("ahorroEuros")),
+         "ahorro_pct": _dato_ia(r.get("ahorroEstimado"))}
+        for r in (mejoras if isinstance(mejoras, list) else []) if isinstance(r, dict)
+    ][:IA_RECOMENDACIONES_MAX]
     resultado = {
-        "etiqueta": informe.get("etiqueta"),
-        "consumo_kwh_anio": informe.get("consumoEstimado"),
-        "consumo_kwh_m2_anio": informe.get("consumoPorM2"),
-        "emisiones_kg_co2_anio": informe.get("emisiones"),
-        "coste_eur_anio": informe.get("costeAnual"),
+        "etiqueta": _dato_ia(informe.get("etiqueta")),
+        "consumo_kwh_anio": _dato_ia(informe.get("consumoEstimado")),
+        "consumo_kwh_m2_anio": _dato_ia(informe.get("consumoPorM2")),
+        "emisiones_kg_co2_anio": _dato_ia(informe.get("emisiones")),
+        "coste_eur_anio": _dato_ia(informe.get("costeAnual")),
     }
     # Si el usuario añadió su factura de la luz: consumo real y precio que paga
-    if (informe.get("consumoLuzFactura") or 0) > 0:
-        resultado["consumo_luz_estimado_kwh_anio"] = informe.get("consumoLuzEstimado")
-        resultado["consumo_luz_real_factura_kwh_anio"] = informe.get("consumoLuzFactura")
-        resultado["precio_luz_factura_eur_kwh"] = informe.get("precioLuz")
+    factura = informe.get("consumoLuzFactura")
+    if isinstance(factura, (int, float)) and factura > 0:
+        resultado["consumo_luz_estimado_kwh_anio"] = _dato_ia(informe.get("consumoLuzEstimado"))
+        resultado["consumo_luz_real_factura_kwh_anio"] = _dato_ia(factura)
+        resultado["precio_luz_factura_eur_kwh"] = _dato_ia(informe.get("precioLuz"))
+
+    prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    while len(prompt) > IA_PROMPT_MAX and recomendaciones:
+        recomendaciones.pop()
+        prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    while len(prompt) > IA_PROMPT_MAX and datos_vivienda:
+        datos_vivienda.popitem()
+        prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    return prompt
+
+
+def _texto_prompt_ia(datos_vivienda: dict, resultado: dict, recomendaciones: list, idioma: str) -> str:
     return (
         "Eres un asesor de eficiencia energética de viviendas en España. "
         "Con los datos de esta vivienda y su informe, da consejos concretos, "
@@ -1289,24 +1334,39 @@ def _llamar_gemini(contenido, esquema: dict = _ESQUEMA_IA, temperatura: float = 
 
 def _consumir_cupo_ia(db, uid: str) -> None:
     """Gasta una consulta del límite diario de IA del usuario (compartido por
-    los consejos y la lectura de facturas). Transaccional para que no se cuele
-    en paralelo; si no quedan, lanza RESOURCE_EXHAUSTED."""
-    hoy = time.strftime("%Y%m%d", time.gmtime())
+    los consejos y la lectura de facturas) y del tope del día entre todos
+    (/limites_ia_global/{AAAAMMDD}), en la misma transacción para que no se
+    cuele en paralelo. Si no quedan, lanza RESOURCE_EXHAUSTED sin gastar nada."""
+    hoy = _hoy_utc()
     limite_ref = db.collection("limites_ia").document(uid)
+    global_ref = db.collection("limites_ia_global").document(hoy)
 
     @firestore.transactional
     def _consumir(txn):
         d = (limite_ref.get(transaction=txn).to_dict() or {})
+        g = (global_ref.get(transaction=txn).to_dict() or {})
         usados = int(d.get("usados") or 0) if d.get("dia") == hoy else 0
+        usados_global = int(g.get("usados") or 0)
         if usados >= IA_LIMITE_DIARIO:
-            return False
+            return "usuario"
+        if usados_global >= IA_LIMITE_GLOBAL_DIARIO:
+            return "global"
         txn.set(limite_ref, {"dia": hoy, "usados": usados + 1})
-        return True
+        txn.set(global_ref, {"usados": usados_global + 1})
+        return ""
 
-    if not _consumir(db.transaction()):
+    agotado = _consumir(db.transaction())
+    if agotado == "usuario":
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
             "Has alcanzado el límite diario de consultas a la IA.",
+        )
+    if agotado == "global":
+        print("[IA] Tope diario global de consultas alcanzado")
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Hoy se ha alcanzado el límite de consultas a la IA. Inténtalo mañana.",
+            {"motivo": "global"},
         )
 
 
@@ -1345,7 +1405,7 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     uid = _exigir_email_verificado(req)
     data = req.data or {}
     informe_id = str(data.get("informeId") or "")
-    idioma = str(data.get("idioma") or "Español")[:30]
+    idioma = _idioma_conocido(data.get("idioma"))
     regenerar = bool(data.get("regenerar"))
     if not informe_id or "/" in informe_id:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "informeId inválido.")
