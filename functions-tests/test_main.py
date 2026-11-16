@@ -238,6 +238,31 @@ class ConfiguracionTest(unittest.TestCase):
         for modelo in main.GEMINI_MODELOS:
             self.assertFalse(modelo.startswith(("gemini-2.0", "gemini-2.5")), modelo)
 
+    @staticmethod
+    def funciones_desplegables():
+        """Nombre → endpoint de cada función que despliega main.py."""
+        return {n: f.__firebase_endpoint__ for n, f in vars(main).items()
+                if hasattr(f, "__firebase_endpoint__")}
+
+    def test_ninguna_funcion_queda_sin_techo_de_instancias(self):
+        funciones = self.funciones_desplegables()
+        self.assertGreaterEqual(len(funciones), 16)
+        for nombre, endpoint in funciones.items():
+            with self.subTest(funcion=nombre):
+                self.assertIsInstance(endpoint.maxInstances, int)
+                self.assertTrue(1 <= endpoint.maxInstances <= 20, endpoint.maxInstances)
+                self.assertEqual(endpoint.region, [main.REGION])
+                # set_global_options pone cpu="gcf_gen1" si no se indica (y con
+                # ello concurrencia 1): las funciones siguen con la CPU de 2.ª gen.
+                self.assertIsNone(endpoint.cpu)
+
+    def test_el_chat_admite_mas_instancias_y_la_ia_menos(self):
+        funciones = self.funciones_desplegables()
+        normal = funciones["activar_suscripcion"].maxInstances
+        self.assertGreater(funciones["on_message_created"].maxInstances, normal)
+        self.assertLess(funciones["generar_sugerencias_ia"].maxInstances, normal)
+        self.assertLess(funciones["leer_factura"].maxInstances, normal)
+
     def test_los_esquemas_de_gemini_son_json_valido(self):
         for esquema in (main._ESQUEMA_IA, main._ESQUEMA_FACTURA):
             self.assertEqual(json.loads(json.dumps(esquema)), esquema)

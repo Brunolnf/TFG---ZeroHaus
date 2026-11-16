@@ -87,6 +87,16 @@ SMTP_PUERTO = int(os.environ.get("SMTP_PUERTO", "465"))
 
 REGION = "europe-west1"
 
+# Techo de instancias: una ráfaga de mensajes, eventos o llamadas no escala sin
+# límite (ni el coste). Cada instancia atiende varias peticiones a la vez. Va
+# antes de cualquier función: el decorador lee las opciones globales al definirla.
+MAX_INSTANCIAS = 10
+MAX_INSTANCIAS_CHAT = 20   # on_message_created: un mensaje por cada envío del chat
+MAX_INSTANCIAS_IA = 3      # Gemini: cada llamada cuesta dinero
+# cpu=None mantiene la CPU de 2.ª generación: sin él, set_global_options pone
+# "gcf_gen1" (menos CPU y una sola petición por instancia).
+options.set_global_options(region=REGION, max_instances=MAX_INSTANCIAS, cpu=None)
+
 COLECCIONES_POR_CAMPO_UID = [
     ("viviendas",       "uid"),
     ("informes",        "uid"),
@@ -565,6 +575,7 @@ def _enviar_push(destino: dict, titulo: str, cuerpo: str, data: dict = None, son
     document="chats/{chatId}/mensajes/{msgId}",
     region=REGION,
     secrets=[SMTP_USUARIO, SMTP_CLAVE],
+    max_instances=MAX_INSTANCIAS_CHAT,
 )
 def on_message_created(event) -> None:
     """Nuevo mensaje de chat: notificación en la app y, según los ajustes de cada
@@ -1343,6 +1354,7 @@ def _limpiar_respuesta_ia(r: dict) -> dict:
     enforce_app_check=True,
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
+    max_instances=MAX_INSTANCIAS_IA,
 )
 def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     """Consejos personalizados para un informe del usuario, generados con Gemini.
@@ -1463,6 +1475,7 @@ def _validar_factura(r: dict) -> dict:
     enforce_app_check=True,
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
+    max_instances=MAX_INSTANCIAS_IA,
 )
 def leer_factura(req: https_fn.CallableRequest) -> dict:
     """Lee una factura de la luz con Gemini. Args: mime (image/jpeg, image/png,
