@@ -6,6 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.AjustesUsuario
+import com.example.zerohaus.Modelos.esVerificado
+import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.example.zerohaus.Repositorios.RepositorioAjustes
 import com.example.zerohaus.Repositorios.RepositorioAutenticacion
 import com.example.zerohaus.Util.AppEstado
@@ -20,6 +22,8 @@ data class AjustesEstado(
     val guardando: Boolean = false,
     val cambiandoPassword: Boolean = false,
     val eliminandoCuenta: Boolean = false,
+    /** Profesional con un plan vigente: al borrar la cuenta pierde el periodo pagado. */
+    val planVigente: Boolean = false,
     val mensajeToast: String? = null,
     val error: String? = null
 )
@@ -33,7 +37,16 @@ class AjustesViewModel : ViewModel() {
     private val repo = RepositorioAjustes()
     private val repoAuth = RepositorioAutenticacion()
 
-    init { cargarAjustes() }
+    init {
+        cargarAjustes()
+        cargarPlan()
+    }
+
+    private fun cargarPlan() {
+        RepositorioTecnicos().obtenerMiPerfilTecnico { t ->
+            estado = estado.copy(planVigente = t?.esVerificado == true)
+        }
+    }
 
     fun cargarAjustes() {
         estado = estado.copy(cargando = true)
