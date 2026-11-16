@@ -254,7 +254,7 @@ python herramientas/i18n.py comprobar            # verifica que los 14 idiomas e
 
 Configuración externa necesaria: productos de suscripción en Play Console, Play Developer API vinculada, tema Pub/Sub `play-rtdn` con permiso de publicación para Google Play, Vertex AI API habilitada y, para `actualizar_precio_luz_diario`, la Firebase Remote Config API habilitada y el rol «Administrador de Firebase Remote Config» en la cuenta de servicio de las funciones.
 
-> `precio_electricidad` lo mantiene la función a diario. Si despliegas la plantilla de Remote Config (`firebase deploy` sin `--only`, o `--only remoteconfig`), su valor vuelve al de `remoteconfig.template.json` hasta la siguiente ejecución.
+> **Remote Config ya no se despliega con `firebase deploy`.** `firebase.json` no tiene el bloque `remoteconfig`, porque un despliegue completo pisaría `precio_electricidad`, que `actualizar_precio_luz_diario` actualiza cada día. `remoteconfig.template.json` se conserva solo como referencia de los valores por defecto. Si hiciera falta publicar la plantilla a mano (`precio_electricidad` volvería al valor del archivo hasta la siguiente ejecución de la función), impórtala desde la consola de Firebase (Remote Config, publicar plantilla) o usa un `firebase.json` temporal con `"remoteconfig": {"template": "remoteconfig.template.json"}` y `firebase deploy --only remoteconfig`.
 
 ## Versionado y flujo de trabajo
 
