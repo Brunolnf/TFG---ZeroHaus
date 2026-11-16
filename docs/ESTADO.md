@@ -1,20 +1,18 @@
-# Estado — 2026-11-12
+# Estado — 2026-11-16
 
 ## Hecho
-- Paso 0: subagentes en `.claude/agents/`, reparto en `CLAUDE.md`. Rama `chore/agentes` (sin subir, sin PR).
-- Pasos manuales previstos: `docs/pasos-manuales.md`.
-- F1, informe: `docs/auditoria.md` (solo local, excluido de git; no subir hasta desplegar los altos). 0 críticos, 3 altos, 8 medios, 10 bajos.
-
-## Falta de F1
-- Arreglos altos A-01, A-02 y A-03 con el ciclo critical-implementer → test-runner → reviewer → PR. Rama prevista: `fix/auditoria-altos`, desde `main`.
-- No hechos en la primera sesión: los subagentes nuevos solo se cargan al arrancar una sesión.
+- Paso 0: subagentes y `CLAUDE.md` → PR #47 (`chore/agentes`), abierto. Incluye este archivo, `docs/plan.md` y `docs/pasos-manuales.md`.
+- F1: `docs/auditoria.md` (solo local, excluido de git). 0 críticos, 3 altos, 10 medios, 10 bajos.
+- F1, altos A-01, A-02 y A-03 → PR #48 (`fix/auditoria-altos`), abierto. Suites: app 81, reglas 71, functions 56, textos OK. Dos revisiones sin bloqueantes.
+- Dependabot #44, #45 y #46 fusionados.
+- F2: `docs/plan.md` escrito. **Pendiente del OK del usuario.**
 
 ## Pendiente del usuario
-- Decisiones A1–A4 de `docs/pasos-manuales.md`.
-- PR abiertos: #43 (legal, 2.3.1) y Dependabot #44–#46.
+- OK del plan (y de los valores de §2: comisión 10 %, liberación a 7 días, máximo 3 000 €).
+- Fusionar #47, #48 y #43 (legal, 2.3.1). Desplegar #48 con las reglas antes que las functions.
+- Decisión A5 y paso manual B6 (`docs/pasos-manuales.md`).
 
-## Siguiente paso
-1. Comprobar que existen los subagentes (`code-searcher`, etc.). Si no, hay que fusionar `chore/agentes` en `main` y abrir sesión nueva.
-2. Lanzar critical-implementer con A-01, A-02 y A-03 (un test que falle antes por cada uno).
-3. test-runner (reglas y functions) → reviewer → PR.
-4. F2: `docs/plan.md` y parar a esperar el OK.
+## Siguiente paso (F3, solo con el OK)
+1. Con #47 en `main`, abrir sesión nueva y comprobar que cargan los subagentes.
+2. Bloques A, B, C y G del plan (no comparten archivos); A empieza por T-A0.
+3. Después D → E → F → H, un PR por bloque, actualizando este archivo tras cada uno.

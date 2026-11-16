@@ -3,14 +3,15 @@
 Los secretos nunca se pegan en el chat: van a la variable o archivo indicado.
 Estado: ☐ pendiente · ☑ hecho. «Cuándo» indica la fase que lo necesita.
 
-## A. Decisiones (antes de F2)
+## A. Decisiones
 
-| ID | Qué decidir | Respóndeme |
-|----|-------------|------------|
-| A1 | Quién fusiona los PR. Abiertos hoy: #43 (legal, 2.3.1) y Dependabot #44–#46. | «fusiona tú» (rebase, con CI y reviewer en verde) o «fusiono yo» |
-| A2 | Pago con retención: comisión de ZeroHaus (%), cuándo se libera el dinero (confirmación del cliente o plazo) e importe máximo por pago. | Los tres valores, o «propón tú» |
-| A3 | Titular legal. Hoy el aviso legal lleva nombre sin NIF ni domicilio. Cobrar comisiones exige identificar al prestador (LSSI art. 10) y Stripe en real exige actividad dada de alta. **Confirmar en fuente oficial.** | «solo modo test» (pagos reales fuera del alcance) o «me doy de alta» |
-| A4 | El repo es público: `docs/auditoria.md` describe fallos explotables. Propongo no subirlo hasta desplegar los arreglos críticos y altos. | «ok» o «súbelo ya» |
+| ID | Decisión | Estado |
+|----|----------|--------|
+| A1 | Los PR los fusiona el usuario. Los de Dependabot los fusiona Claude con el CI en verde. | ☑ 2026-11-12 |
+| A2 | Pago con retención: comisión, plazo de liberación e importe máximo configurables en Remote Config; valores propuestos en `docs/plan.md` §2. | ☑ a falta del OK del plan |
+| A3 | Pagos solo en modo test; los pagos reales quedan fuera del alcance. | ☑ 2026-11-12 |
+| A4 | `docs/auditoria.md` no se sube al repo hasta desplegar los arreglos altos. | ☑ 2026-11-12 |
+| A5 | Quién revisa el código de `critical-implementer` (Opus): la tabla pone al revisor en Opus y a la vez pide que no revise el modelo que escribió. En el PR #48 revisó Fable. | ☐ «Fable» u «Opus» |
 
 ## B. Cuentas y claves
 
@@ -39,6 +40,11 @@ Estado: ☐ pendiente · ☑ hecho. «Cuándo» indica la fase que lo necesita.
 **B5 · API de OCR** (F3, solo si en F2 se elige Cloud Vision en vez de Gemini en Vertex, que ya está activo)
 - Cómo: Cloud Console → **APIs y servicios → Biblioteca** → *Cloud Vision API* → Habilitar.
 - Respóndeme: «hecho B5».
+
+**B6 · Cambio de email solo con verificación** (ya; cierra la causa de A-03)
+- Cómo: console.firebase.google.com → proyecto → **Authentication → Configuración → Acciones de los usuarios** → marcar *Protección de enumeración de correos electrónicos (recomendado)* → Guardar. Con ella, Auth no deja cambiar el email de una cuenta sin verificar el nuevo.
+- Comprobar: la casilla queda marcada tras recargar la página.
+- Respóndeme: «hecho B6» y si estaba ya marcada.
 
 ## C. Play Console (F4)
 
