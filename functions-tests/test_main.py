@@ -842,6 +842,120 @@ class PurgaTest(_ConPurga):
         self.delete_user.assert_called_once_with("p1")
 
 
+def _respuesta_http(codigo, datos=None):
+    return SimpleNamespace(status_code=codigo, text="", json=lambda: dict(datos or {}))
+
+
+class _PlayFalso:
+    """Google Play Developer API simulada: estado de cada token y peticiones recibidas."""
+    RENOVABLES = {"SUBSCRIPTION_STATE_ACTIVE", "SUBSCRIPTION_STATE_IN_GRACE_PERIOD",
+                  "SUBSCRIPTION_STATE_ON_HOLD", "SUBSCRIPTION_STATE_PAUSED"}
+
+    def __init__(self):
+        self.estados = {}       # token → subscriptionState
+        self.caido = False
+        self.peticiones = []    # (método, url, cuerpo)
+
+    def post(self, url, json=None, timeout=None):
+        self.peticiones.append(("POST", url, json))
+        if self.caido:
+            raise ConnectionError("Play no responde")
+        token = url.rsplit("/", 1)[-1].split(":")[0]
+        if token not in self.estados:
+            return _respuesta_http(404)
+        if self.estados[token] not in self.RENOVABLES:
+            return _respuesta_http(400)   # ya cancelada o caducada
+        self.estados[token] = "SUBSCRIPTION_STATE_CANCELED"
+        return _respuesta_http(200)
+
+    def get(self, url, timeout=None):
+        self.peticiones.append(("GET", url, None))
+        if self.caido:
+            raise ConnectionError("Play no responde")
+        token = url.rsplit("/", 1)[-1]
+        if token not in self.estados:
+            return _respuesta_http(404)
+        return _respuesta_http(200, {"subscriptionState": self.estados[token]})
+
+
+class BorrarCuentaConSuscripcionTest(_ConPurga):
+    """Antes de borrar la cuenta se cancela la renovación en Google Play."""
+
+    def setUp(self):
+        super().setUp()
+        self.play = _PlayFalso()
+        parche = mock.patch.object(main, "_sesion_play", lambda: self.play)
+        parche.start()
+        self.addCleanup(parche.stop)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1"}
+
+    def suscripcion(self, token, estado_play, **datos):
+        self.play.estados[token] = estado_play
+        self.db.docs[f"suscripciones/{token}"] = {
+            "uid": "p1", "origen": "play", "planId": "verificado_anual", "activa": True,
+            "fechaFin": main._ahora_ms() + 30 * main.DIA_MS, **datos,
+        }
+
+    def borrar(self):
+        with mock.patch("builtins.print"):
+            return llamar(main.eliminar_mi_cuenta, "p1")
+
+    def test_cancela_la_renovacion_y_borra_la_cuenta(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        respuesta = self.borrar()
+        self.assertIs(respuesta["suscripcionCancelada"], True)
+        self.assertEqual(self.play.peticiones[0], (
+            "POST", f"{main.ANDROID_PUBLISHER}/purchases/subscriptionsv2/tokens/token-play-1:cancel",
+            {"cancellationContext": {"cancellationType": "DEVELOPER_REQUESTED_STOP_PAYMENTS"}},
+        ))
+        self.assertEqual(self.play.estados["token-play-1"], "SUBSCRIPTION_STATE_CANCELED")
+        self.delete_user.assert_called_once_with("p1")
+        self.assertEqual(self.db.docs, {})
+
+    def test_si_play_no_responde_no_se_borra_nada(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        self.play.caido = True
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.borrar()
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.delete_user.assert_not_called()
+        self.assertIn("tecnicos/p1", self.db.docs)
+        self.assertIn("suscripciones/token-play-1", self.db.docs)
+
+    def test_sin_suscripcion_se_borra_sin_llamar_a_play(self):
+        respuesta = self.borrar()
+        self.assertIs(respuesta["suscripcionCancelada"], False)
+        self.assertEqual(self.play.peticiones, [])
+        self.delete_user.assert_called_once_with("p1")
+
+    def test_si_play_dice_que_ya_no_se_renueva_se_borra(self):
+        self.suscripcion("token-caducado", "SUBSCRIPTION_STATE_EXPIRED")   # Firestore aún no lo sabe
+        self.suscripcion("token-desconocido", "SUBSCRIPTION_STATE_ACTIVE")
+        del self.play.estados["token-desconocido"]                         # Play no lo conoce
+        respuesta = self.borrar()
+        self.assertIs(respuesta["suscripcionCancelada"], False)
+        self.delete_user.assert_called_once_with("p1")
+
+    def test_no_llama_a_play_por_suscripciones_que_ya_no_se_cobran(self):
+        self.suscripcion("token-cancelado", "SUBSCRIPTION_STATE_CANCELED", estadoPlay="SUBSCRIPTION_STATE_CANCELED")
+        self.suscripcion("token-sustituido", "SUBSCRIPTION_STATE_EXPIRED", activa=False)
+        self.borrar()
+        self.assertEqual(self.play.peticiones, [])
+        self.delete_user.assert_called_once_with("p1")
+
+    def test_una_suscripcion_en_retencion_tambien_se_cancela(self):
+        self.suscripcion("token-retenido", "SUBSCRIPTION_STATE_ON_HOLD",
+                         activa=False, estadoPlay="SUBSCRIPTION_STATE_ON_HOLD")
+        self.assertIs(self.borrar()["suscripcionCancelada"], True)
+
+    def test_el_borrado_del_administrador_tambien_cancela(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        with mock.patch("builtins.print"):
+            respuesta = llamar(main.eliminar_usuario_completo, "admin", admin=True, uid="p1")
+        self.assertIs(respuesta["suscripcionCancelada"], True)
+        self.delete_user.assert_called_once_with("p1")
+
+
 class ValoracionesTest(_ConPurga):
 
     def test_la_nota_se_recalcula_si_el_perfil_existe(self):

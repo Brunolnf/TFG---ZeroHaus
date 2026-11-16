@@ -280,8 +280,10 @@ def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
         )
 
     db = firestore.client()
+    # Antes de borrar nada: si Play no responde, no se borra (se reintenta)
+    canceladas = _cancelar_suscripciones_play(db, uid)
     stats = _purgar_usuario(db, uid)
-    return {"ok": True, "uid": uid, "stats": stats}
+    return {"ok": True, "uid": uid, "stats": stats, "suscripcionCancelada": canceladas > 0}
 
 
 @https_fn.on_call(
@@ -366,7 +368,9 @@ def _sincronizar_bloqueados(db) -> int:
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
     todos sus datos. Obligatorio por la política de Google Play (borrado de
-    cuenta desde la app) y por el RGPD (derecho de supresión). Irreversible."""
+    cuenta desde la app) y por el RGPD (derecho de supresión). Irreversible.
+    Antes cancela en Google Play la renovación de sus suscripciones: sin
+    cuenta no podría usarlas y Play le seguiría cobrando."""
     if req.auth is None:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión."
@@ -374,8 +378,10 @@ def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
 
     uid = req.auth.uid
     db = firestore.client()
+    # Antes de borrar nada: si Play no responde, no se borra (se reintenta)
+    canceladas = _cancelar_suscripciones_play(db, uid)
     stats = _purgar_usuario(db, uid)
-    return {"ok": True, "uid": uid, "stats": stats}
+    return {"ok": True, "uid": uid, "stats": stats, "suscripcionCancelada": canceladas > 0}
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1635,6 +1641,66 @@ def _acknowledge_play(product_id: str, token: str) -> None:
             print(f"[SUSCRIPCION] acknowledge HTTP {r.status_code}: {r.text[:300]}")
     except Exception as e:
         print(f"[SUSCRIPCION] acknowledge falló: {e}")
+
+
+# Estados en los que Play ya no va a cobrar: no hace falta cancelar nada
+ESTADOS_SIN_RENOVACION = {
+    "SUBSCRIPTION_STATE_CANCELED",
+    "SUBSCRIPTION_STATE_EXPIRED",
+    "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED",
+}
+# Sin acceso ahora (activa=False), pero Play aún puede volver a cobrar
+ESTADOS_PENDIENTES_DE_COBRO = {"SUBSCRIPTION_STATE_ON_HOLD", "SUBSCRIPTION_STATE_PAUSED"}
+
+
+def _cancelar_en_play(token: str) -> bool:
+    """Cancela la renovación de una suscripción en Google Play con
+    purchases.subscriptionsv2.cancel (la de purchases.subscriptions está
+    obsoleta). DEVELOPER_REQUESTED_STOP_PAYMENTS: no se puede restaurar y no
+    hay más cobros; no reembolsa el periodo ya pagado.
+
+    True si Play la ha cancelado ahora; False si ya no se renovaba (Play no
+    conoce el token, o está cancelada o caducada). Si Play no responde o no la
+    cancela, lanza UNAVAILABLE para que la cuenta no se borre."""
+    try:
+        r = _sesion_play().post(
+            f"{ANDROID_PUBLISHER}/purchases/subscriptionsv2/tokens/{token}:cancel",
+            json={"cancellationContext": {"cancellationType": "DEVELOPER_REQUESTED_STOP_PAYMENTS"}},
+            timeout=15,
+        )
+        if r.status_code < 300:
+            return True
+        print(f"[SUSCRIPCION] cancel HTTP {r.status_code}: {r.text[:300]}")
+    except Exception as e:
+        print(f"[SUSCRIPCION] cancel falló: {e}")
+    # No se canceló: se sigue solo si Play confirma que ya no se va a cobrar
+    data = _consultar_play(token)
+    if data == {} or (data and data.get("subscriptionState") in ESTADOS_SIN_RENOVACION):
+        return False
+    raise https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.UNAVAILABLE,
+        "No se pudo cancelar la suscripción en Google Play. Inténtalo de nuevo en unos minutos.",
+        {"motivo": "play"},
+    )
+
+
+def _cancelar_suscripciones_play(db, uid: str) -> int:
+    """Antes de borrar una cuenta: cancela en Google Play la renovación de
+    sus suscripciones que aún pueden cobrarse (vigentes, o en retención o
+    pausa). Si Play no responde lanza UNAVAILABLE y la cuenta no se borra: se
+    puede reintentar. Devuelve cuántas se han cancelado."""
+    canceladas = 0
+    for d in db.collection("suscripciones").where(filter=FieldFilter("uid", "==", uid)).stream():
+        s = d.to_dict() or {}
+        estado = s.get("estadoPlay")
+        if s.get("origen") != "play" or estado in ESTADOS_SIN_RENOVACION:
+            continue
+        if not s.get("activa") and estado not in ESTADOS_PENDIENTES_DE_COBRO:
+            continue   # caducada o sustituida por un cambio de plan
+        if _cancelar_en_play(d.id):
+            print(f"[SUSCRIPCION] Renovación cancelada en Play al borrar la cuenta {uid}")
+            canceladas += 1
+    return canceladas
 
 
 def _validar_token_suscripcion(product_id: str, token: str, uid: str):
