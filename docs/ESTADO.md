@@ -1,18 +1,19 @@
-# Estado — 2026-11-16
+# Estado — 2026-11-17
 
 ## Hecho
-- Paso 0: subagentes y `CLAUDE.md` → PR #47 (`chore/agentes`), abierto. Incluye este archivo, `docs/plan.md` y `docs/pasos-manuales.md`.
-- F1: `docs/auditoria.md` (solo local, excluido de git). 0 críticos, 3 altos, 10 medios, 10 bajos.
-- F1, altos A-01, A-02 y A-03 → PR #48 (`fix/auditoria-altos`), abierto. Suites: app 81, reglas 71, functions 56, textos OK. Dos revisiones sin bloqueantes.
-- Dependabot #44, #45 y #46 fusionados.
-- F2: `docs/plan.md` escrito. **Pendiente del OK del usuario.**
+- F1 y F2 cerrados. Plan aprobado (`docs/plan.md`). Auditoría en `docs/auditoria.md` (solo local).
+- F3, bloques 0, A, B, C y G con PR abierto, tests y revisión hechos:
+  - #48 `fix/auditoria-altos` (bloque 0) · #52 `fix/auditoria-servidor` (A) y #51 `fix/auditoria-reglas` (B), apilados sobre #48.
+  - #50 `chore/endurecer-app` (C) · #49 `chore/observabilidad` (G) · #47 `chore/agentes` (subagentes, plan, este archivo).
+- Dependabot #44–#46 fusionados.
 
 ## Pendiente del usuario
-- OK del plan (y de los valores de §2: comisión 10 %, liberación a 7 días, máximo 3 000 €).
-- Fusionar #47, #48 y #43 (legal, 2.3.1). Desplegar #48 con las reglas antes que las functions.
-- Decisión A5 y paso manual B6 (`docs/pasos-manuales.md`).
+- Fusionar, por orden: #47, #48, y después #49 y #50. Tras #48, avisar para rebasar #51 y #52 sobre `main`.
+- Desplegar: reglas antes o a la vez que functions. Antes, pasos B6, B7 y B8 de `docs/pasos-manuales.md`.
+- Decisión A5 (revisor del código de Opus). Fable pide créditos; se está usando Sonnet en esfuerzo alto.
 
-## Siguiente paso (F3, solo con el OK)
-1. Con #47 en `main`, abrir sesión nueva y comprobar que cargan los subagentes.
-2. Bloques A, B, C y G del plan (no comparten archivos); A empieza por T-A0.
-3. Después D → E → F → H, un PR por bloque, actualizando este archivo tras cada uno.
+## Siguiente paso
+1. Rebasar #51 y #52 sobre `main` en cuanto se fusione #48, y repasar su CI.
+2. T-C4 (app: errores del borrado de cuenta), con #52 fusionado.
+3. Bloque D (denunciar y bloquear), después E (pagos), F (certificados) y H (publicación).
+4. Worktrees temporales que se pueden borrar al fusionar: `%TEMP%\wt-observabilidad`, `%TEMP%\wt-endurecer-app` y `.claude/worktrees/agent-*` del checkout principal.

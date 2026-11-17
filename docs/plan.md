@@ -41,18 +41,19 @@ Agentes: **CI** = critical-implementer · **IM** = implementer. Cada bloque es u
 |----|-----|----------|--------------|------|
 | T-01 | CI | `functions/main.py`, `firestore.rules`, tests, `Modelos/Tecnico.kt`, `ViewModel/TecnicosViewModel.kt` | ✅ A-01, A-02 y A-03 con tests; dos revisiones sin bloqueantes | — |
 
-### Bloque A — Resto de la auditoría, servidor (`fix/auditoria-servidor`)
+### Bloque A — Resto de la auditoría, servidor (`fix/auditoria-servidor`, PR #52 ✅)
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
 | T-A0 | CI | `functions/main.py`, `functions-tests/` | Menores de la revisión del PR #48: al deshacer una verificación se revocan las sesiones y se deshace también si falla la relectura; repaso diario de perfiles ocultos por lotes y con `try` por documento; `_hoy_utc` en el envío de códigos; marcar el perfil cuando la cuenta ya estaba verificada | T-01 |
 | T-A1 | CI | `functions/main.py` | M-01: `max_instances` global y por función | T-01 |
 | T-A2 | CI | `functions/main.py`, `functions-tests/` | M-04 y M-09: el borrado no deja perfiles vacíos ni perfiles antiguos; test de ambos | T-01 |
 | T-A3 | CI | `functions/main.py`, `functions-tests/` | M-05: tarea diaria sin recorridos completos, 540 s, bloqueos primero | T-01 |
-| T-A4 | CI | `functions/main.py`, `functions-tests/`, `ViewModel/AjustesViewModel.kt` | M-06: borrar la cuenta cancela la suscripción en Play o lo impide con aviso | T-01 |
+| T-A4 | CI | `functions/main.py`, `functions-tests/` | M-06: borrar la cuenta cancela antes la renovación en Play; si Play no responde, no se borra y se puede reintentar | T-01 |
 | T-A5 | CI | `functions/main.py`, `functions-tests/` | M-07: prompt recortado, idiomas de lista cerrada, tope global diario de IA | T-01 |
-| T-A6 | CI | `functions/main.py`, `functions-tests/` | B-07 y B-08 | T-A3 |
+| T-A6 | CI | `functions/main.py`, `functions-tests/` | B-08: un evento reentregado no cuenta doble. B-07 queda aceptado: un secreto nuevo obligaría a un paso manual antes de cada despliegue y el efecto de rotar la clave de correo son códigos de 10 minutos | T-A3 |
+| T-A7 | CI | `functions/main.py`, `functions-tests/` | M-03 (servidor): el nombre de la reseña lo fija el servidor con el del perfil | T-01 |
 
-### Bloque B — Resto de la auditoría, reglas (`fix/auditoria-reglas`)
+### Bloque B — Resto de la auditoría, reglas (`fix/auditoria-reglas`, PR #51 ✅)
 Criterio común: la app 2.3 publicada sigue funcionando con las reglas nuevas.
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
@@ -60,12 +61,13 @@ Criterio común: la app 2.3 publicada sigue funcionando con las reglas nuevas.
 | T-B2 | CI | `firestore.rules`, `rules-tests/` | B-03 y B-04: chats, mensajes y usuarios | T-B1 |
 | T-B3 | CI | `storage.rules`, `rules-tests/` | B-02 y M-02: tipos de imagen cerrados, borrado de la foto propia, ruta de perfil acotada | — |
 
-### Bloque C — App y CI (`chore/endurecer-app`)
+### Bloque C — App y CI (`chore/endurecer-app`, PR #50 ✅ salvo T-C4)
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
 | T-C1 | IM | `res/xml/file_paths.xml`, `UserInterface/PreestudioScreen.kt`, `UserInterface/ChatScreen.kt`, compartir | B-06: carpeta compartida propia, factura borrada tras leerla, adjuntos solo `https` del bucket | — |
-| T-C2 | IM | `app/proguard-rules.pro` | B-10: sin `-keep` de paquetes enteros; `:app:minifyReleaseWithR8` pasa | — |
+| T-C2 | IM | `UserInterface/AjustesScreen.kt`, `ViewModel/AjustesViewModel.kt`, `i18n.py` | Con un plan vigente, el diálogo de borrar la cuenta avisa de que la suscripción se cancela y se pierde el periodo pagado (14 idiomas) | — |
 | T-C3 | IM | `.github/workflows/ci.yml` | B-09: acciones fijadas por SHA | — |
+| T-C4 | IM | `UserInterface/AjustesScreen.kt`, `ViewModel/AjustesViewModel.kt`, `i18n.py` | Con el bloque A desplegado: el aviso «borrar la cuenta no detiene los cobros» pasa a decir que se cancela la renovación, el error `UNAVAILABLE` con `motivo: "play"` muestra «no se ha podido cancelar tu suscripción, inténtalo más tarde», y si la respuesta trae `cancelarEnPlay: true` se avisa de cancelarla en Google Play (enlace de gestión) | T-A4, T-C2 |
 
 ### Bloque D — Denunciar y bloquear usuarios (`feat/denuncias-bloqueos`)
 B-11 confirmado: hoy solo el administrador puede bloquear (`AdminScreen.kt:282`); no hay denuncia ni bloqueo entre usuarios.
@@ -98,7 +100,7 @@ Motor: Gemini en Vertex, el mismo que ya lee facturas (sin API nueva ni paso man
 | T-F3 | CI | `functions/certificados.py`, `functions/main.py`, tests | Decisión del administrador, distintivo en `/tecnicos` congelado en reglas, borrado del archivo tras decidir | T-F2 |
 | T-F4 | IM | `UserInterface/` (perfil profesional, `AdminScreen.kt`, `PerfilTecnicoScreen.kt`), `i18n.py` | Subida, estado, revisión en el panel y distintivo visible | T-F3 |
 
-### Bloque G — Observabilidad y coste (`chore/observabilidad`)
+### Bloque G — Observabilidad y coste (`chore/observabilidad`, PR #49 ✅ salvo T-G3)
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
 | T-G1 | IM | `Util/Diagnostico.kt`, `ZeroHausApp.kt` | Ya recoge solo en release y registra los errores de functions; falta un identificador de usuario sin datos personales (hash del uid) y la clave `version` | — |
@@ -108,6 +110,7 @@ Motor: Gemini en Vertex, el mismo que ya lee facturas (sin API nueva ni paso man
 ### Bloque H — Publicación (`release/2.4.0`), F4
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
+| T-H0 | IM | `app/proguard-rules.pro` | B-10: sin `-keep` de paquetes enteros. Va aquí porque solo se puede dar por bueno con la build release probada en un dispositivo | todos |
 | T-H1 | IM | `docs/publicacion.md` | Checklist de §5 con el estado de cada punto | todos |
 | T-H2 | IM | `app/build.gradle.kts`, `CHANGELOG.md`, notas de la versión | Versión 2.4.0, `bundleRelease` correcto | T-H1 |
 
