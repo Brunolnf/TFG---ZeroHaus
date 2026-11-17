@@ -1100,8 +1100,15 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         if not _deshacer_o_anotar(db, uid, email):
             raise no_confirmada
         raise caducado
-    # Verificación confirmada: una marca de un fallo anterior ya no aplica
-    _quitar_marca_deshacer(db, uid)
+    # Verificación confirmada: una marca de un fallo anterior ya no aplica. La
+    # marca guarda el email de aquel código: si la cuenta verifica ahora otro,
+    # la tarea diaria la desharía, así que si no se puede quitar se reintenta.
+    for intento in (1, 2):
+        try:
+            _quitar_marca_deshacer(db, uid)
+            break
+        except Exception as e:
+            print(f"[SEGURIDAD] No se pudo quitar la marca de deshacer de {uid} (intento {intento}): {e}")
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
 
@@ -1152,9 +1159,10 @@ def _reintentar_deshacer(db, uid: str) -> str:
     except Exception as e:
         print(f"[SEGURIDAD] No se pudo consultar Auth para el deshacer pendiente de {uid}: {e}")
         return "pendiente"
+    email_del_codigo = _normalizar_email(marca.get("deshacerEmail"))
     if usuario is None or not usuario.email_verified:
         estado = "sin_verificar"
-    elif _normalizar_email(usuario.email) == marca.get("deshacerEmail"):
+    elif email_del_codigo and _normalizar_email(usuario.email) == email_del_codigo:
         estado = "legitima"
     elif _deshacer_verificacion(uid):
         estado = "sin_verificar"
@@ -1948,8 +1956,9 @@ _RAZONES_SIN_PERMISO = {
 def _play_niega_permiso(r) -> bool:
     """True si la respuesta de Play es una falta de permiso: 401, o 403 con
     status PERMISSION_DENIED o una razón de permisos. Google también responde
-    403 por cuota (rateLimitExceeded, quotaExceeded): eso es pasajero y la
-    cuota manda aunque el status sea PERMISSION_DENIED."""
+    403 por cuota o límites (rateLimitExceeded, quotaExceeded,
+    dailyLimitExceeded…): eso es pasajero y manda aunque el status sea
+    PERMISSION_DENIED."""
     if r.status_code == 401:
         return True
     if r.status_code != 403:
@@ -1965,7 +1974,7 @@ def _play_niega_permiso(r) -> bool:
         for e in (error.get("errors") or []) + (error.get("details") or [])
         if isinstance(e, dict)
     }
-    if any("quota" in r_ or "ratelimit" in r_ or "rate_limit" in r_ for r_ in razones):
+    if any(marca in razon for razon in razones for marca in ("quota", "limit", "exceeded")):
         return False
     return error.get("status") == "PERMISSION_DENIED" or bool(razones & _RAZONES_SIN_PERMISO)
 

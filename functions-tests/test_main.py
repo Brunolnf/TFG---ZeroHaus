@@ -779,6 +779,31 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
             main._reintentar_deshacer_pendientes(self.db)
         self.update_user.assert_called_once_with("u1", email_verified=True)
 
+    def test_si_falla_quitar_la_marca_al_verificar_se_reintenta_y_no_rompe(self):
+        self.usuario("u1", "c@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        quitar = mock.Mock(side_effect=[RuntimeError("Firestore no responde"), None])
+        with mock.patch.object(main, "_quitar_marca_deshacer", quitar), mock.patch("builtins.print") as log:
+            self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.assertEqual(quitar.call_count, 2)
+        self.assertTrue(any("[SEGURIDAD]" in str(c) for c in log.call_args_list))
+
+    def test_si_quitar_la_marca_falla_dos_veces_la_verificacion_vale_igual(self):
+        self.usuario("u1", "c@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        quitar = mock.Mock(side_effect=RuntimeError("Firestore no responde"))
+        with mock.patch.object(main, "_quitar_marca_deshacer", quitar), mock.patch("builtins.print"):
+            self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.assertEqual(quitar.call_count, 2)
+
+    def test_el_email_de_la_marca_se_compara_normalizado(self):
+        self.usuario("u1", "a@x.es", True)
+        self.db.docs["verificaciones_email/u1"] = {"deshacerPendiente": True, "deshacerEmail": " A@X.es"}
+        with mock.patch("builtins.print"):
+            main._reintentar_deshacer_pendientes(self.db)
+        self.update_user.assert_not_called()
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+
     def test_si_la_cuenta_tiene_el_email_del_codigo_la_marca_se_quita_sin_deshacer(self):
         # Fallo de Auth al confirmar, pero el email no había cambiado: era legítima
         self.usuario("u1", "a@x.es", False)
@@ -1227,6 +1252,8 @@ class BorrarCuentaConSuscripcionTest(_ConPurga):
             "rateLimitExceeded": {"code": 403, "errors": [{"reason": "rateLimitExceeded"}]},
             # La cuota manda aunque el status sea el de permisos
             "quotaExceeded": {"code": 403, "status": "PERMISSION_DENIED", "errors": [{"reason": "quotaExceeded"}]},
+            "dailyLimitExceeded": {"code": 403, "status": "PERMISSION_DENIED",
+                                   "errors": [{"reason": "dailyLimitExceeded"}]},
             "403 sin detalle": None,
         }
         for caso, error in casos.items():
