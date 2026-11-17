@@ -1027,12 +1027,17 @@ class _ConPurga(_ConServiciosFalsos):
     def setUp(self):
         super().setUp()
         self.delete_user = mock.Mock()
+        self.prefijos_storage = []   # carpetas de Storage borradas
         for parche in (
             mock.patch.object(main.auth, "delete_user", self.delete_user),
-            mock.patch.object(main, "_borrar_storage", lambda prefijo: 0),
+            mock.patch.object(main, "_borrar_storage", self._borrar_storage),
         ):
             parche.start()
             self.addCleanup(parche.stop)
+
+    def _borrar_storage(self, prefijo):
+        self.prefijos_storage.append(prefijo)
+        return 0
 
 
 class PurgaTest(_ConPurga):
@@ -1050,6 +1055,22 @@ class PurgaTest(_ConPurga):
         main._purgar_usuario(self.db, "p1")
         self.assertEqual(sorted(self.db.docs), ["tecnicos/otro", "tecnicos/otro/eventos/e3"])
         self.delete_user.assert_called_once_with("p1")
+
+    def test_el_perfil_con_otro_id_se_borra_con_sus_resenas_estadisticas_y_fotos(self):
+        self.db.docs.update({
+            "tecnicos/legado": {"uid": "p1"},
+            "resenas/sobre_legado": {"uid": "c1", "tecnicoId": "legado", "puntuacion": 4},
+            "resenas/sobre_otro": {"uid": "c1", "tecnicoId": "otro", "puntuacion": 5},
+            "estadisticas/legado": {"total": {"visita": 3}},
+            "estadisticas/otro": {"total": {"visita": 1}},
+        })
+        main._purgar_usuario(self.db, "p1")
+        self.assertNotIn("resenas/sobre_legado", self.db.docs)
+        self.assertNotIn("estadisticas/legado", self.db.docs)
+        self.assertIn("resenas/sobre_otro", self.db.docs)
+        self.assertIn("estadisticas/otro", self.db.docs)
+        self.assertIn("perfiles/legado/", self.prefijos_storage)
+        self.assertIn("perfiles/p1/", self.prefijos_storage)
 
 
 def _respuesta_http(codigo, datos=None):

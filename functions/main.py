@@ -200,6 +200,14 @@ def _purgar_usuario(db, uid: str) -> dict:
     el borrado self-service (RGPD / política de Google Play). Irreversible."""
     stats: dict = {}
 
+    # Perfiles profesionales: el de id = uid y los antiguos reclamados con otro
+    # id, que llevan el uid en el campo `uid`. De cada uno se borran también
+    # sus reseñas, estadísticas, eventos y fotos.
+    perfiles = sorted({uid} | {
+        d.id for d in db.collection("tecnicos").where(filter=FieldFilter("uid", "==", uid)).stream()
+    })
+    otros_perfiles = [p for p in perfiles if p != uid]
+
     for col, campo in COLECCIONES_POR_CAMPO_UID:
         q = db.collection(col).where(filter=FieldFilter(campo, "==", uid))
         stats[col] = _borrar_query(db, q)
@@ -207,8 +215,10 @@ def _purgar_usuario(db, uid: str) -> dict:
     for col, campos in COLECCIONES_DOBLE_CAMPO:
         total = 0
         for campo in campos:
-            q = db.collection(col).where(filter=FieldFilter(campo, "==", uid))
-            total += _borrar_query(db, q)
+            # tecnicoId: las reseñas sobre cualquiera de sus perfiles
+            for valor in ([uid] if campo == "uid" else perfiles):
+                q = db.collection(col).where(filter=FieldFilter(campo, "==", valor))
+                total += _borrar_query(db, q)
         stats[col] = total
 
     chats_borrados = 0
@@ -224,21 +234,17 @@ def _purgar_usuario(db, uid: str) -> dict:
         chats_borrados += 1
     stats["chats"] = chats_borrados
     stats["mensajes"] = mensajes_borrados
-    stats["archivos"] = archivos_borrados + _borrar_storage(f"perfiles/{uid}/")
+    stats["archivos"] = archivos_borrados + sum(_borrar_storage(f"perfiles/{p}/") for p in perfiles)
 
-    # Perfiles profesionales: el de id = uid (se borra con DOCS_POR_ID) y los
-    # antiguos reclamados con otro id, que llevan el uid en el campo `uid`
-    perfiles = {uid} | {
-        d.id for d in db.collection("tecnicos").where(filter=FieldFilter("uid", "==", uid)).stream()
-    }
     eventos = 0
     for perfil_id in perfiles:
-        ref = db.collection("tecnicos").document(perfil_id)
-        eventos += _borrar_subcoleccion(db, ref, "eventos")
-        if perfil_id != uid:
-            ref.delete()
+        eventos += _borrar_subcoleccion(db, db.collection("tecnicos").document(perfil_id), "eventos")
+    # El de id = uid (con su /estadisticas) se borra con DOCS_POR_ID
+    for perfil_id in otros_perfiles:
+        db.collection("estadisticas").document(perfil_id).delete()
+        db.collection("tecnicos").document(perfil_id).delete()
     stats["eventos"] = eventos
-    stats["perfilesOtroId"] = len(perfiles - {uid})
+    stats["perfilesOtroId"] = len(otros_perfiles)
 
     for col in DOCS_POR_ID:
         try:
