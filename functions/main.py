@@ -326,17 +326,14 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
     uid = (req.data or {}).get("uid")
     if not uid or not isinstance(uid, str):
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Falta el parámetro 'uid'.")
+    db = firestore.client()
+    # Antes de marcar en Auth: una marca de deshacer pendiente desharía esta
+    # verificación (y si no se puede quitar, no se verifica)
+    _quitar_marca_deshacer(db, uid)
     try:
         auth.update_user(uid, email_verified=True)
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
-    db = firestore.client()
-    # Una verificación pendiente de deshacer ya no aplica: si no, se desharía esta
-    try:
-        db.collection("verificaciones_email").document(uid).update(
-            {"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
-    except NotFound:
-        pass
     _marcar_perfil_verificado(db, uid)
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
     return {"ok": True}
@@ -1250,9 +1247,10 @@ def _email_verificado_en_auth(uid: str) -> bool:
         return False
 
 
-def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
+def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool, oculto: bool = False) -> None:
     """Pone emailVerificado del perfil según Auth, en una transacción. Con
-    `respetar_true` no pisa un true que haya puesto ya la verificación del código."""
+    `respetar_true` no pisa un true que haya puesto ya la verificación del
+    código. Con `oculto` queda en false sin consultar Auth."""
 
     @firestore.transactional
     def _anotar(txn):
@@ -1260,13 +1258,24 @@ def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
         if not snap.exists:
             return
         actual = (snap.to_dict() or {}).get("emailVerificado")
-        if actual is True and respetar_true:
+        if actual is True and respetar_true and not oculto:
             return
-        verificado = _email_verificado_en_auth(uid)
+        verificado = False if oculto else _email_verificado_en_auth(uid)
         if actual is not verificado:
             txn.update(ref, {"emailVerificado": verificado})
 
     _anotar(db.transaction())
+
+
+def _tiene_marca_deshacer(db, uid: str) -> bool:
+    """True si la verificación de `uid` está pendiente de deshacer (o no se
+    puede comprobar: en la duda, el perfil queda oculto)."""
+    try:
+        marca = db.collection("verificaciones_email").document(uid).get().to_dict() or {}
+    except Exception as e:
+        print(f"[TECNICOS] No se pudo leer la verificación de {uid}: {e}")
+        return True
+    return marca.get("deshacerPendiente") is True
 
 
 @firestore_fn.on_document_created(document="tecnicos/{tecnicoId}", region=REGION)
@@ -1283,7 +1292,9 @@ def on_tecnico_creado(event) -> None:
     ref = db.collection("tecnicos").document(event.params["tecnicoId"])
     # Un true que ya venía en el alta no lo puso el servidor: se decide por Auth.
     # Solo se respeta el que apareció después (la verificación del código).
-    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True)
+    # Con una verificación pendiente de deshacer, oculto aunque Auth diga que sí.
+    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True,
+                             oculto=_tiene_marca_deshacer(db, uid))
 
 
 AUTH_LOTE = 100   # máximo de identificadores por llamada a auth.get_users

@@ -922,11 +922,21 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
         # Auth aún la da por verificada, pero su perfil no se muestra
         self.assertIs(self.db.docs["tecnicos/u2"]["emailVerificado"], False)
 
-    def test_el_administrador_al_verificar_quita_el_deshacer_pendiente(self):
+    def test_el_administrador_quita_el_deshacer_pendiente_antes_de_verificar(self):
         self.usuario("p1", "p1@x.es", False)
         self.db.docs["verificaciones_email/p1"] = {"deshacerPendiente": True, "deshacerEmail": "x@x.es"}
+
+        def verificar(uid, **cambios):   # al marcar en Auth, la marca ya no está
+            self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/p1"])
+        self.update_user.side_effect = verificar
         llamar(main.marcar_email_verificado, "admin", admin=True, uid="p1")
-        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/p1"])
+        self.update_user.assert_called_once_with("p1", email_verified=True)
+
+    def test_con_un_deshacer_pendiente_el_perfil_nace_oculto(self):
+        self.usuario("p1", "p1@x.es", True)   # Auth aún la da por verificada
+        self.db.docs["verificaciones_email/p1"] = {"deshacerPendiente": True, "deshacerEmail": "otro@x.es"}
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], False)
+        self.assertIs(self.crear_perfil("p1", despues={"emailVerificado": True})["emailVerificado"], False)
 
     def test_si_la_cuenta_ya_estaba_verificada_el_perfil_se_hace_visible(self):
         self.usuario("p1", "p1@x.es", True)
