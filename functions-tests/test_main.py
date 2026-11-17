@@ -990,12 +990,15 @@ class _PlayFalso:
     def __init__(self):
         self.estados = {}       # token → subscriptionState
         self.caido = False
+        self.codigo_cancel = None   # fuerza la respuesta HTTP de :cancel (403, 503…)
         self.peticiones = []    # (método, url, cuerpo)
 
     def post(self, url, json=None, timeout=None):
         self.peticiones.append(("POST", url, json))
         if self.caido:
             raise ConnectionError("Play no responde")
+        if self.codigo_cancel is not None:
+            return _respuesta_http(self.codigo_cancel)
         token = url.rsplit("/", 1)[-1].split(":")[0]
         if token not in self.estados:
             return _respuesta_http(404)
@@ -1033,13 +1036,14 @@ class BorrarCuentaConSuscripcionTest(_ConPurga):
         }
 
     def borrar(self):
-        with mock.patch("builtins.print"):
+        with mock.patch("builtins.print") as self.log:
             return llamar(main.eliminar_mi_cuenta, "p1")
 
     def test_cancela_la_renovacion_y_borra_la_cuenta(self):
         self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
         respuesta = self.borrar()
         self.assertIs(respuesta["suscripcionCancelada"], True)
+        self.assertIs(respuesta["cancelarEnPlay"], False)
         self.assertEqual(self.play.peticiones[0], (
             "POST", f"{main.ANDROID_PUBLISHER}/purchases/subscriptionsv2/tokens/token-play-1:cancel",
             {"cancellationContext": {"cancellationType": "DEVELOPER_REQUESTED_STOP_PAYMENTS"}},
@@ -1057,6 +1061,34 @@ class BorrarCuentaConSuscripcionTest(_ConPurga):
         self.delete_user.assert_not_called()
         self.assertIn("tecnicos/p1", self.db.docs)
         self.assertIn("suscripciones/token-play-1", self.db.docs)
+
+    def test_sin_permiso_en_play_se_borra_y_se_pide_cancelarla_en_play(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        self.play.codigo_cancel = 403   # la cuenta de servicio no puede cancelar
+        respuesta = self.borrar()
+        self.assertIs(respuesta["suscripcionCancelada"], False)
+        self.assertIs(respuesta["cancelarEnPlay"], True)
+        self.delete_user.assert_called_once_with("p1")
+        self.assertTrue(any("[SUSCRIPCION]" in str(c) for c in self.log.call_args_list))
+
+    def test_un_fallo_pasajero_de_play_con_la_suscripcion_activa_no_borra(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        self.play.codigo_cancel = 503
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.borrar()
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.delete_user.assert_not_called()
+        self.assertIn("suscripciones/token-play-1", self.db.docs)
+
+    def test_el_administrador_puede_forzar_el_borrado_sin_llamar_a_play(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        self.play.caido = True
+        with mock.patch("builtins.print") as log:
+            respuesta = llamar(main.eliminar_usuario_completo, "admin", admin=True, uid="p1", forzar=True)
+        self.assertEqual(self.play.peticiones, [])
+        self.assertIs(respuesta["suscripcionCancelada"], False)
+        self.delete_user.assert_called_once_with("p1")
+        self.assertTrue(any("forzar" in str(c) for c in log.call_args_list))
 
     def test_sin_suscripcion_se_borra_sin_llamar_a_play(self):
         respuesta = self.borrar()
