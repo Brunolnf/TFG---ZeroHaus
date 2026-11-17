@@ -11,6 +11,5 @@
 - Decisión A5 (revisor del código de Opus). Se usa Sonnet en esfuerzo alto.
 
 ## Siguiente paso
-1. T-C4 (app: errores del borrado de cuenta y aviso `cancelarEnPlay`).
-2. Bloque D (denunciar y bloquear), después E (pagos), F (certificados) y H (publicación).
-3. Worktrees que se pueden borrar: `%TEMP%\wt-observabilidad`, `%TEMP%\wt-endurecer-app`, `%TEMP%\wt-deploy` y `.claude/worktrees/agent-*` del checkout principal.
+1. Bloque D (denunciar y bloquear), después E (pagos), F (certificados) y H (publicación). T-C4 fusionado en #55 (la app se publica con la próxima versión).
+2. Worktrees que se pueden borrar: `%TEMP%\wt-observabilidad`, `%TEMP%\wt-endurecer-app`, `%TEMP%\wt-deploy` y `.claude/worktrees/agent-*` del checkout principal.
