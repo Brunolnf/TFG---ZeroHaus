@@ -552,8 +552,9 @@ describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
     await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp()));
     // Volver a valorar sobrescribe la reseña con la fecha nueva
     await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ puntuacion: 3, comentario: "Regular" })));
-    // Un reloj de móvil algo adelantado sigue valiendo
+    // Un móvil con la hora adelantada sigue pudiendo valorar (justo por debajo del margen de 24 h)
     await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + MINUTO })));
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA - MINUTO })));
   });
 
   it("no admite campos fuera del modelo ni otro id", async () => {
@@ -573,7 +574,8 @@ describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
 
   it("la fecha es un número y no puede estar en el futuro", async () => {
     const db = verificado("cliente");
-    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA })));
+    // Margen de 24 h para móviles con la hora adelantada: justo por encima, no
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA + MINUTO })));
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: "9999999999999" })));
     const { fecha, ...sinFecha } = resenaApp();
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinFecha));
@@ -584,8 +586,8 @@ describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
       setDoc(doc(ctx.firestore(), "resenas/cliente_pro"), resenaApp()));
     const db = verificado("cliente");
     await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { nombreUsuario: "x".repeat(61) }));
-    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { fecha: Date.now() + DIA }));
-    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA })));
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { fecha: Date.now() + DIA + MINUTO }));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA + MINUTO })));
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
     await assertSucceeds(updateDoc(doc(db, "resenas/cliente_pro"), { puntuacion: 4, fecha: Date.now() }));
   });
@@ -646,7 +648,8 @@ describe("chat nuevo y fecha de los mensajes", () => {
 
   it("la fecha del mensaje es un número que no está en el futuro", async () => {
     const db = verificado("cliente");
-    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), mensajeApp({ fecha: Date.now() + DIA })));
+    // Justo por encima del margen de 24 h
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), mensajeApp({ fecha: Date.now() + DIA + MINUTO })));
     await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), mensajeApp({ fecha: "mañana" })));
     const { fecha, ...sinFecha } = mensajeApp();
     await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), sinFecha));
@@ -656,9 +659,11 @@ describe("chat nuevo y fecha de los mensajes", () => {
     const db = verificado("cliente");
     await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m21"),
       mensajeApp({ id: "m21", fecha: Date.now() - 7 * DIA })));
-    // Reloj del móvil algo adelantado
+    // Móvil con la hora adelantada, justo por debajo del margen de 24 h
     await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m22"),
       mensajeApp({ id: "m22", fecha: Date.now() + MINUTO })));
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m23"),
+      mensajeApp({ id: "m23", fecha: Date.now() + DIA - MINUTO })));
   });
 });
 

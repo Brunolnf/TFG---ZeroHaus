@@ -297,10 +297,12 @@ service cloud.firestore {
           && prof.uid in chat.get('escribieron', []);
     }
 
-    // Fechas escritas con el reloj del móvil: como mucho 5 minutos por delante
-    // del servidor (margen para relojes algo adelantados). Sin límite inferior.
+    // Fechas escritas con el reloj del móvil: como mucho 24 h por delante del
+    // servidor (el mismo margen que fechaUltimoMensaje), para no dejar sin
+    // chat ni reseñas a los móviles con la hora adelantada; en el chat el
+    // adjunto ya está subido cuando se escribe el mensaje. Sin límite inferior.
     function fechaNoFutura(fecha) {
-      return fecha is int && fecha <= request.time.toMillis() + 5 * 60 * 1000;
+      return fecha is int && fecha <= request.time.toMillis() + 86400000;
     }
     // Campos del modelo Resena de la app (lo que escribe al serializarlo entero)
     function camposModeloResena() {
