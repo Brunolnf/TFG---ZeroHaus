@@ -699,10 +699,15 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play no tiene esta suscripción activa.",
     "subCambiarAPlan" to "Cambiar a este plan",
     "subCambioPlanInfo" to "Al cambiar de plan, Google Play sustituye tu suscripción actual y descuenta el tiempo que te queda: no pagarás dos planes a la vez.",
-    "ajustesEliminarAvisoSuscripcion" to "Si tienes una suscripción de profesional, cancélala antes en Google Play: borrar la cuenta no detiene los cobros.",
+    "ajustesEliminarAvisoSuscripcion" to "Al borrar la cuenta se cancela también la renovación de tu suscripción en Google Play, así que no se te volverá a cobrar.",
     "comOpinion" to "opinión",
     "comValoracion" to "valoración",
-    "ajustesEliminarPerdidaPeriodo" to "Tienes un plan vigente: si borras la cuenta perderás el periodo ya pagado, sin reembolso.",
+    "ajustesEliminarPerdidaPeriodo" to "El periodo ya pagado se pierde y no se reembolsa.",
+    "ajustesEliminarErrorPlay" to "No se pudo cancelar tu suscripción en Google Play; inténtalo de nuevo en unos minutos. Tu cuenta no se ha borrado.",
+    "ajustesCuentaBorradaTitulo" to "Cuenta borrada",
+    "ajustesCuentaBorradaCancelarPlay" to "Tu cuenta se ha borrado, pero no hemos podido cancelar tu suscripción en Google Play. Cancélala tú a mano para que no se te siga cobrando.",
+    "ajustesCuentaBorradaAbrirPlay" to "Abrir Google Play",
+    "ajustesCuentaBorradaCerrar" to "Entendido",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1363,10 +1368,15 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play doesn't show this subscription as active.",
     "subCambiarAPlan" to "Switch to this plan",
     "subCambioPlanInfo" to "When you switch plans, Google Play replaces your current subscription and credits the unused time: you won't pay for two plans at once.",
-    "ajustesEliminarAvisoSuscripcion" to "If you have a professional subscription, cancel it in Google Play first: deleting your account doesn't stop the charges.",
+    "ajustesEliminarAvisoSuscripcion" to "Deleting your account also cancels the renewal of your Google Play subscription, so you will not be charged again.",
     "comOpinion" to "review",
     "comValoracion" to "review",
-    "ajustesEliminarPerdidaPeriodo" to "You have an active plan: if you delete the account you will lose the period you have already paid for, with no refund.",
+    "ajustesEliminarPerdidaPeriodo" to "The period you have already paid for is lost and is not refunded.",
+    "ajustesEliminarErrorPlay" to "Your Google Play subscription could not be cancelled; please try again in a few minutes. Your account has not been deleted.",
+    "ajustesCuentaBorradaTitulo" to "Account deleted",
+    "ajustesCuentaBorradaCancelarPlay" to "Your account has been deleted, but we could not cancel your Google Play subscription. Please cancel it yourself so you are not charged again.",
+    "ajustesCuentaBorradaAbrirPlay" to "Open Google Play",
+    "ajustesCuentaBorradaCerrar" to "Got it",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2027,10 +2037,15 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play no té aquesta subscripció activa.",
     "subCambiarAPlan" to "Canviar a aquest pla",
     "subCambioPlanInfo" to "En canviar de pla, Google Play substitueix la subscripció actual i descompta el temps que et queda: no pagaràs dos plans alhora.",
-    "ajustesEliminarAvisoSuscripcion" to "Si tens una subscripció de professional, cancel·la-la abans a Google Play: esborrar el compte no atura els cobraments.",
+    "ajustesEliminarAvisoSuscripcion" to "En esborrar el compte també es cancel·la la renovació de la teva subscripció a Google Play, així que no se't tornarà a cobrar.",
     "comOpinion" to "opinió",
     "comValoracion" to "valoració",
-    "ajustesEliminarPerdidaPeriodo" to "Tens un pla vigent: si esborres el compte perdràs el període ja pagat, sense reemborsament.",
+    "ajustesEliminarPerdidaPeriodo" to "El període ja pagat es perd i no es reemborsa.",
+    "ajustesEliminarErrorPlay" to "No s'ha pogut cancel·lar la teva subscripció a Google Play; torna-ho a provar d'aquí a uns minuts. El teu compte no s'ha esborrat.",
+    "ajustesCuentaBorradaTitulo" to "Compte esborrat",
+    "ajustesCuentaBorradaCancelarPlay" to "El teu compte s'ha esborrat, però no hem pogut cancel·lar la teva subscripció a Google Play. Cancel·la-la tu mateix perquè no et segueixin cobrant.",
+    "ajustesCuentaBorradaAbrirPlay" to "Obrir Google Play",
+    "ajustesCuentaBorradaCerrar" to "Entès",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2691,10 +2706,15 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play-n harpidetza hau ez dago aktibo.",
     "subCambiarAPlan" to "Aldatu plan honetara",
     "subCambioPlanInfo" to "Plana aldatzean, Google Play-k zure egungo harpidetza ordezkatzen du eta erabili gabeko denbora deskontatzen du: ez duzu bi plan aldi berean ordainduko.",
-    "ajustesEliminarAvisoSuscripcion" to "Profesionalen harpidetza baduzu, ezeztatu lehenik Google Play-n: kontua ezabatzeak ez ditu kobrantzak geldiarazten.",
+    "ajustesEliminarAvisoSuscripcion" to "Kontua ezabatzean, Google Playko harpidetzaren berritzea ere bertan behera geratzen da, beraz ez zaizu berriro kobratuko.",
     "comOpinion" to "iritzi",
     "comValoracion" to "balorazio",
-    "ajustesEliminarPerdidaPeriodo" to "Plan indarrean duzu: kontua ezabatzen baduzu, jada ordaindutako aldia galduko duzu, itzulketarik gabe.",
+    "ajustesEliminarPerdidaPeriodo" to "Ordaindutako aldia galdu egiten da eta ez da itzultzen.",
+    "ajustesEliminarErrorPlay" to "Ezin izan da zure Google Playko harpidetza bertan behera utzi; saiatu berriro minutu batzuk barru. Zure kontua ez da ezabatu.",
+    "ajustesCuentaBorradaTitulo" to "Kontua ezabatu da",
+    "ajustesCuentaBorradaCancelarPlay" to "Zure kontua ezabatu da, baina ezin izan dugu Google Playko harpidetza bertan behera utzi. Utzi zuk eskuz, kobratzen jarrai ez dezaten.",
+    "ajustesCuentaBorradaAbrirPlay" to "Ireki Google Play",
+    "ajustesCuentaBorradaCerrar" to "Ulertu dut",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3355,10 +3375,15 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play non ten esta subscrición activa.",
     "subCambiarAPlan" to "Cambiar a este plan",
     "subCambioPlanInfo" to "Ao cambiar de plan, Google Play substitúe a túa subscrición actual e desconta o tempo que che queda: non pagarás dous plans á vez.",
-    "ajustesEliminarAvisoSuscripcion" to "Se tes unha subscrición de profesional, cancélaa antes en Google Play: borrar a conta non detén os cobros.",
+    "ajustesEliminarAvisoSuscripcion" to "Ao borrar a conta cancélase tamén a renovación da túa subscrición en Google Play, así que non se che volverá cobrar.",
     "comOpinion" to "opinión",
     "comValoracion" to "valoración",
-    "ajustesEliminarPerdidaPeriodo" to "Tes un plan vixente: se borras a conta perderás o período xa pagado, sen reembolso.",
+    "ajustesEliminarPerdidaPeriodo" to "O período xa pagado perdese e non se reembolsa.",
+    "ajustesEliminarErrorPlay" to "Non se puido cancelar a túa subscrición en Google Play; téntao de novo en uns minutos. A túa conta non se borrou.",
+    "ajustesCuentaBorradaTitulo" to "Conta borrada",
+    "ajustesCuentaBorradaCancelarPlay" to "A túa conta borrouse, pero non puidemos cancelar a túa subscrición en Google Play. Cancélaa ti mesmo para que non se che siga cobrando.",
+    "ajustesCuentaBorradaAbrirPlay" to "Abrir Google Play",
+    "ajustesCuentaBorradaCerrar" to "Entendido",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4019,10 +4044,15 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "O Google Play não tem esta subscrição ativa.",
     "subCambiarAPlan" to "Mudar para este plano",
     "subCambioPlanInfo" to "Ao mudar de plano, o Google Play substitui a sua subscrição atual e desconta o tempo que falta: não pagará dois planos ao mesmo tempo.",
-    "ajustesEliminarAvisoSuscripcion" to "Se tiver uma subscrição de profissional, cancele-a primeiro no Google Play: eliminar a conta não interrompe as cobranças.",
+    "ajustesEliminarAvisoSuscripcion" to "Ao apagar a conta, a renovação da sua subscrição no Google Play também é cancelada, por isso não voltará a ser cobrado.",
     "comOpinion" to "avaliação",
     "comValoracion" to "avaliação",
-    "ajustesEliminarPerdidaPeriodo" to "Tens um plano ativo: se eliminares a conta, perderás o período já pago, sem reembolso.",
+    "ajustesEliminarPerdidaPeriodo" to "O período já pago é perdido e não é reembolsado.",
+    "ajustesEliminarErrorPlay" to "Não foi possível cancelar a sua subscrição no Google Play; tente novamente dentro de alguns minutos. A sua conta não foi apagada.",
+    "ajustesCuentaBorradaTitulo" to "Conta apagada",
+    "ajustesCuentaBorradaCancelarPlay" to "A sua conta foi apagada, mas não conseguimos cancelar a sua subscrição no Google Play. Cancele-a manualmente para que não continue a ser cobrado.",
+    "ajustesCuentaBorradaAbrirPlay" to "Abrir o Google Play",
+    "ajustesCuentaBorradaCerrar" to "Entendido",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4683,10 +4713,15 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play n'indique pas cet abonnement comme actif.",
     "subCambiarAPlan" to "Passer à cette formule",
     "subCambioPlanInfo" to "Quand vous changez de formule, Google Play remplace votre abonnement actuel et déduit le temps restant : vous ne paierez jamais deux formules à la fois.",
-    "ajustesEliminarAvisoSuscripcion" to "Si vous avez un abonnement professionnel, résiliez-le d'abord dans Google Play : supprimer votre compte n'arrête pas les prélèvements.",
+    "ajustesEliminarAvisoSuscripcion" to "La suppression du compte annule aussi le renouvellement de votre abonnement Google Play : vous ne serez plus débité.",
     "comOpinion" to "avis",
     "comValoracion" to "avis",
-    "ajustesEliminarPerdidaPeriodo" to "Vous avez un abonnement en cours : si vous supprimez le compte, vous perdrez la période déjà payée, sans remboursement.",
+    "ajustesEliminarPerdidaPeriodo" to "La période déjà payée est perdue et n'est pas remboursée.",
+    "ajustesEliminarErrorPlay" to "Impossible d'annuler votre abonnement Google Play ; réessayez dans quelques minutes. Votre compte n'a pas été supprimé.",
+    "ajustesCuentaBorradaTitulo" to "Compte supprimé",
+    "ajustesCuentaBorradaCancelarPlay" to "Votre compte a été supprimé, mais nous n'avons pas pu annuler votre abonnement Google Play. Annulez-le vous-même pour ne plus être débité.",
+    "ajustesCuentaBorradaAbrirPlay" to "Ouvrir Google Play",
+    "ajustesCuentaBorradaCerrar" to "Compris",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5347,10 +5382,15 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Laut Google Play ist dieses Abo nicht aktiv.",
     "subCambiarAPlan" to "Zu diesem Tarif wechseln",
     "subCambioPlanInfo" to "Beim Tarifwechsel ersetzt Google Play dein aktuelles Abo und rechnet die verbleibende Zeit an: Du zahlst nie zwei Tarife gleichzeitig.",
-    "ajustesEliminarAvisoSuscripcion" to "Wenn du ein Profi-Abo hast, kündige es zuerst in Google Play: Das Löschen des Kontos stoppt die Abbuchungen nicht.",
+    "ajustesEliminarAvisoSuscripcion" to "Mit dem Löschen des Kontos wird auch die Verlängerung deines Abos bei Google Play gekündigt, es wird dir also nichts mehr berechnet.",
     "comOpinion" to "Bewertung",
     "comValoracion" to "Bewertung",
-    "ajustesEliminarPerdidaPeriodo" to "Du hast einen laufenden Tarif: Wenn du das Konto löschst, verlierst du den bereits bezahlten Zeitraum, ohne Erstattung.",
+    "ajustesEliminarPerdidaPeriodo" to "Der bereits bezahlte Zeitraum verfällt und wird nicht erstattet.",
+    "ajustesEliminarErrorPlay" to "Dein Google-Play-Abo konnte nicht gekündigt werden; versuche es in ein paar Minuten erneut. Dein Konto wurde nicht gelöscht.",
+    "ajustesCuentaBorradaTitulo" to "Konto gelöscht",
+    "ajustesCuentaBorradaCancelarPlay" to "Dein Konto wurde gelöscht, aber wir konnten dein Google-Play-Abo nicht kündigen. Kündige es selbst, damit dir nichts mehr berechnet wird.",
+    "ajustesCuentaBorradaAbrirPlay" to "Google Play öffnen",
+    "ajustesCuentaBorradaCerrar" to "Verstanden",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6011,10 +6051,15 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play non risulta avere questo abbonamento attivo.",
     "subCambiarAPlan" to "Passa a questo piano",
     "subCambioPlanInfo" to "Quando cambi piano, Google Play sostituisce l'abbonamento attuale e scala il tempo rimanente: non pagherai mai due piani insieme.",
-    "ajustesEliminarAvisoSuscripcion" to "Se hai un abbonamento da professionista, annullalo prima su Google Play: eliminare l'account non interrompe gli addebiti.",
+    "ajustesEliminarAvisoSuscripcion" to "Eliminando l'account viene annullato anche il rinnovo del tuo abbonamento su Google Play, quindi non ti verrà più addebitato nulla.",
     "comOpinion" to "recensione",
     "comValoracion" to "recensione",
-    "ajustesEliminarPerdidaPeriodo" to "Hai un piano attivo: se elimini l'account perderai il periodo già pagato, senza rimborso.",
+    "ajustesEliminarPerdidaPeriodo" to "Il periodo già pagato va perso e non viene rimborsato.",
+    "ajustesEliminarErrorPlay" to "Non è stato possibile annullare il tuo abbonamento su Google Play; riprova tra qualche minuto. Il tuo account non è stato eliminato.",
+    "ajustesCuentaBorradaTitulo" to "Account eliminato",
+    "ajustesCuentaBorradaCancelarPlay" to "Il tuo account è stato eliminato, ma non siamo riusciti ad annullare il tuo abbonamento su Google Play. Annullalo tu stesso per non essere più addebitato.",
+    "ajustesCuentaBorradaAbrirPlay" to "Apri Google Play",
+    "ajustesCuentaBorradaCerrar" to "Capito",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6675,10 +6720,15 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "لا يُظهر Google Play هذا الاشتراك على أنه نشط.",
     "subCambiarAPlan" to "التبديل إلى هذه الخطة",
     "subCambioPlanInfo" to "عند تغيير الخطة، يستبدل Google Play اشتراكك الحالي ويحتسب المدة المتبقية: لن تدفع مقابل خطتين في الوقت نفسه.",
-    "ajustesEliminarAvisoSuscripcion" to "إذا كان لديك اشتراك احترافي، فألغِه أولاً من Google Play: حذف الحساب لا يوقف الدفعات.",
+    "ajustesEliminarAvisoSuscripcion" to "عند حذف الحساب يُلغى أيضًا تجديد اشتراكك في Google Play، لذلك لن يتم خصم أي مبلغ منك مرة أخرى.",
     "comOpinion" to "تقييم",
     "comValoracion" to "تقييم",
-    "ajustesEliminarPerdidaPeriodo" to "لديك خطة سارية: إذا حذفت الحساب فستفقد الفترة المدفوعة بالفعل، دون استرداد.",
+    "ajustesEliminarPerdidaPeriodo" to "تُفقد الفترة المدفوعة مسبقًا ولا يتم استرداد قيمتها.",
+    "ajustesEliminarErrorPlay" to "تعذّر إلغاء اشتراكك في Google Play؛ أعد المحاولة بعد بضع دقائق. لم يتم حذف حسابك.",
+    "ajustesCuentaBorradaTitulo" to "تم حذف الحساب",
+    "ajustesCuentaBorradaCancelarPlay" to "تم حذف حسابك، لكننا لم نتمكن من إلغاء اشتراكك في Google Play. ألغِه بنفسك حتى لا يتم خصم أي مبلغ منك مجددًا.",
+    "ajustesCuentaBorradaAbrirPlay" to "فتح Google Play",
+    "ajustesCuentaBorradaCerrar" to "فهمت",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7339,10 +7389,15 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play 显示此订阅未生效。",
     "subCambiarAPlan" to "切换到此方案",
     "subCambioPlanInfo" to "切换方案时，Google Play 会替换您当前的订阅并抵扣剩余时长：您不会同时为两个方案付费。",
-    "ajustesEliminarAvisoSuscripcion" to "如果您有专业版订阅，请先在 Google Play 中取消：删除账户不会停止扣费。",
+    "ajustesEliminarAvisoSuscripcion" to "删除账号时，也会取消你在 Google Play 上的订阅续订，因此不会再向你扣费。",
     "comOpinion" to "条评价",
     "comValoracion" to "条评价",
-    "ajustesEliminarPerdidaPeriodo" to "你有一个仍在有效期内的套餐：删除账户后，已支付的时段将作废，不予退款。",
+    "ajustesEliminarPerdidaPeriodo" to "已付费的时段将作废，且不予退款。",
+    "ajustesEliminarErrorPlay" to "无法取消你在 Google Play 上的订阅，请几分钟后重试。你的账号尚未删除。",
+    "ajustesCuentaBorradaTitulo" to "账号已删除",
+    "ajustesCuentaBorradaCancelarPlay" to "你的账号已删除，但我们未能取消你在 Google Play 上的订阅。请自行取消，以免继续被扣费。",
+    "ajustesCuentaBorradaAbrirPlay" to "打开 Google Play",
+    "ajustesCuentaBorradaCerrar" to "知道了",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8003,10 +8058,15 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Google Play nu are acest abonament activ.",
     "subCambiarAPlan" to "Treci la acest plan",
     "subCambioPlanInfo" to "Când schimbi planul, Google Play îți înlocuiește abonamentul actual și scade timpul rămas: nu vei plăti două planuri în același timp.",
-    "ajustesEliminarAvisoSuscripcion" to "Dacă ai un abonament de profesionist, anulează-l mai întâi din Google Play: ștergerea contului nu oprește plățile.",
+    "ajustesEliminarAvisoSuscripcion" to "La ștergerea contului se anulează și reînnoirea abonamentului tău din Google Play, deci nu vei mai fi taxat.",
     "comOpinion" to "recenzie",
     "comValoracion" to "recenzie",
-    "ajustesEliminarPerdidaPeriodo" to "Ai un plan activ: dacă ștergi contul, vei pierde perioada deja plătită, fără rambursare.",
+    "ajustesEliminarPerdidaPeriodo" to "Perioada deja plătită se pierde și nu se rambursează.",
+    "ajustesEliminarErrorPlay" to "Nu s-a putut anula abonamentul tău din Google Play; încearcă din nou în câteva minute. Contul tău nu a fost șters.",
+    "ajustesCuentaBorradaTitulo" to "Cont șters",
+    "ajustesCuentaBorradaCancelarPlay" to "Contul tău a fost șters, dar nu am putut anula abonamentul tău din Google Play. Anulează-l tu manual ca să nu mai fii taxat.",
+    "ajustesCuentaBorradaAbrirPlay" to "Deschide Google Play",
+    "ajustesCuentaBorradaCerrar" to "Am înțeles",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8667,10 +8727,15 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Volgens Google Play is dit abonnement niet actief.",
     "subCambiarAPlan" to "Overstappen naar dit abonnement",
     "subCambioPlanInfo" to "Als je van abonnement wisselt, vervangt Google Play je huidige abonnement en verrekent de resterende tijd: je betaalt nooit voor twee abonnementen tegelijk.",
-    "ajustesEliminarAvisoSuscripcion" to "Heb je een abonnement voor vakmensen? Zeg het eerst op in Google Play: je account verwijderen stopt de betalingen niet.",
+    "ajustesEliminarAvisoSuscripcion" to "Als je je account verwijdert, wordt ook de verlenging van je Google Play-abonnement geannuleerd, dus er wordt niets meer afgeschreven.",
     "comOpinion" to "beoordeling",
     "comValoracion" to "beoordeling",
-    "ajustesEliminarPerdidaPeriodo" to "Je hebt een lopend abonnement: als je het account verwijdert, verlies je de al betaalde periode, zonder terugbetaling.",
+    "ajustesEliminarPerdidaPeriodo" to "De al betaalde periode vervalt en wordt niet terugbetaald.",
+    "ajustesEliminarErrorPlay" to "Je Google Play-abonnement kon niet worden geannuleerd; probeer het over een paar minuten opnieuw. Je account is niet verwijderd.",
+    "ajustesCuentaBorradaTitulo" to "Account verwijderd",
+    "ajustesCuentaBorradaCancelarPlay" to "Je account is verwijderd, maar we konden je Google Play-abonnement niet annuleren. Annuleer het zelf zodat er niets meer wordt afgeschreven.",
+    "ajustesCuentaBorradaAbrirPlay" to "Google Play openen",
+    "ajustesCuentaBorradaCerrar" to "Begrepen",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9331,8 +9396,13 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "subNoActivaPlay" to "Według Google Play ta subskrypcja nie jest aktywna.",
     "subCambiarAPlan" to "Zmień na ten plan",
     "subCambioPlanInfo" to "Przy zmianie planu Google Play zastępuje obecną subskrypcję i odlicza niewykorzystany czas: nie zapłacisz za dwa plany jednocześnie.",
-    "ajustesEliminarAvisoSuscripcion" to "Jeśli masz subskrypcję dla specjalistów, najpierw anuluj ją w Google Play: usunięcie konta nie zatrzymuje płatności.",
+    "ajustesEliminarAvisoSuscripcion" to "Usunięcie konta anuluje też odnowienie subskrypcji w Google Play, więc nie zostaniesz już obciążony opłatą.",
     "comOpinion" to "opinia",
     "comValoracion" to "opinia",
-    "ajustesEliminarPerdidaPeriodo" to "Masz aktywny plan: jeśli usuniesz konto, stracisz już opłacony okres bez zwrotu pieniędzy.",
+    "ajustesEliminarPerdidaPeriodo" to "Opłacony już okres przepada i nie jest zwracany.",
+    "ajustesEliminarErrorPlay" to "Nie udało się anulować subskrypcji w Google Play; spróbuj ponownie za kilka minut. Twoje konto nie zostało usunięte.",
+    "ajustesCuentaBorradaTitulo" to "Konto usunięte",
+    "ajustesCuentaBorradaCancelarPlay" to "Twoje konto zostało usunięte, ale nie udało się anulować subskrypcji w Google Play. Anuluj ją samodzielnie, aby nie być dalej obciążanym.",
+    "ajustesCuentaBorradaAbrirPlay" to "Otwórz Google Play",
+    "ajustesCuentaBorradaCerrar" to "Rozumiem",
 ), respaldo = espanol) }

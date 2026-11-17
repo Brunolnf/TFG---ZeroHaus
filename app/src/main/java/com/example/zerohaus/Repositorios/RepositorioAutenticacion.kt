@@ -5,6 +5,7 @@ import android.os.Looper
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.BorradoCuenta
 import com.example.zerohaus.Util.codigoIdioma
 import com.example.zerohaus.Util.Diagnostico
 import com.example.zerohaus.Util.esFalloDeRed
@@ -21,6 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 
 /**
  * Autenticación y cuenta: login (con comprobación de bloqueo), registro,
@@ -261,23 +263,33 @@ class RepositorioAutenticacion {
      * Borrado self-service de la cuenta: delega en la Cloud Function
      * `eliminar_mi_cuenta`, que borra en cascada todos los datos del usuario y
      * su cuenta de Auth server-side (RGPD / requisito de Google Play). Al
-     * terminar cerramos la sesión local.
+     * terminar cerramos la sesión local, salvo que quede una suscripción por
+     * cancelar a mano en Google Play: entonces el resultado es `true` y la sesión
+     * se cierra al descartar el aviso (la pantalla llama a `onCerrarSesion`).
+     * Antes de borrar, el servidor cancela la renovación en Play; si Play falla
+     * de forma pasajera no se borra nada.
      */
-    fun eliminarMiCuenta(callback: (Result<Unit>) -> Unit) {
+    fun eliminarMiCuenta(callback: (Result<Boolean>) -> Unit) {
         if (auth.currentUser == null) {
             callback(Result.failure(Exception(textos().authErrSinSesion)))
             return
         }
         functions.getHttpsCallable("eliminar_mi_cuenta")
             .call()
-            .addOnSuccessListener {
-                auth.signOut()
-                callback(Result.success(Unit))
+            .addOnSuccessListener { resultado ->
+                val cancelarEnPlay = BorradoCuenta.requiereCancelarEnPlay(resultado.getData())
+                if (!cancelarEnPlay) auth.signOut()
+                callback(Result.success(cancelarEnPlay))
             }
             .addOnFailureListener { e ->
                 Diagnostico.errorDeFuncion("eliminar_mi_cuenta", e)
-                callback(Result.failure(Exception(
-                    if (e.esFalloDeRed()) textos().errorRed else textos().ajustesEliminarError)))
+                val fe = e as? FirebaseFunctionsException
+                callback(Result.failure(Exception(when {
+                    e.esFalloDeRed() -> textos().errorRed
+                    BorradoCuenta.esFalloTransitorioDePlay(fe?.code?.name, fe?.details) ->
+                        textos().ajustesEliminarErrorPlay
+                    else -> textos().ajustesEliminarError
+                })))
             }
     }
 

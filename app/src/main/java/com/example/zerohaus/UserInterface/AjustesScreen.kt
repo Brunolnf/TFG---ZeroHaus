@@ -30,7 +30,7 @@ import com.example.zerohaus.BuildConfig
 import com.example.zerohaus.ViewModel.AjustesViewModel
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
-import com.example.zerohaus.Util.BillingManager
+import com.example.zerohaus.Util.BorradoCuenta
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.NotificacionesLocales
 
@@ -70,6 +70,7 @@ fun AjustesScreen(
 
     var mostrarCambiarPass by remember { mutableStateOf(false) }
     var mostrarEliminar by remember { mutableStateOf(false) }
+    var avisoCancelarEnPlay by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.cargarAjustes() }
 
@@ -380,6 +381,25 @@ fun AjustesScreen(
         )
     }
 
+    // ── Aviso: cuenta borrada pero la suscripción hay que cancelarla a mano ──
+    if (avisoCancelarEnPlay) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(c.ajustesCuentaBorradaTitulo, fontWeight = FontWeight.SemiBold) },
+            text = { Text(c.ajustesCuentaBorradaCancelarPlay) },
+            confirmButton = {
+                TextButton(onClick = { abrirUrl(BorradoCuenta.URL_SUSCRIPCIONES_PLAY) }) {
+                    Text(c.ajustesCuentaBorradaAbrirPlay, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { avisoCancelarEnPlay = false; onCerrarSesion() }) {
+                    Text(c.ajustesCuentaBorradaCerrar)
+                }
+            }
+        )
+    }
+
     // ── Diálogo: eliminar cuenta ──
     if (mostrarEliminar) {
         AlertDialog(
@@ -389,18 +409,14 @@ fun AjustesScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(c.ajustesEliminarMensaje)
-                    // Borrar la cuenta no cancela la suscripción de Google Play:
-                    // un profesional seguiría pagando sin saberlo
+                    // Al borrar la cuenta el servidor cancela la renovación en
+                    // Google Play; el periodo ya pagado se pierde sin reembolso
                     val esProfesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
                     if (esProfesional) {
                         Text(c.ajustesEliminarAvisoSuscripcion, color = rojo, fontSize = 13.sp)
                         if (estado.planVigente != false) {
                             Text(c.ajustesEliminarPerdidaPeriodo, color = rojo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
-                        TextButton(
-                            onClick = { abrirUrl(BillingManager.urlGestionSuscripcion(PLAY_ID)) },
-                            contentPadding = PaddingValues(0.dp)
-                        ) { Text(c.subGestionar) }
                     }
                 }
             },
@@ -408,9 +424,10 @@ fun AjustesScreen(
                 TextButton(
                     enabled = !estado.eliminandoCuenta,
                     onClick = {
-                        viewModel.eliminarCuenta {
+                        viewModel.eliminarCuenta { cancelarEnPlay ->
                             mostrarEliminar = false
-                            onCerrarSesion()
+                            // La sesión sigue abierta hasta que el usuario lea el aviso
+                            if (cancelarEnPlay) avisoCancelarEnPlay = true else onCerrarSesion()
                         }
                     }
                 ) {

@@ -109,12 +109,13 @@ class AjustesViewModel : ViewModel() {
         }
     }
 
-    fun eliminarCuenta(onExito: () -> Unit) {
+    /** [onExito] recibe `true` si queda una suscripción por cancelar a mano en Google Play. */
+    fun eliminarCuenta(onExito: (cancelarEnPlay: Boolean) -> Unit) {
         estado = estado.copy(eliminandoCuenta = true, error = null, mensajeToast = null)
         repoAuth.eliminarMiCuenta { r ->
-            r.onSuccess {
+            r.onSuccess { cancelarEnPlay ->
                 estado = estado.copy(eliminandoCuenta = false)
-                onExito()
+                onExito(cancelarEnPlay)
             }.onFailure {
                 estado = estado.copy(eliminandoCuenta = false, error = it.message)
             }
