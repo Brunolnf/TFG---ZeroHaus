@@ -5,7 +5,7 @@
 **Eficiencia energética para tu hogar, y los profesionales que te ayudan a conseguirla.**
 
 [![CI](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml/badge.svg)](https://github.com/Brunolnf/TFG---ZeroHaus/actions/workflows/ci.yml)
-![Versión](https://img.shields.io/badge/versión-2.3.0-1F6E43)
+![Versión](https://img.shields.io/badge/versión-2.3.1-1F6E43)
 ![Android](https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.4-7F52FF?logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white)

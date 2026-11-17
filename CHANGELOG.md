@@ -4,6 +4,15 @@ Todos los cambios relevantes de ZeroHaus. El formato sigue [Keep a Changelog](ht
 
 ## [Sin publicar]
 
+## [2.3.1] — 2026-10-19 · versionCode 7
+
+Primera versión de la 2.3 para Google Play (la 2.3.0 no llegó a subirse).
+
+### Corregido
+- **Páginas legales**: los enlaces de la app y de la ficha de Play (privacidad, términos y gestión de datos) daban error 404 porque el Hosting no estaba desplegado. Ya están publicadas, con el responsable (Bruno Linares) y un email de contacto real.
+- **«Contactar» y derechos de privacidad**: escribían a `soporte@zerohaus.es`, que no existe; ahora a `brulinf9@gmail.com`.
+- La política de privacidad describe lo que hace la app hoy: sin fijación de certificados, adjuntos del chat (fotos y PDF) y reseñas solo con respuesta del profesional.
+
 ## [2.3.0] — 2026-10-09 · versionCode 6
 
 ### Corregido (diagnóstico de octubre de 2026)
