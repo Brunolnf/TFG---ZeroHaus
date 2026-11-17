@@ -6,10 +6,17 @@ instaladas:
 
 Están fuera de functions/ para que no se suban con el despliegue.
 """
+import calendar
+import hashlib
+import hmac
+import inspect
 import json
 import os
 import sys
+import time
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 # main.py declara los secretos SMTP; para importarlo basta con valores ficticios
 os.environ.setdefault("SMTP_USUARIO", "tests@example.com")
@@ -17,6 +24,7 @@ os.environ.setdefault("SMTP_CLAVE", "tests")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "functions"))
 
 import main  # noqa: E402
+from google.api_core.exceptions import NotFound  # noqa: E402
 
 
 def factura(**cambios):
@@ -334,6 +342,336 @@ class EmailVerificadoTest(unittest.TestCase):
     def test_sin_sesion_o_sin_verificar_no_pasa(self):
         self.assertEqual(self.codigo(_Peticion()), main.https_fn.FunctionsErrorCode.UNAUTHENTICATED)
         self.assertEqual(self.codigo(_Peticion("u1")), main.https_fn.FunctionsErrorCode.PERMISSION_DENIED)
+
+
+# ── Firestore y Auth en memoria, para probar los flujos con transacciones ──
+
+class _SnapMem:
+    def __init__(self, ref, datos):
+        self.reference, self.id, self._datos = ref, ref.id, datos
+        self.exists = datos is not None
+    def to_dict(self): return None if self._datos is None else dict(self._datos)
+
+
+def _sin_borrados(datos):
+    return {k: v for k, v in datos.items() if v is not main.firestore.DELETE_FIELD}
+
+
+class _RefMem:
+    def __init__(self, db, ruta):
+        self._db, self.ruta, self.id = db, ruta, ruta.rsplit("/", 1)[-1]
+    def get(self, transaction=None): return _SnapMem(self, self._db.docs.get(self.ruta))
+    def set(self, datos, merge=False):
+        base = dict(self._db.docs.get(self.ruta) or {}) if merge else {}
+        base.update(datos)
+        self._db.docs[self.ruta] = _sin_borrados(base)
+    def update(self, datos):
+        if self.ruta not in self._db.docs:
+            raise NotFound(f"No existe {self.ruta}")
+        self._db.docs[self.ruta] = _sin_borrados({**self._db.docs[self.ruta], **datos})
+
+
+_OPERADORES = {"==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b}
+
+
+class _ConsultaMem:
+    """Colección de primer nivel con filtros where(filter=FieldFilter(...))."""
+    def __init__(self, db, nombre, filtros=()):
+        self._db, self._nombre, self._filtros = db, nombre, list(filtros)
+    def document(self, doc_id): return _RefMem(self._db, f"{self._nombre}/{doc_id}")
+    def where(self, filter): return _ConsultaMem(self._db, self._nombre, self._filtros + [filter])
+    def stream(self):
+        prefijo = f"{self._nombre}/"
+        for ruta, datos in list(self._db.docs.items()):
+            if not ruta.startswith(prefijo) or "/" in ruta[len(prefijo):]:
+                continue
+            if all(f.field_path in datos and _OPERADORES[f.op_string](datos[f.field_path], f.value)
+                   for f in self._filtros):
+                yield _RefMem(self._db, ruta).get()
+
+
+class _FirestoreMem:
+    def __init__(self): self.docs = {}
+    def collection(self, nombre): return _ConsultaMem(self, nombre)
+    def transaction(self):
+        return SimpleNamespace(set=lambda ref, datos, merge=False: ref.set(datos, merge=merge),
+                               update=lambda ref, datos: ref.update(datos))
+
+
+class _ConServiciosFalsos(unittest.TestCase):
+    """Firestore y Auth en memoria y el correo capturado (nada sale a la red)."""
+
+    def setUp(self):
+        self.db = _FirestoreMem()
+        self.usuarios = {}         # uid → SimpleNamespace(email, email_verified)
+        self.correos = []          # destinatarios de los avisos enviados
+        self.codigos = []          # (destino, código) de los emails de verificación
+        self.update_user = mock.Mock()
+        self.auth_caido = False     # True: Auth responde con un error inesperado
+        for parche in (
+            mock.patch.object(main.firestore, "transactional", lambda f: f),
+            mock.patch.object(main.firestore, "client", lambda: self.db),
+            mock.patch.object(main.auth, "get_user", self._get_user),
+            mock.patch.object(main.auth, "update_user", self.update_user),
+            mock.patch.object(main, "_enviar_email", lambda destino, *a, **k: self.correos.append(destino)),
+            mock.patch.object(main, "_enviar_email_codigo", lambda destino, codigo, idioma: self.codigos.append((destino, codigo))),
+        ):
+            parche.start()
+            self.addCleanup(parche.stop)
+
+    def _get_user(self, uid):
+        if self.auth_caido:
+            raise RuntimeError("Auth no responde")
+        if uid not in self.usuarios:
+            raise main.auth.UserNotFoundError(f"No existe {uid}")
+        return self.usuarios[uid]
+
+    def usuario(self, uid, email, verificado):
+        self.usuarios[uid] = SimpleNamespace(uid=uid, email=email, email_verified=verificado)
+
+    @staticmethod
+    def hoy():
+        return time.strftime("%Y%m%d", time.gmtime())
+
+
+class CupoCorreosTest(_ConServiciosFalsos):
+    """Los avisos por email no pueden dejar sin correo a los códigos de verificación."""
+
+    def aviso(self, uid, chat="c1"):
+        main._enviar_aviso_email(self.db, uid, "Español", "mensaje", clave_limite=f"chat_{chat}",
+                                 nombre="Ana", texto="hola")
+
+    def test_con_el_cupo_de_avisos_gastado_los_codigos_siguen_saliendo(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs[f"limites_correo/{self.hoy()}"] = {"enviados": 150, "avisos": 150}
+        self.aviso("dest")
+        self.assertEqual(self.correos, [])
+        self.assertTrue(main._reservar_cupo_correo(self.db))
+
+    def test_con_el_tope_total_gastado_no_sale_nada(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs[f"limites_correo/{self.hoy()}"] = {"enviados": 300, "avisos": 10}
+        self.aviso("dest")
+        self.assertEqual(self.correos, [])
+        self.assertFalse(main._reservar_cupo_correo(self.db))
+
+    def test_un_aviso_cuenta_en_el_total_y_en_los_avisos(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.aviso("dest")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        self.assertEqual(self.db.docs[f"limites_correo/{self.hoy()}"], {"enviados": 1, "avisos": 1})
+
+    def test_como_mucho_20_avisos_al_dia_a_la_misma_persona(self):
+        self.usuario("dest", "dest@x.es", True)
+        for i in range(21):
+            self.aviso("dest", chat=f"c{i}")   # chats distintos: no los frena la espera de 30 min
+        self.assertEqual(len(self.correos), 20)
+        self.usuario("otra", "otra@x.es", True)
+        self.aviso("otra")
+        self.assertEqual(len(self.correos), 21)
+
+    def test_el_tope_por_persona_se_reinicia_cada_dia(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["avisos_email/dest"] = {"dia": "20000101", "enviadosHoy": 20}
+        self.aviso("dest")
+        self.assertEqual(self.correos, ["dest@x.es"])
+
+    def test_los_cupos_cambian_de_dia_a_medianoche_utc(self):
+        reloj = [calendar.timegm((2026, 11, 16, 23, 59, 0)) * 1000]   # 23:59 UTC
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["limites_correo/20261116"] = {"enviados": 150, "avisos": 150}
+        self.db.docs["avisos_email/dest"] = {"dia": "20261116", "enviadosHoy": 3}
+        with mock.patch.object(main, "_ahora_ms", lambda: reloj[0]):
+            self.aviso("dest")
+            self.assertEqual(self.correos, [])
+            reloj[0] += 2 * 60 * 1000   # 00:01 UTC del día siguiente
+            self.aviso("dest", chat="c2")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        self.assertEqual(self.db.docs["limites_correo/20261117"], {"enviados": 1, "avisos": 1})
+        self.assertEqual(self.db.docs["avisos_email/dest"]["dia"], "20261117")
+        self.assertEqual(self.db.docs["avisos_email/dest"]["enviadosHoy"], 1)
+
+    def test_un_chat_avisa_como_mucho_una_vez_cada_30_minutos(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.aviso("dest", chat="c1")
+        self.aviso("dest", chat="c1")
+        self.assertEqual(self.correos, ["dest@x.es"])
+
+    def test_con_el_tope_de_la_persona_gastado_no_se_anota_el_chat(self):
+        self.usuario("dest", "dest@x.es", True)
+        self.db.docs["avisos_email/dest"] = {"dia": self.hoy(), "enviadosHoy": 20}
+        self.aviso("dest", chat="c9")
+        self.assertEqual(self.correos, [])
+        self.assertNotIn("chat_c9", self.db.docs["avisos_email/dest"])
+
+    def test_al_anotar_un_chat_se_borran_las_esperas_ya_vencidas(self):
+        self.usuario("dest", "dest@x.es", True)
+        ahora = main._ahora_ms()
+        self.db.docs["avisos_email/dest"] = {
+            "chat_viejo": ahora - 31 * 60 * 1000, "chat_reciente": ahora - 5 * 60 * 1000,
+        }
+        self.aviso("dest", chat="nuevo")
+        self.assertEqual(self.correos, ["dest@x.es"])
+        claves = {k for k in self.db.docs["avisos_email/dest"] if k.startswith("chat_")}
+        self.assertEqual(claves, {"chat_reciente", "chat_nuevo"})
+
+
+def llamar(funcion, quien, admin=False, **datos):
+    """Ejecuta una callable (sin el envoltorio HTTP) como el usuario `quien`."""
+    peticion = SimpleNamespace(auth=SimpleNamespace(uid=quien, token={"admin": admin}), data=datos)
+    return inspect.unwrap(funcion)(peticion)
+
+
+class CodigoVerificacionTest(_ConServiciosFalsos):
+    """El código solo verifica el email al que se envió."""
+
+    def pedir_codigo(self, uid):
+        self.assertTrue(llamar(main.enviar_codigo_verificacion, uid, idioma="Español")["enviado"])
+        return self.codigos[-1][1]
+
+    def verificar(self, uid, codigo):
+        return llamar(main.verificar_codigo_email, uid, codigo=codigo)
+
+    def test_el_codigo_verifica_la_cuenta_con_el_mismo_email(self):
+        self.usuario("u1", "Ana@X.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["email"], "ana@x.es")
+        self.usuarios["u1"].email = "ana@x.es"   # mayúsculas aparte, es el mismo
+        self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.update_user.assert_called_once_with("u1", email_verified=True)
+
+    def test_si_el_email_de_la_cuenta_cambia_el_codigo_ya_no_vale(self):
+        self.usuario("u1", "a@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.usuarios["u1"].email = "b@x.es"
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
+        self.update_user.assert_not_called()
+
+    def test_si_el_email_cambia_mientras_se_verifica_se_deshace(self):
+        self.usuario("u1", "a@x.es", False)
+        self.db.docs["tecnicos/u1"] = {"uid": "u1", "emailVerificado": False}
+        codigo = self.pedir_codigo("u1")
+
+        def cambio_simultaneo(uid, **cambios):   # el email cambia justo al marcarlo
+            if cambios.get("email_verified"):
+                self.usuarios[uid].email = "b@x.es"
+        self.update_user.side_effect = cambio_simultaneo
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", codigo)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.FAILED_PRECONDITION)
+        self.assertEqual(error.exception.details, {"motivo": "caducado"})
+        self.assertEqual(self.update_user.call_args_list,
+                         [mock.call("u1", email_verified=True), mock.call("u1", email_verified=False)])
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+
+    def test_un_codigo_emitido_sin_email_guardado_caduca_sin_gastar_intentos(self):
+        # Códigos pedidos antes de ligar el código al email: la huella no lo incluía
+        self.usuario("u1", "a@x.es", False)
+        huella = hmac.new(main.SMTP_CLAVE.value.encode(), b"u1:123456", hashlib.sha256).hexdigest()
+        self.db.docs["verificaciones_email/u1"] = {
+            "huella": huella, "expira": main._ahora_ms() + 60_000, "intentos": 0,
+        }
+        with self.assertRaises(main.https_fn.HttpsError) as error:
+            self.verificar("u1", "123456")
+        self.assertEqual(error.exception.details, {"motivo": "caducado"})
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["intentos"], 0)
+        self.update_user.assert_not_called()
+
+
+class PerfilEmailVerificadoTest(_ConServiciosFalsos):
+    """`emailVerificado` de /tecnicos (oculta del directorio los perfiles de
+    cuentas sin verificar): solo lo escribe el servidor."""
+
+    def crear_perfil(self, uid, despues=None, **datos):
+        """Simula el alta de /tecnicos/{uid} y el trigger que la sigue. `despues`:
+        cambios que el servidor hace en el documento antes de que llegue el trigger."""
+        creado = {"id": uid, "uid": uid, "nombre": "Pro", **datos}
+        self.db.docs[f"tecnicos/{uid}"] = {**creado, **(despues or {})}
+        # El documento tal como se creó (sin referencia: el trigger usa el id del evento)
+        evento = SimpleNamespace(data=SimpleNamespace(exists=True, to_dict=lambda: dict(creado)),
+                                 params={"tecnicoId": uid})
+        inspect.unwrap(main.on_tecnico_creado)(evento)
+        return self.db.docs[f"tecnicos/{uid}"]
+
+    def test_el_perfil_de_una_cuenta_sin_verificar_queda_oculto(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], False)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=False)["emailVerificado"], False)
+
+    def test_el_perfil_de_una_cuenta_verificada_queda_visible(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], True)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=False)["emailVerificado"], True)
+
+    def test_el_perfil_de_una_cuenta_que_no_existe_queda_oculto(self):
+        self.assertIs(self.crear_perfil("fantasma")["emailVerificado"], False)
+
+    def test_no_pisa_el_true_que_puso_la_verificacion_despues_del_alta(self):
+        self.usuario("p1", "p1@x.es", False)   # Auth leído antes de verificar
+        perfil = self.crear_perfil("p1", despues={"emailVerificado": True})
+        self.assertIs(perfil["emailVerificado"], True)
+
+    def test_un_true_que_ya_venia_en_el_alta_no_se_respeta(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.assertIs(self.crear_perfil("p1", emailVerificado=True)["emailVerificado"], False)
+        self.usuario("p2", "p2@x.es", True)
+        self.assertIs(self.crear_perfil("p2", emailVerificado=True)["emailVerificado"], True)
+
+    def test_si_auth_falla_el_perfil_queda_oculto(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.auth_caido = True
+        self.assertIs(self.crear_perfil("p1")["emailVerificado"], False)
+
+    def test_la_revision_diaria_muestra_los_perfiles_de_cuentas_ya_verificadas(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.usuario("p2", "p2@x.es", False)
+        self.usuario("p3", "p3@x.es", True)
+        self.db.docs.update({
+            "tecnicos/p1": {"uid": "p1", "emailVerificado": False},
+            "tecnicos/p2": {"uid": "p2", "emailVerificado": False},
+            "tecnicos/legado": {"uid": "p3", "emailVerificado": False},   # id del documento ≠ uid
+            "tecnicos/huerfano": {"uid": "borrada", "emailVerificado": False},
+            "tecnicos/antiguo": {"uid": "p2"},                            # sin el campo: no se toca
+        })
+        self.assertEqual(main._mostrar_perfiles_verificados(self.db), 2)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+        self.assertIs(self.db.docs["tecnicos/legado"]["emailVerificado"], True)
+        self.assertIs(self.db.docs["tecnicos/p2"]["emailVerificado"], False)
+        self.assertIs(self.db.docs["tecnicos/huerfano"]["emailVerificado"], False)
+        self.assertNotIn("emailVerificado", self.db.docs["tecnicos/antiguo"])
+
+    def test_la_tarea_diaria_incluye_la_revision_de_perfiles_ocultos(self):
+        self.usuario("p1", "p1@x.es", True)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "emailVerificado": False}
+        with mock.patch("builtins.print"):   # los demás pasos no tienen datos
+            inspect.unwrap(main.revisar_suscripciones_diario)(None)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+
+    def test_al_verificar_el_codigo_el_perfil_se_hace_visible(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "nombre": "Pro", "emailVerificado": False}
+        llamar(main.enviar_codigo_verificacion, "p1", idioma="Español")
+        self.assertEqual(llamar(main.verificar_codigo_email, "p1", codigo=self.codigos[-1][1]), {"verificado": True})
+        self.assertEqual(self.db.docs["tecnicos/p1"], {"uid": "p1", "nombre": "Pro", "emailVerificado": True})
+
+    def test_verificar_sin_perfil_profesional_no_falla_ni_lo_crea(self):
+        self.usuario("c1", "c1@x.es", False)
+        llamar(main.enviar_codigo_verificacion, "c1", idioma="Español")
+        self.assertEqual(llamar(main.verificar_codigo_email, "c1", codigo=self.codigos[-1][1]), {"verificado": True})
+        self.assertNotIn("tecnicos/c1", self.db.docs)
+
+    def test_el_administrador_marca_el_email_y_el_perfil_se_hace_visible(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.db.docs["tecnicos/p1"] = {"uid": "p1", "emailVerificado": False}
+        self.assertEqual(llamar(main.marcar_email_verificado, "admin", admin=True, uid="p1"), {"ok": True})
+        self.update_user.assert_called_once_with("p1", email_verified=True)
+        self.assertIs(self.db.docs["tecnicos/p1"]["emailVerificado"], True)
+        # Sin perfil profesional tampoco falla
+        self.usuario("c1", "c1@x.es", False)
+        self.assertEqual(llamar(main.marcar_email_verificado, "admin", admin=True, uid="c1"), {"ok": True})
+        self.assertNotIn("tecnicos/c1", self.db.docs)
 
 
 if __name__ == "__main__":

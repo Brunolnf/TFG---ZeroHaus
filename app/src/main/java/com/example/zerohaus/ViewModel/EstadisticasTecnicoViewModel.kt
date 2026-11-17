@@ -8,6 +8,7 @@ import com.example.zerohaus.Modelos.Planes
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.esDestacado
 import com.example.zerohaus.Modelos.nivelPlan
+import com.example.zerohaus.Modelos.visiblesEnDirectorio
 import com.example.zerohaus.Repositorios.EstadisticasProfesional
 import com.example.zerohaus.Repositorios.RepositorioEstadisticas
 import com.example.zerohaus.Repositorios.RepositorioMonetizacion
@@ -51,6 +52,20 @@ data class EstadisticasTecnicoEstado(
         get() = 100 - pendientesPerfil.size * 100 / MejoraPerfil.entries.size
 }
 
+private fun normalizarCiudad(s: String) = Normalizer.normalize(s.trim().lowercase(), Normalizer.Form.NFD)
+    .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+
+/**
+ * Perfiles de la ciudad de [yo] con los que se calcula su posición: los que
+ * ve el cliente en el directorio (sin los ocultos) y siempre el suyo.
+ */
+internal fun competidoresEnCiudad(todos: List<Tecnico>, yo: Tecnico): List<Tecnico> {
+    val ciudad = normalizarCiudad(yo.ciudad)
+    return visiblesEnDirectorio(todos, yo.uid)
+        .filter { normalizarCiudad(it.ciudad) == ciudad }
+        .let { lista -> if (lista.none { it.id == yo.id }) lista + yo else lista }
+}
+
 class EstadisticasTecnicoViewModel : ViewModel() {
 
     var estado by mutableStateOf(EstadisticasTecnicoEstado())
@@ -86,10 +101,8 @@ class EstadisticasTecnicoViewModel : ViewModel() {
 
     private fun calcularPosicion(yo: Tecnico) {
         if (yo.ciudad.isBlank()) return
-        val ciudad = normalizar(yo.ciudad)
         repoTecnicos.obtenerTecnicos { todos ->
-            val deMiCiudad = todos.filter { normalizar(it.ciudad) == ciudad }
-                .let { lista -> if (lista.none { it.id == yo.id }) lista + yo else lista }
+            val deMiCiudad = competidoresEnCiudad(todos, yo)
             val puesto = puestoEn(deMiCiudad, yo.id)
             val conDestacado = if (yo.esDestacado) null else {
                 val simulado = yo.copy(
@@ -109,9 +122,6 @@ class EstadisticasTecnicoViewModel : ViewModel() {
     private fun puestoEn(lista: List<Tecnico>, id: String): Int =
         lista.sortedWith(compareByDescending<Tecnico> { it.nivelPlan }.thenByDescending { it.rating })
             .indexOfFirst { it.id == id } + 1
-
-    private fun normalizar(s: String) = Normalizer.normalize(s.trim().lowercase(), Normalizer.Form.NFD)
-        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
 
     override fun onCleared() {
         super.onCleared()

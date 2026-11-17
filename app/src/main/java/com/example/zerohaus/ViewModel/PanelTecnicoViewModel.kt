@@ -8,11 +8,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
+import com.example.zerohaus.Modelos.datosPerfilReasignado
 import com.example.zerohaus.Repositorios.RepositorioMonetizacion
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 
 /**
  * Estado del panel de inicio del profesional.
@@ -111,13 +113,13 @@ class PanelTecnicoViewModel : ViewModel() {
             }
     }
 
+    // Reparar y clonar fusionan sin emailVerificado: lo pone el servidor y las
+    // reglas no dejan cambiarlo ni quitarlo (una copia leída puede estar desfasada)
     private fun repararYUsar(doc: DocumentSnapshot, miUid: String) {
-        val datos = doc.data?.toMutableMap() ?: mutableMapOf()
-        datos["id"] = miUid
-        datos["uid"] = miUid
+        val datos = datosPerfilReasignado(doc.data.orEmpty(), miUid)
 
         db.collection("tecnicos").document(miUid)
-            .set(datos)
+            .set(datos, SetOptions.merge())
             .addOnSuccessListener {
                 val tec = doc.toObject(Tecnico::class.java)?.copy(id = miUid, uid = miUid)
                 iniciarListenerPerfil(tec)
@@ -130,12 +132,10 @@ class PanelTecnicoViewModel : ViewModel() {
     }
 
     private fun clonarANuevoDoc(docOriginal: DocumentSnapshot, miUid: String) {
-        val datos = docOriginal.data?.toMutableMap() ?: mutableMapOf()
-        datos["id"] = miUid
-        datos["uid"] = miUid
+        val datos = datosPerfilReasignado(docOriginal.data.orEmpty(), miUid)
 
         db.collection("tecnicos").document(miUid)
-            .set(datos)
+            .set(datos, SetOptions.merge())
             .addOnSuccessListener {
                 val tec = docOriginal.toObject(Tecnico::class.java)
                     ?.copy(id = miUid, uid = miUid)

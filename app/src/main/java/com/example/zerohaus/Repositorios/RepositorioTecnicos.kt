@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.SetOptions
 import java.text.Normalizer
 
 /**
@@ -268,12 +269,16 @@ class RepositorioTecnicos {
             callback(snap?.documents?.mapNotNull { aTecnico(it) } ?: emptyList())
         }
 
-    /** Perfil con su id y la nota redondeada a una cifra decimal (como se muestra). */
+    /**
+     * Perfil con su id, la nota redondeada a una cifra decimal (como se
+     * muestra) y `emailVerificado`, que el modelo no lee ni escribe solo.
+     */
     private fun aTecnico(doc: DocumentSnapshot): Tecnico? =
         doc.toObject(Tecnico::class.java)?.let { t ->
             t.copy(
                 id = t.id.ifBlank { doc.id },
-                rating = Math.round(t.rating * 10.0) / 10.0
+                rating = Math.round(t.rating * 10.0) / 10.0,
+                emailVerificado = doc.get("emailVerificado") as? Boolean
             )
         }
 
@@ -328,13 +333,17 @@ class RepositorioTecnicos {
             }
     }
 
-    /** Crea el perfil profesional del usuario actual (las reglas exigen id del documento = uid). */
+    /**
+     * Crea el perfil profesional del usuario actual (las reglas exigen id del
+     * documento = uid). Fusionando: si el perfil ya existía, se conserva
+     * `emailVerificado`, que solo escribe el servidor (sin él las reglas lo rechazan).
+     */
     fun registrarTecnico(tecnico: Tecnico, callback: (Result<Unit>) -> Unit) {
         val uid = uid()
         if (uid.isEmpty()) { callback(Result.failure(Exception("Sin sesión"))); return }
         val (latitud, longitud) = coordenadasDeCiudad(tecnico.ciudad) ?: (0.0 to 0.0)
         val t = tecnico.copy(id = uid, uid = uid, latitud = latitud, longitud = longitud)
-        db.collection("tecnicos").document(uid).set(t)
+        db.collection("tecnicos").document(uid).set(t, SetOptions.merge())
             .addOnSuccessListener { callback(Result.success(Unit)) }
             .addOnFailureListener { e ->
                 callback(Result.failure(Exception(e.message ?: "Error registrando técnico")))

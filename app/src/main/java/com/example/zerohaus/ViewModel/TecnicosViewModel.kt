@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.nivelPlan
+import com.example.zerohaus.Modelos.visiblesEnDirectorio
 import com.example.zerohaus.Repositorios.*
 import com.example.zerohaus.Modelos.Especialidades
 import com.example.zerohaus.Util.AppEstado
@@ -105,8 +106,10 @@ class TecnicosViewModel : ViewModel() {
         }
         if (estado.origenUbicacion == null) usarProvinciaDeLaVivienda()
         estado = estado.copy(cargando = estado.tecnicos.isEmpty())
+        val miUid = uidEscuchado
         listenerTec = repo.escucharTecnicos { lista ->
-            val procesados = lista.map { t ->
+            // Lista y mapa: sin los perfiles de cuentas sin verificar (salvo el propio)
+            val procesados = visiblesEnDirectorio(lista, miUid).map { t ->
                 if (estado.latUsuario != 0.0) {
                     val (tLat, tLng) = coordsEfectivasTecnico(t)
                     if (tLat != 0.0) t.copy(distanciaKm = calcularDistanciaKm(estado.latUsuario, estado.lngUsuario, tLat, tLng))

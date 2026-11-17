@@ -18,11 +18,13 @@ Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
   on_resena_changed            Reseña creada/editada/borrada → recalcula la nota.
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
+  on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
   revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
-                               autores de chats antiguos y bloqueos pendientes en Auth.
+                               autores de chats antiguos, bloqueos pendientes en Auth y perfiles
+                               profesionales ocultos de cuentas ya verificadas.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -52,6 +54,7 @@ from email.utils import formataddr
 from firebase_functions import https_fn, firestore_fn, scheduler_fn, pubsub_fn, options
 from firebase_functions.params import SecretParam
 from firebase_admin import initialize_app, auth, firestore, messaging, storage
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1 import FieldFilter
 from google.auth import default as default_creds
 from google.auth.transport.requests import AuthorizedSession
@@ -276,6 +279,7 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
         auth.update_user(uid, email_verified=True)
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
+    _marcar_perfil_verificado(firestore.client(), uid)
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
     return {"ok": True}
 
@@ -397,18 +401,63 @@ AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación c
 # admite unos 500 y, si se pasa, Google la bloquea y nadie recibe su código.
 # Así, aunque alguien cree cuentas en masa para mandar códigos, no la tumba.
 CORREOS_MAX_DIA = int(os.environ.get("CORREOS_MAX_DIA", "300"))
+# Parte del tope que pueden gastar los avisos (mensajes y valoraciones): el
+# resto queda siempre para los códigos de verificación.
+CORREOS_AVISOS_MAX_DIA = int(os.environ.get("CORREOS_AVISOS_MAX_DIA", "150"))
+# Avisos por email que recibe como mucho una misma persona al día
+AVISOS_MAX_DIA_USUARIO = int(os.environ.get("AVISOS_MAX_DIA_USUARIO", "20"))
 
 
-def _reservar_cupo_correo(db) -> bool:
-    """Gasta un correo del tope diario (CORREOS_MAX_DIA). False si ya no quedan."""
-    ref = db.collection("limites_correo").document(time.strftime("%Y%m%d", time.gmtime()))
+def _hoy_utc() -> str:
+    """Día UTC (AAAAMMDD) del reloj de _ahora_ms: con él cambian los cupos diarios."""
+    return time.strftime("%Y%m%d", time.gmtime(_ahora_ms() / 1000))
+
+
+def _reservar_cupo_correo(db, aviso: bool = False) -> bool:
+    """Gasta un correo del tope diario. Los códigos solo miran el total
+    (CORREOS_MAX_DIA); los avisos, además, su propio cupo
+    (CORREOS_AVISOS_MAX_DIA), para no dejar sin código a nadie. False si no quedan."""
+    ref = db.collection("limites_correo").document(_hoy_utc())
 
     @firestore.transactional
     def _reservar(txn):
-        enviados = int((ref.get(transaction=txn).to_dict() or {}).get("enviados") or 0)
-        if enviados >= CORREOS_MAX_DIA:
+        d = ref.get(transaction=txn).to_dict() or {}
+        enviados = int(d.get("enviados") or 0)
+        avisos = int(d.get("avisos") or 0)
+        if enviados >= CORREOS_MAX_DIA or (aviso and avisos >= CORREOS_AVISOS_MAX_DIA):
             return False
-        txn.set(ref, {"enviados": enviados + 1})
+        txn.set(ref, {"enviados": enviados + 1, "avisos": avisos + (1 if aviso else 0)})
+        return True
+
+    return _reservar(db.transaction())
+
+
+def _reservar_aviso_usuario(db, uid: str, clave_limite: str = "") -> bool:
+    """Reserva un aviso para este destinatario en /avisos_email/{uid}, en una
+    transacción: con `clave_limite` (chat_{id}) como mucho uno por chat cada
+    AVISO_CHAT_ESPERA_MS, y AVISOS_MAX_DIA_USUARIO al día (dia, enviadosHoy).
+    Si no toca enviar, no escribe nada. Al escribir borra las esperas de chat
+    ya vencidas, para que el documento no crezca sin límite. False si no toca."""
+    ref = db.collection("avisos_email").document(uid)
+    ahora = _ahora_ms()
+    hoy = _hoy_utc()
+
+    @firestore.transactional
+    def _reservar(txn):
+        d = ref.get(transaction=txn).to_dict() or {}
+        if clave_limite and ahora - int(d.get(clave_limite) or 0) < AVISO_CHAT_ESPERA_MS:
+            return False
+        enviados_hoy = int(d.get("enviadosHoy") or 0) if d.get("dia") == hoy else 0
+        if enviados_hoy >= AVISOS_MAX_DIA_USUARIO:
+            return False
+        cambios = {
+            k: firestore.DELETE_FIELD for k, v in d.items()
+            if k.startswith("chat_") and (not isinstance(v, (int, float)) or ahora - v >= AVISO_CHAT_ESPERA_MS)
+        }
+        cambios.update({"dia": hoy, "enviadosHoy": enviados_hoy + 1})
+        if clave_limite:
+            cambios[clave_limite] = ahora
+        txn.set(ref, cambios, merge=True)
         return True
 
     return _reservar(db.transaction())
@@ -416,18 +465,19 @@ def _reservar_cupo_correo(db) -> bool:
 
 def _enviar_aviso_email(db, uid: str, idioma: str, tipo: str, clave_limite: str = "", **campos) -> None:
     """Aviso por email (tipo 'mensaje' o 'valoracion') a un usuario con el email
-    verificado. Nunca rompe el trigger: los fallos solo se registran."""
+    verificado. Nunca rompe el trigger: los fallos solo se registran.
+
+    Primero se reserva el aviso de la persona (espera del chat y tope diario) y
+    después el cupo común. Si el común está agotado, el aviso no sale pero ya
+    cuenta en la espera del chat y en el tope de la persona; si falla el SMTP,
+    cuenta además en el cupo común. Así un fallo nunca provoca reintentos."""
     try:
-        if clave_limite:
-            ref = db.collection("avisos_email").document(uid)
-            ultimo = int(((ref.get().to_dict() or {}).get(clave_limite)) or 0)
-            if _ahora_ms() - ultimo < AVISO_CHAT_ESPERA_MS:
-                return
-            ref.set({clave_limite: _ahora_ms()}, merge=True)
         usuario = auth.get_user(uid)
         if not usuario.email or not usuario.email_verified:
             return
-        if not _reservar_cupo_correo(db):
+        if not _reservar_aviso_usuario(db, uid, clave_limite):
+            return
+        if not _reservar_cupo_correo(db, aviso=True):
             print(f"[EMAIL] Tope diario de correos alcanzado: sin aviso '{tipo}' a {uid}")
             return
         t = _AVISOS_EMAIL.get(idioma, _AVISOS_EMAIL["Español"])
@@ -785,17 +835,22 @@ _TEXTOS_EMAIL = {
 }
 
 
-def _huella_codigo(uid: str, codigo: str) -> str:
-    """HMAC del código ligado al usuario: en Firestore nunca está en claro."""
-    return hmac.new(SMTP_CLAVE.value.encode(), f"{uid}:{codigo}".encode(), hashlib.sha256).hexdigest()
+def _normalizar_email(email) -> str:
+    return (email or "").strip().lower()
 
 
-def _generar_codigo_nuevo(uid: str, historial: list) -> tuple:
+def _huella_codigo(uid: str, email: str, codigo: str) -> str:
+    """HMAC del código ligado al usuario y al email al que se envió: en
+    Firestore nunca está en claro."""
+    return hmac.new(SMTP_CLAVE.value.encode(), f"{uid}:{email}:{codigo}".encode(), hashlib.sha256).hexdigest()
+
+
+def _generar_codigo_nuevo(uid: str, email: str, historial: list) -> tuple:
     """Código aleatorio de 6 dígitos que este usuario no ha recibido nunca."""
     usados = set(historial)
     for _ in range(50):
         codigo = f"{secrets.randbelow(1_000_000):06d}"
-        huella = _huella_codigo(uid, codigo)
+        huella = _huella_codigo(uid, email, codigo)
         if huella not in usados:
             return codigo, huella
     raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INTERNAL, "No se pudo generar el código.")
@@ -860,6 +915,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
 
     idioma = str((req.data or {}).get("idioma") or "Español")
+    email = _normalizar_email(usuario.email)
     db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
@@ -879,9 +935,11 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
                 {"motivo": "envios"},
             )
         historial = list(d.get("historial") or [])
-        codigo, huella = _generar_codigo_nuevo(uid, historial)
+        codigo, huella = _generar_codigo_nuevo(uid, email, historial)
         txn.set(ref, {
             "huella": huella,
+            # El código solo vale para este email: si el de la cuenta cambia, caduca
+            "email": email,
             "expira": ahora + CODIGO_VALIDEZ_MS,
             "intentos": 0,
             "ultimoEnvio": ahora,
@@ -928,8 +986,10 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     if not re.fullmatch(r"\d{6}", codigo):
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "El código tiene 6 dígitos.")
 
-    if auth.get_user(uid).email_verified:
+    usuario = auth.get_user(uid)
+    if usuario.email_verified:
         return {"verificado": True}
+    email = _normalizar_email(usuario.email)
 
     db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
@@ -939,12 +999,13 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
     def _comprobar(txn):
         d = ref.get(transaction=txn).to_dict() or {}
         huella = d.get("huella")
-        if not huella or int(d.get("expira") or 0) < ahora:
+        # Si el email de la cuenta ya no es al que se envió el código, no vale
+        if not huella or int(d.get("expira") or 0) < ahora or not email or d.get("email") != email:
             return "caducado", 0
         intentos = int(d.get("intentos") or 0)
         if intentos >= CODIGO_MAX_INTENTOS:
             return "bloqueado", 0
-        if hmac.compare_digest(huella, _huella_codigo(uid, codigo)):
+        if hmac.compare_digest(huella, _huella_codigo(uid, email, codigo)):
             # Un solo uso: se borra la huella activa (queda en el historial)
             txn.update(ref, {"huella": firestore.DELETE_FIELD, "intentos": 0})
             return "ok", 0
@@ -955,9 +1016,11 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         txn.update(ref, cambios)
         return "incorrecto", CODIGO_MAX_INTENTOS - intentos
 
+    caducado = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "El código ha caducado. Pide uno nuevo.", {"motivo": "caducado"})
     resultado, restantes = _comprobar(db.transaction())
     if resultado == "caducado":
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "El código ha caducado. Pide uno nuevo.", {"motivo": "caducado"})
+        raise caducado
     if resultado == "bloqueado":
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED, "Demasiados intentos. Pide un código nuevo.", {"motivo": "intentos"})
     if resultado == "incorrecto":
@@ -970,7 +1033,96 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         )
 
     auth.update_user(uid, email_verified=True)
+    # Si el email de la cuenta cambió entre la comprobación y este momento, la
+    # verificación sería de otro correo: se deshace y el código no vale
+    if _normalizar_email(auth.get_user(uid).email) != email:
+        auth.update_user(uid, email_verified=False)
+        raise caducado
+    _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Perfil profesional: en el directorio solo con el email verificado
+# ════════════════════════════════════════════════════════════════════════
+#
+# /tecnicos/{id}.emailVerificado lo escribe solo el servidor (las reglas no
+# dejan al cliente ponerlo a true ni quitarlo). La app oculta del directorio y
+# del mapa los perfiles con false; los anteriores a este campo no lo tienen y
+# se siguen mostrando.
+
+def _marcar_perfil_verificado(db, uid: str) -> None:
+    """Hace visible el perfil profesional de `uid` tras verificar su email.
+    Siempre después de actualizar Auth (on_tecnico_creado depende de ese orden).
+    Sin perfil no hace nada; otros fallos se registran sin romper la verificación
+    (los corrige la revisión diaria, _mostrar_perfiles_verificados)."""
+    try:
+        db.collection("tecnicos").document(uid).update({"emailVerificado": True})
+    except NotFound:
+        pass
+    except Exception as e:
+        print(f"[VERIFICACION] No se pudo marcar el perfil de {uid}: {e}")
+
+
+def _email_verificado_en_auth(uid: str) -> bool:
+    """True solo si Auth confirma que la cuenta tiene el email verificado. Si
+    no existe o Auth falla, False: el perfil queda oculto y la revisión diaria
+    lo corrige cuando la cuenta esté verificada."""
+    try:
+        return auth.get_user(uid).email_verified is True
+    except Exception as e:
+        if not isinstance(e, auth.UserNotFoundError):
+            print(f"[TECNICOS] No se pudo consultar Auth para {uid}: {e}")
+        return False
+
+
+def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
+    """Pone emailVerificado del perfil según Auth, en una transacción. Con
+    `respetar_true` no pisa un true que haya puesto ya la verificación del código."""
+
+    @firestore.transactional
+    def _anotar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return
+        actual = (snap.to_dict() or {}).get("emailVerificado")
+        if actual is True and respetar_true:
+            return
+        verificado = _email_verificado_en_auth(uid)
+        if actual is not verificado:
+            txn.update(ref, {"emailVerificado": verificado})
+
+    _anotar(db.transaction())
+
+
+@firestore_fn.on_document_created(document="tecnicos/{tecnicoId}", region=REGION)
+def on_tecnico_creado(event) -> None:
+    """Perfil profesional nuevo (la app lo crea al registrarse, antes de
+    verificar el email): queda oculto del directorio hasta que la cuenta lo verifica."""
+    if event.data is None:
+        return
+    creado = event.data.to_dict() or {}
+    uid = creado.get("uid") or ""
+    if not uid:
+        return  # sin cuenta asociada: solo puede crearlo el administrador
+    db = firestore.client()
+    ref = db.collection("tecnicos").document(event.params["tecnicoId"])
+    # Un true que ya venía en el alta no lo puso el servidor: se decide por Auth.
+    # Solo se respeta el que apareció después (la verificación del código).
+    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True)
+
+
+def _mostrar_perfiles_verificados(db) -> int:
+    """Pone emailVerificado a true en los perfiles ocultos cuya cuenta ya tiene
+    el email verificado: cubre un fallo al marcarlo, perfiles cuyo id no es el
+    uid y verificaciones por otra vía. Devuelve cuántos."""
+    corregidos = 0
+    for d in db.collection("tecnicos").where(filter=FieldFilter("emailVerificado", "==", False)).stream():
+        uid = (d.to_dict() or {}).get("uid") or ""
+        if uid and _email_verificado_en_auth(uid):
+            d.reference.update({"emailVerificado": True})
+            corregidos += 1
+    return corregidos
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1705,8 +1857,9 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Red de seguridad por si falla o no está configurado RTDN, limpieza
     diaria (eventos de estadísticas y notificaciones antiguas), nota de los
-    profesionales recalculada con sus reseñas, autores de los chats antiguos
-    y cuentas bloqueadas desactivadas en Auth."""
+    profesionales recalculada con sus reseñas, autores de los chats antiguos,
+    cuentas bloqueadas desactivadas en Auth y perfiles profesionales ocultos
+    de cuentas que ya verificaron su email."""
     db = firestore.client()
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
@@ -1756,6 +1909,12 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
     except Exception as e:
         print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
+
+    # 8) Perfiles profesionales ocultos de cuentas que ya verificaron su email
+    try:
+        print(f"[TECNICOS] Perfiles ocultos ya verificados: {_mostrar_perfiles_verificados(db)}")
+    except Exception as e:
+        print(f"[TECNICOS] No se pudieron revisar los perfiles ocultos: {e}")
 
 
 # ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══

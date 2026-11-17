@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 let env;
 
@@ -447,5 +447,91 @@ describe("auditoría: id del chat, bloqueo y perfil profesional", () => {
       { especialidades: Array.from({ length: 50 }, (_, i) => `E${i}`) }));
     await assertFails(updateDoc(doc(db, "tecnicos/pro"), { especialidades: ["x".repeat(5000)] }));
     await assertFails(updateDoc(doc(db, "tecnicos/pro"), { latitud: 500 }));
+  });
+});
+
+// Cuarta auditoría (2026-11): alta del perfil profesional y visibilidad en el directorio
+describe("perfil profesional: alta con los campos del modelo y emailVerificado", () => {
+  // Lo que escribe la app al registrarse (el objeto Tecnico entero, versión 2.3)
+  const perfilApp = (extra = {}) => ({
+    id: "nuevo", uid: "nuevo", nombre: "Nuevo", ciudad: "", rating: 0, opiniones: 0,
+    proyectosCompletados: 0, distanciaKm: 0, especialidades: [], descripcion: "", telefono: "",
+    emailContacto: "nuevo@x.es", latitud: 0, longitud: 0, tipoProfesional: "TECNICO",
+    planActivo: "", suscripcionHasta: 0,
+    ...extra,
+  });
+
+  // Perfil de una cuenta sin verificar: el servidor le puso emailVerificado a false
+  const perfilOculto = (extra = {}) =>
+    perfilApp({ id: "oculto", uid: "oculto", nombre: "Oculto", emailContacto: "oculto@x.es", ...extra });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      for (const u of ["nuevo", "panel", "oculto"]) {
+        await setDoc(doc(db, `usuarios/${u}`), { uid: u, tipoUsuario: "Técnico" });
+      }
+      await setDoc(doc(db, "tecnicos/oculto"), perfilOculto({ emailVerificado: false }));
+    });
+  });
+
+  it("el alta como la hace la app (objeto entero o solo lo básico) sigue permitida", async () => {
+    await assertSucceeds(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp()));
+    // Panel del profesional: crea el perfil mínimo si falta
+    await assertSucceeds(setDoc(doc(verificado("panel"), "tecnicos/panel"), {
+      id: "panel", uid: "panel", nombre: "Panel", emailContacto: "panel@x.es",
+      tipoProfesional: "TECNICO", rating: 0, opiniones: 0, proyectosCompletados: 0,
+    }));
+  });
+
+  it("el alta puede llevar emailVerificado a false", async () => {
+    await assertSucceeds(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: false })));
+  });
+
+  it("el alta no admite campos fuera del modelo", async () => {
+    await assertFails(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ relleno: "x" })));
+    await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ visible: true })));
+  });
+
+  it("el alta no puede llevar emailVerificado a true (solo lo pone el servidor)", async () => {
+    await assertFails(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: true })));
+    await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: true })));
+    await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: "true" })));
+    await assertFails(setDoc(doc(verificado("nuevo"), "tecnicos/nuevo"), perfilApp({ emailVerificado: null })));
+  });
+
+  it("al reclamar un perfil antiguo no se puede añadir emailVerificado", async () => {
+    const db = env.authenticatedContext("nuevo", { email: "legacy@x.es", email_verified: true }).firestore();
+    await assertFails(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo", emailVerificado: true }));
+    await assertFails(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo", emailVerificado: false }));
+    await assertSucceeds(updateDoc(doc(db, "tecnicos/legacy"), { uid: "nuevo" }));
+  });
+
+  it("id y distanciaKm tienen tipo y tamaño, al crear y al editar", async () => {
+    await assertFails(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ id: "x".repeat(129) })));
+    await assertFails(setDoc(doc(sinVerificar("nuevo"), "tecnicos/nuevo"), perfilApp({ distanciaKm: "x".repeat(5000) })));
+    await assertFails(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { id: "x".repeat(5000) }));
+    await assertFails(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { distanciaKm: "lejos" }));
+    await assertSucceeds(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { distanciaKm: 12.5 }));
+  });
+
+  it("el dueño no puede marcarse como verificado ni quitar el campo", async () => {
+    const db = verificado("oculto");
+    await assertFails(updateDoc(doc(db, "tecnicos/oculto"), { emailVerificado: true }));
+    await assertFails(updateDoc(doc(db, "tecnicos/oculto"), { emailVerificado: deleteField() }));
+    // Sobrescribir el documento entero sin el campo también lo quitaría
+    await assertFails(setDoc(doc(db, "tecnicos/oculto"), perfilOculto()));
+    await assertFails(updateDoc(doc(verificado("pro"), "tecnicos/pro"), { emailVerificado: true }));
+    // Reescribirlo entero con el mismo valor (reparación del panel) sí se permite
+    await assertSucceeds(setDoc(doc(db, "tecnicos/oculto"), perfilOculto({ emailVerificado: false })));
+    // Y fusionando (lo que hace la app al guardar el perfil entero) el campo se conserva
+    await assertSucceeds(setDoc(doc(db, "tecnicos/oculto"), perfilOculto({ descripcion: "Nueva" }), { merge: true }));
+  });
+
+  it("con emailVerificado a false el dueño sigue editando su perfil como hace la app", async () => {
+    await assertSucceeds(updateDoc(doc(verificado("oculto"), "tecnicos/oculto"), {
+      nombre: "Oculto", ciudad: "Madrid", descripcion: "Aislamientos", telefono: "600000000",
+      emailContacto: "oculto@x.es", especialidades: ["Aislamiento"], latitud: 40.4168, longitud: -3.7038,
+    }));
   });
 });
