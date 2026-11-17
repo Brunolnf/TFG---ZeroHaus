@@ -212,7 +212,7 @@ class TareaDiariaTest(unittest.TestCase):
             inspect.unwrap(main.revisar_suscripciones_diario)(None)
         self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "eventos", "notificaciones"])
 
-    def test_tiene_el_tiempo_maximo_de_una_tarea_programada(self):
+    def test_tiene_540_segundos_de_tiempo_limite(self):
         self.assertEqual(main.revisar_suscripciones_diario.__firebase_endpoint__.timeoutSeconds, 540)
 
     def test_ya_no_hace_los_rellenos_de_datos_antiguos(self):

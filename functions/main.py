@@ -2190,8 +2190,8 @@ def _revisar_suscripciones(db) -> int:
     schedule="every day 05:00",
     timezone=scheduler_fn.Timezone("Europe/Madrid"),
     region=REGION,
-    # Máximo de una tarea programada: con los 60 s por defecto, al crecer los
-    # datos se cortaba antes de llegar a los últimos pasos
+    # Con los 60 s por defecto, al crecer los datos se cortaba antes de llegar
+    # a los últimos pasos. 540 s bastan (en 2.ª generación se admiten hasta 1800)
     timeout_sec=540,
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
