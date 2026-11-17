@@ -303,13 +303,17 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
     """Cancela en Google Play las suscripciones que aún pueden cobrarse y
     después purga la cuenta. Si Play falla de forma pasajera, la cancelación
     lanza UNAVAILABLE antes de borrar nada (se reintenta). `cancelarEnPlay`:
-    Play no nos dejó cancelar alguna y el usuario debe hacerlo en Google Play."""
-    canceladas, sin_permiso = _cancelar_suscripciones_play(db, uid) if cancelar_en_play else (0, 0)
+    alguna quedó sin cancelar (Play no nos dejó, o el administrador forzó el
+    borrado) y hay que cancelarla en Google Play."""
+    if cancelar_en_play:
+        canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
+    else:
+        canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
     stats = _purgar_usuario(db, uid)
     return {
         "ok": True, "uid": uid, "stats": stats,
         "suscripcionCancelada": canceladas > 0,
-        "cancelarEnPlay": sin_permiso > 0,
+        "cancelarEnPlay": sin_cancelar > 0,
     }
 
 
@@ -1966,13 +1970,10 @@ def _play_niega_permiso(r) -> bool:
     return error.get("status") == "PERMISSION_DENIED" or bool(razones & _RAZONES_SIN_PERMISO)
 
 
-def _cancelar_suscripciones_play(db, uid: str) -> tuple:
-    """Antes de borrar una cuenta: cancela en Google Play la renovación de
-    sus suscripciones que aún pueden cobrarse (vigentes, o en retención o
-    pausa). Ante un fallo pasajero de Play lanza UNAVAILABLE y la cuenta no se
-    borra: se puede reintentar. Devuelve (canceladas, sin_permiso): cuántas se
-    han cancelado y cuántas tiene que cancelar el usuario en Google Play."""
-    canceladas = sin_permiso = 0
+def _suscripciones_por_cancelar(db, uid: str) -> list:
+    """Tokens de las suscripciones de Play de `uid` que aún pueden cobrarse:
+    vigentes, o en retención o pausa (según lo último que sabemos de Play)."""
+    tokens = []
     for d in db.collection("suscripciones").where(filter=FieldFilter("uid", "==", uid)).stream():
         s = d.to_dict() or {}
         estado = s.get("estadoPlay")
@@ -1980,7 +1981,19 @@ def _cancelar_suscripciones_play(db, uid: str) -> tuple:
             continue
         if not s.get("activa") and estado not in ESTADOS_PENDIENTES_DE_COBRO:
             continue   # caducada o sustituida por un cambio de plan
-        resultado = _cancelar_en_play(d.id)
+        tokens.append(d.id)
+    return tokens
+
+
+def _cancelar_suscripciones_play(db, uid: str) -> tuple:
+    """Antes de borrar una cuenta: cancela en Google Play la renovación de
+    sus suscripciones que aún pueden cobrarse (vigentes, o en retención o
+    pausa). Ante un fallo pasajero de Play lanza UNAVAILABLE y la cuenta no se
+    borra: se puede reintentar. Devuelve (canceladas, sin_permiso): cuántas se
+    han cancelado y cuántas tiene que cancelar el usuario en Google Play."""
+    canceladas = sin_permiso = 0
+    for token in _suscripciones_por_cancelar(db, uid):
+        resultado = _cancelar_en_play(token)
         if resultado == "cancelada":
             print(f"[SUSCRIPCION] Renovación cancelada en Play al borrar la cuenta {uid}")
             canceladas += 1

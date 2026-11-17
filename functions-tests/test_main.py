@@ -1268,8 +1268,23 @@ class BorrarCuentaConSuscripcionTest(_ConPurga):
             respuesta = llamar(main.eliminar_usuario_completo, "admin", admin=True, uid="p1", forzar=True)
         self.assertEqual(self.play.peticiones, [])
         self.assertIs(respuesta["suscripcionCancelada"], False)
+        self.assertIs(respuesta["cancelarEnPlay"], True)   # quedó una vigente sin cancelar
         self.delete_user.assert_called_once_with("p1")
         self.assertTrue(any("forzar" in str(c) for c in log.call_args_list))
+
+    def test_forzar_sin_suscripciones_no_pide_cancelar_nada(self):
+        with mock.patch("builtins.print"):
+            respuesta = llamar(main.eliminar_usuario_completo, "admin", admin=True, uid="p1", forzar=True)
+        self.assertIs(respuesta["cancelarEnPlay"], False)
+
+    def test_forzar_no_vale_en_el_borrado_de_la_propia_cuenta(self):
+        self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+        self.play.caido = True
+        with mock.patch("builtins.print"), self.assertRaises(main.https_fn.HttpsError) as error:
+            llamar(main.eliminar_mi_cuenta, "p1", forzar=True)
+        self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.delete_user.assert_not_called()
+        self.assertIn("tecnicos/p1", self.db.docs)
 
     def test_sin_suscripcion_se_borra_sin_llamar_a_play(self):
         respuesta = self.borrar()
