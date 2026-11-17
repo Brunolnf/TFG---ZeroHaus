@@ -758,13 +758,49 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
     def test_con_un_deshacer_pendiente_el_codigo_solo_vale_tras_deshacerlo(self):
         self.usuario("u1", "a@x.es", False)
         codigo = self.pedir_codigo("u1")
-        self.deshacer_pendiente("u1", "a@x.es")
+        self.deshacer_pendiente("u1", "z@x.es")   # el código de entonces era para otro email
         with mock.patch("builtins.print"):
             self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
         self.assertEqual(self.update_user.call_args_list,
                          [mock.call("u1", email_verified=False), mock.call("u1", email_verified=True)])
         self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
         self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], True)
+
+    def test_al_verificar_bien_se_quita_una_marca_antigua(self):
+        # Tras el fallo la cuenta cambió de email (Auth la dejó sin verificar)
+        # y ahora verifica bien el nuevo: la marca no debe deshacerlo después
+        self.usuario("u1", "c@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.db.docs["verificaciones_email/u1"].update({"deshacerPendiente": True, "deshacerEmail": "a@x.es"})
+        self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+        self.usuarios["u1"].email_verified = True
+        with mock.patch("builtins.print"):
+            main._reintentar_deshacer_pendientes(self.db)
+        self.update_user.assert_called_once_with("u1", email_verified=True)
+
+    def test_si_la_cuenta_tiene_el_email_del_codigo_la_marca_se_quita_sin_deshacer(self):
+        # Fallo de Auth al confirmar, pero el email no había cambiado: era legítima
+        self.usuario("u1", "a@x.es", False)
+        self.deshacer_pendiente("u1", "a@x.es")
+        with mock.patch("builtins.print"):
+            self.assertEqual(llamar(main.enviar_codigo_verificacion, "u1", idioma="Español"), {"verificado": True})
+        self.update_user.assert_not_called()
+        self.revoke.assert_not_called()
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], True)
+
+    def test_la_tarea_diaria_solo_deshace_si_la_cuenta_sigue_con_otro_email(self):
+        self.usuario("legitima", "a@x.es", True)      # tiene el email al que se envió el código
+        self.usuario("sin_verificar", "b@x.es", False)
+        self.usuario("ajena", "c@x.es", True)
+        for uid in ("legitima", "sin_verificar", "ajena"):
+            self.db.docs[f"verificaciones_email/{uid}"] = {"deshacerPendiente": True, "deshacerEmail": "a@x.es"}
+        with mock.patch("builtins.print"):
+            main._reintentar_deshacer_pendientes(self.db)
+        self.update_user.assert_called_once_with("ajena", email_verified=False)
+        for uid in ("legitima", "sin_verificar", "ajena"):
+            self.assertNotIn("deshacerPendiente", self.db.docs[f"verificaciones_email/{uid}"])
 
     def test_los_envios_del_dia_cuentan_con_el_reloj_utc_de_los_cupos(self):
         self.usuario("u1", "a@x.es", False)

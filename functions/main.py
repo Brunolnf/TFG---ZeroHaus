@@ -1099,14 +1099,25 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         if not _deshacer_o_anotar(db, uid, email):
             raise no_confirmada
         raise caducado
+    # Verificación confirmada: una marca de un fallo anterior ya no aplica
+    _quitar_marca_deshacer(db, uid)
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
 
 
 # Si no se puede deshacer una verificación, queda anotado en
 # /verificaciones_email/{uid} (deshacerPendiente y deshacerEmail, el email al
-# que se envió el código). Mientras esté la marca, la cuenta no se da por
-# verificada: se reintenta al pedir o comprobar un código y en la tarea diaria.
+# que se envió el código: el único que el código verificó). Mientras esté la
+# marca se reintenta al pedir o comprobar un código y en la tarea diaria, y
+# solo se deshace si la cuenta sigue verificada con otro email; si ya tiene
+# ese email o no está verificada, la marca se quita sin tocar la cuenta.
+
+def _quitar_marca_deshacer(db, uid: str) -> None:
+    try:
+        db.collection("verificaciones_email").document(uid).update(
+            {"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
+    except NotFound:
+        pass
 
 def _deshacer_o_anotar(db, uid: str, email: str) -> bool:
     """Deshace la verificación; si no se puede, deja la marca para
@@ -1122,16 +1133,37 @@ def _deshacer_o_anotar(db, uid: str, email: str) -> bool:
 
 
 def _reintentar_deshacer(db, uid: str) -> str:
-    """"" si la cuenta no tiene nada por deshacer; "deshecha" si lo tenía y
-    ahora se ha deshecho (se quita la marca); "pendiente" si sigue sin poderse."""
+    """Resuelve la marca de deshacer de `uid`:
+    ""            no hay marca;
+    "pendiente"   la cuenta sigue verificada con otro email y aún no se pudo deshacer;
+    "sin_verificar" la cuenta no está verificada (se ha deshecho ahora o ya no
+                  lo estaba): se quita la marca;
+    "legitima"    la cuenta tiene el email al que se envió el código: la
+                  verificación vale y se quita la marca sin tocar nada."""
     ref = db.collection("verificaciones_email").document(uid)
-    if (ref.get().to_dict() or {}).get("deshacerPendiente") is not True:
+    marca = ref.get().to_dict() or {}
+    if marca.get("deshacerPendiente") is not True:
         return ""
-    if not _deshacer_verificacion(uid):
+    try:
+        usuario = auth.get_user(uid)
+    except auth.UserNotFoundError:
+        usuario = None
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo consultar Auth para el deshacer pendiente de {uid}: {e}")
         return "pendiente"
-    ref.update({"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
-    print(f"[SEGURIDAD] Deshecha la verificación pendiente de {uid}")
-    return "deshecha"
+    if usuario is None or not usuario.email_verified:
+        estado = "sin_verificar"
+    elif _normalizar_email(usuario.email) == marca.get("deshacerEmail"):
+        estado = "legitima"
+    elif _deshacer_verificacion(uid):
+        estado = "sin_verificar"
+        print(f"[SEGURIDAD] Deshecha la verificación pendiente de {uid}")
+    else:
+        return "pendiente"
+    _quitar_marca_deshacer(db, uid)
+    if estado == "legitima":
+        print(f"[SEGURIDAD] Marca de deshacer de {uid} sin efecto: la cuenta tiene el email verificado por el código")
+    return estado
 
 
 def _ya_verificada(db, uid: str) -> bool:
@@ -1143,7 +1175,7 @@ def _ya_verificada(db, uid: str) -> bool:
     if estado == "pendiente":
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo verificar el email. Inténtalo de nuevo en unos minutos.")
-    if estado == "deshecha":
+    if estado == "sin_verificar":
         return False
     _marcar_perfil_verificado(db, uid)
     return True
@@ -1155,16 +1187,16 @@ def _uids_deshacer_pendiente(db) -> set:
 
 
 def _reintentar_deshacer_pendientes(db) -> int:
-    """Tarea diaria: reintenta cada verificación pendiente de deshacer.
-    Devuelve cuántas se han deshecho."""
-    deshechas = 0
+    """Tarea diaria: resuelve cada marca de deshacer pendiente. Devuelve
+    cuántas se han resuelto (deshechas o sin efecto)."""
+    resueltas = 0
     for uid in _uids_deshacer_pendiente(db):
         try:
-            if _reintentar_deshacer(db, uid) == "deshecha":
-                deshechas += 1
+            if _reintentar_deshacer(db, uid) in ("sin_verificar", "legitima"):
+                resueltas += 1
         except Exception as e:
             print(f"[SEGURIDAD] No se pudo reintentar el deshacer de {uid}: {e}")
-    return deshechas
+    return resueltas
 
 
 def _deshacer_verificacion(uid: str) -> bool:
@@ -2203,7 +2235,7 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     db = firestore.client()
     pasos = (
         ("[ADMIN] Cuentas bloqueadas desactivadas en Auth", _sincronizar_bloqueados),
-        ("[SEGURIDAD] Verificaciones pendientes deshechas", _reintentar_deshacer_pendientes),
+        ("[SEGURIDAD] Marcas de deshacer verificación resueltas", _reintentar_deshacer_pendientes),
         ("[SUSCRIPCION] Suscripciones revisadas con Play", _revisar_suscripciones),
         ("[TECNICOS] Perfiles ocultos ya verificados", _mostrar_perfiles_verificados),
         # Privacidad: eventos individuales de estadísticas de más de 48 h
