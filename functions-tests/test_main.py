@@ -1132,6 +1132,7 @@ class _PlayFalso:
         self.estados = {}       # token → subscriptionState
         self.caido = False
         self.codigo_cancel = None   # fuerza la respuesta HTTP de :cancel (403, 503…)
+        self.error_cancel = None    # y su cuerpo {"error": {...}}
         self.peticiones = []    # (método, url, cuerpo)
 
     def post(self, url, json=None, timeout=None):
@@ -1139,7 +1140,7 @@ class _PlayFalso:
         if self.caido:
             raise ConnectionError("Play no responde")
         if self.codigo_cancel is not None:
-            return _respuesta_http(self.codigo_cancel)
+            return _respuesta_http(self.codigo_cancel, {"error": self.error_cancel} if self.error_cancel else None)
         token = url.rsplit("/", 1)[-1].split(":")[0]
         if token not in self.estados:
             return _respuesta_http(404)
@@ -1204,13 +1205,52 @@ class BorrarCuentaConSuscripcionTest(_ConPurga):
         self.assertIn("suscripciones/token-play-1", self.db.docs)
 
     def test_sin_permiso_en_play_se_borra_y_se_pide_cancelarla_en_play(self):
+        casos = {
+            "401": (401, None),
+            "403 de permiso": (403, {"code": 403, "status": "PERMISSION_DENIED",
+                                     "message": "The caller does not have permission"}),
+            "403 con reason de permiso": (403, {"code": 403, "errors": [{"reason": "permissionDenied"}]}),
+        }
+        for caso, (codigo, error) in casos.items():
+            with self.subTest(caso=caso):
+                self.setUp()
+                self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+                self.play.codigo_cancel, self.play.error_cancel = codigo, error
+                respuesta = self.borrar()
+                self.assertIs(respuesta["suscripcionCancelada"], False)
+                self.assertIs(respuesta["cancelarEnPlay"], True)
+                self.delete_user.assert_called_once_with("p1")
+                self.assertTrue(any("[SUSCRIPCION] ERROR" in str(c) for c in self.log.call_args_list))
+
+    def test_un_403_por_cuota_es_pasajero_y_no_borra(self):
+        casos = {
+            "rateLimitExceeded": {"code": 403, "errors": [{"reason": "rateLimitExceeded"}]},
+            # La cuota manda aunque el status sea el de permisos
+            "quotaExceeded": {"code": 403, "status": "PERMISSION_DENIED", "errors": [{"reason": "quotaExceeded"}]},
+            "403 sin detalle": None,
+        }
+        for caso, error in casos.items():
+            with self.subTest(caso=caso):
+                self.setUp()
+                self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
+                self.play.codigo_cancel, self.play.error_cancel = 403, error
+                with self.assertRaises(main.https_fn.HttpsError) as fallo:
+                    self.borrar()
+                self.assertEqual(fallo.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+                self.delete_user.assert_not_called()
+                self.assertIn("tecnicos/p1", self.db.docs)
+
+    def test_sin_credenciales_para_play_no_borra_y_el_registro_lo_dice(self):
         self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")
-        self.play.codigo_cancel = 403   # la cuenta de servicio no puede cancelar
-        respuesta = self.borrar()
-        self.assertIs(respuesta["suscripcionCancelada"], False)
-        self.assertIs(respuesta["cancelarEnPlay"], True)
-        self.delete_user.assert_called_once_with("p1")
-        self.assertTrue(any("[SUSCRIPCION]" in str(c) for c in self.log.call_args_list))
+
+        def sin_credenciales():
+            raise RuntimeError("Could not automatically determine credentials")
+        with mock.patch.object(main, "_sesion_play", sin_credenciales), \
+                self.assertRaises(main.https_fn.HttpsError) as fallo:
+            self.borrar()
+        self.assertEqual(fallo.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.delete_user.assert_not_called()
+        self.assertTrue(any("credenciales" in str(c) for c in self.log.call_args_list))
 
     def test_un_fallo_pasajero_de_play_con_la_suscripcion_activa_no_borra(self):
         self.suscripcion("token-play-1", "SUBSCRIPTION_STATE_ACTIVE")

@@ -1898,18 +1898,29 @@ def _cancelar_en_play(token: str) -> str:
 
     Devuelve "cancelada" si Play la ha cancelado ahora, "no_renueva" si ya no
     se iba a cobrar (Play no conoce el token, o está cancelada o caducada) y
-    "sin_permiso" si Play responde 401/403: es un fallo de configuración
-    nuestro y no puede impedir que alguien borre su cuenta. Ante un fallo
-    pasajero con la suscripción aún activa, lanza UNAVAILABLE (reintentable)."""
+    "sin_permiso" si Play niega el permiso (401, o 403 de permisos): es un
+    fallo de configuración nuestro y no puede impedir que alguien borre su
+    cuenta. Ante un fallo pasajero (5xx, red, 403 por cuota) con la
+    suscripción aún activa, lanza UNAVAILABLE (reintentable)."""
+    no_disponible = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.UNAVAILABLE,
+        "No se pudo cancelar la suscripción en Google Play. Inténtalo de nuevo en unos minutos.",
+        {"motivo": "play"},
+    )
     try:
-        r = _sesion_play().post(
+        sesion = _sesion_play()
+    except Exception as e:
+        print(f"[SUSCRIPCION] ERROR: sin credenciales para la API de Google Play: {e}")
+        raise no_disponible
+    try:
+        r = sesion.post(
             f"{ANDROID_PUBLISHER}/purchases/subscriptionsv2/tokens/{token}:cancel",
             json={"cancellationContext": {"cancellationType": "DEVELOPER_REQUESTED_STOP_PAYMENTS"}},
             timeout=15,
         )
         if r.status_code < 300:
             return "cancelada"
-        if r.status_code in (401, 403):
+        if _play_niega_permiso(r):
             print(f"[SUSCRIPCION] ERROR: sin permiso para cancelar en Play (HTTP {r.status_code}). "
                   f"Revisa los permisos de la cuenta de servicio en Play Console: {r.text[:300]}")
             return "sin_permiso"
@@ -1920,11 +1931,39 @@ def _cancelar_en_play(token: str) -> str:
     data = _consultar_play(token)
     if data == {} or (data and data.get("subscriptionState") in ESTADOS_SIN_RENOVACION):
         return "no_renueva"
-    raise https_fn.HttpsError(
-        https_fn.FunctionsErrorCode.UNAVAILABLE,
-        "No se pudo cancelar la suscripción en Google Play. Inténtalo de nuevo en unos minutos.",
-        {"motivo": "play"},
-    )
+    raise no_disponible
+
+
+# Razones de los errores de Google que indican falta de permiso
+_RAZONES_SIN_PERMISO = {
+    "permissiondenied", "forbidden", "insufficientpermissions",
+    "iam_permission_denied", "access_token_scope_insufficient",
+}
+
+
+def _play_niega_permiso(r) -> bool:
+    """True si la respuesta de Play es una falta de permiso: 401, o 403 con
+    status PERMISSION_DENIED o una razón de permisos. Google también responde
+    403 por cuota (rateLimitExceeded, quotaExceeded): eso es pasajero y la
+    cuota manda aunque el status sea PERMISSION_DENIED."""
+    if r.status_code == 401:
+        return True
+    if r.status_code != 403:
+        return False
+    try:
+        error = (r.json() or {}).get("error")
+    except Exception:
+        error = None
+    if not isinstance(error, dict):
+        return False
+    razones = {
+        str(e.get("reason") or "").lower()
+        for e in (error.get("errors") or []) + (error.get("details") or [])
+        if isinstance(e, dict)
+    }
+    if any("quota" in r_ or "ratelimit" in r_ or "rate_limit" in r_ for r_ in razones):
+        return False
+    return error.get("status") == "PERMISSION_DENIED" or bool(razones & _RAZONES_SIN_PERMISO)
 
 
 def _cancelar_suscripciones_play(db, uid: str) -> tuple:
