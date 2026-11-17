@@ -692,6 +692,12 @@ describe("/usuarios: email de la cuenta y topes", () => {
       usuarioApp({ email: "otra.persona@x.es" })));
   });
 
+  it("el administrador crea el perfil de otra cuenta con su email (panel de administración)", async () => {
+    const admin = env.authenticatedContext("admin", { email: "admin@x.es", email_verified: true, admin: true }).firestore();
+    await assertSucceeds(setDoc(doc(admin, "usuarios/creado"),
+      usuarioApp({ uid: "creado", nombre: "Creado por el admin", email: "creado@x.es" })));
+  });
+
   it("al registrarse no se admiten campos fuera del modelo ni gigantes", async () => {
     const db = sesion("nuevo", "nuevo@x.es");
     await assertFails(setDoc(doc(db, "usuarios/nuevo"), usuarioApp({ relleno: "x".repeat(10000) })));
