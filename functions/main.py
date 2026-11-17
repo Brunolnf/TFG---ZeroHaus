@@ -16,15 +16,15 @@ Callables (se invocan desde la app con Firebase Functions)
 
 Triggers de Firestore
   on_message_created           Nuevo mensaje de chat → push, email y notificación.
-  on_resena_changed            Reseña creada/editada/borrada → recalcula la nota.
+  on_resena_changed            Reseña creada/editada/borrada → recalcula la nota y pone el nombre real.
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
   on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
-  revisar_suscripciones_diario Respaldo diario de suscripciones + limpieza de eventos y notificaciones,
-                               autores de chats antiguos, bloqueos pendientes en Auth y perfiles
-                               profesionales ocultos de cuentas ya verificadas.
+  revisar_suscripciones_diario Bloqueos pendientes en Auth, respaldo diario de suscripciones,
+                               perfiles profesionales ocultos de cuentas ya verificadas y
+                               limpieza de eventos y notificaciones.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
@@ -86,6 +86,22 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PUERTO = int(os.environ.get("SMTP_PUERTO", "465"))
 
 REGION = "europe-west1"
+
+# Techo de instancias: una ráfaga de mensajes, eventos o llamadas no escala sin
+# límite (ni el coste). Va antes de cualquier función: el decorador lee las
+# opciones globales al definirla.
+#
+# CPU y concurrencia: con cpu=None, firebase-tools asigna 1 CPU a las funciones
+# de hasta 2 GB y, con 1 CPU, una concurrencia de 80 peticiones por instancia
+# (deploy/functions/prepare.js, resolveCpuAndConcurrency; docs de Firebase,
+# «Manage functions»). Sin cpu=None, set_global_options pondría "gcf_gen1":
+# 0,167 CPU con 256 MB y una sola petición a la vez por instancia.
+MAX_INSTANCIAS = 10
+# on_message_created recibe un evento por mensaje: con margen para que una
+# ráfaga de chat no se quede sin instancias y se pierdan avisos
+MAX_INSTANCIAS_CHAT = 50
+MAX_INSTANCIAS_IA = 3      # Gemini: cada llamada cuesta dinero
+options.set_global_options(region=REGION, max_instances=MAX_INSTANCIAS, cpu=None)
 
 COLECCIONES_POR_CAMPO_UID = [
     ("viviendas",       "uid"),
@@ -184,6 +200,14 @@ def _purgar_usuario(db, uid: str) -> dict:
     el borrado self-service (RGPD / política de Google Play). Irreversible."""
     stats: dict = {}
 
+    # Perfiles profesionales: el de id = uid y los antiguos reclamados con otro
+    # id, que llevan el uid en el campo `uid`. De cada uno se borran también
+    # sus reseñas, estadísticas, eventos y fotos.
+    perfiles = sorted({uid} | {
+        d.id for d in db.collection("tecnicos").where(filter=FieldFilter("uid", "==", uid)).stream()
+    })
+    otros_perfiles = [p for p in perfiles if p != uid]
+
     for col, campo in COLECCIONES_POR_CAMPO_UID:
         q = db.collection(col).where(filter=FieldFilter(campo, "==", uid))
         stats[col] = _borrar_query(db, q)
@@ -191,8 +215,10 @@ def _purgar_usuario(db, uid: str) -> dict:
     for col, campos in COLECCIONES_DOBLE_CAMPO:
         total = 0
         for campo in campos:
-            q = db.collection(col).where(filter=FieldFilter(campo, "==", uid))
-            total += _borrar_query(db, q)
+            # tecnicoId: las reseñas sobre cualquiera de sus perfiles
+            for valor in ([uid] if campo == "uid" else perfiles):
+                q = db.collection(col).where(filter=FieldFilter(campo, "==", valor))
+                total += _borrar_query(db, q)
         stats[col] = total
 
     chats_borrados = 0
@@ -208,9 +234,17 @@ def _purgar_usuario(db, uid: str) -> dict:
         chats_borrados += 1
     stats["chats"] = chats_borrados
     stats["mensajes"] = mensajes_borrados
-    stats["archivos"] = archivos_borrados + _borrar_storage(f"perfiles/{uid}/")
+    stats["archivos"] = archivos_borrados + sum(_borrar_storage(f"perfiles/{p}/") for p in perfiles)
 
-    stats["eventos"] = _borrar_subcoleccion(db, db.collection("tecnicos").document(uid), "eventos")
+    eventos = 0
+    for perfil_id in perfiles:
+        eventos += _borrar_subcoleccion(db, db.collection("tecnicos").document(perfil_id), "eventos")
+    # El de id = uid (con su /estadisticas) se borra con DOCS_POR_ID
+    for perfil_id in otros_perfiles:
+        db.collection("estadisticas").document(perfil_id).delete()
+        db.collection("tecnicos").document(perfil_id).delete()
+    stats["eventos"] = eventos
+    stats["perfilesOtroId"] = len(otros_perfiles)
 
     for col in DOCS_POR_ID:
         try:
@@ -240,7 +274,9 @@ def _purgar_usuario(db, uid: str) -> dict:
 )
 def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     """Borra definitivamente un usuario: Auth, Firestore (cascada) y Storage.
-    Reservado al administrador (custom claim `admin`). Args: uid (str)."""
+    Reservado al administrador (custom claim `admin`). Args: uid (str) y
+    forzar (bool, opcional): borra sin cancelar antes en Google Play, por si
+    Play lleva tiempo sin responder; queda en el registro."""
     _verificar_admin(req)
 
     uid = (req.data or {}).get("uid")
@@ -257,9 +293,28 @@ def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
             "El administrador no puede eliminarse a sí mismo."
         )
 
-    db = firestore.client()
+    forzar = (req.data or {}).get("forzar") is True
+    if forzar:
+        print(f"[ADMIN] {caller_uid} borra a {uid} con forzar: sin cancelar antes sus suscripciones en Play")
+    return _borrar_cuenta(firestore.client(), uid, cancelar_en_play=not forzar)
+
+
+def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
+    """Cancela en Google Play las suscripciones que aún pueden cobrarse y
+    después purga la cuenta. Si Play falla de forma pasajera, la cancelación
+    lanza UNAVAILABLE antes de borrar nada (se reintenta). `cancelarEnPlay`:
+    alguna quedó sin cancelar (Play no nos dejó, o el administrador forzó el
+    borrado) y hay que cancelarla en Google Play."""
+    if cancelar_en_play:
+        canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
+    else:
+        canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
     stats = _purgar_usuario(db, uid)
-    return {"ok": True, "uid": uid, "stats": stats}
+    return {
+        "ok": True, "uid": uid, "stats": stats,
+        "suscripcionCancelada": canceladas > 0,
+        "cancelarEnPlay": sin_cancelar > 0,
+    }
 
 
 @https_fn.on_call(
@@ -275,11 +330,15 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
     uid = (req.data or {}).get("uid")
     if not uid or not isinstance(uid, str):
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "Falta el parámetro 'uid'.")
+    db = firestore.client()
+    # Antes de marcar en Auth: una marca de deshacer pendiente desharía esta
+    # verificación (y si no se puede quitar, no se verifica)
+    _quitar_marca_deshacer(db, uid)
     try:
         auth.update_user(uid, email_verified=True)
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
-    _marcar_perfil_verificado(firestore.client(), uid)
+    _marcar_perfil_verificado(db, uid)
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
     return {"ok": True}
 
@@ -344,16 +403,15 @@ def _sincronizar_bloqueados(db) -> int:
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
     todos sus datos. Obligatorio por la política de Google Play (borrado de
-    cuenta desde la app) y por el RGPD (derecho de supresión). Irreversible."""
+    cuenta desde la app) y por el RGPD (derecho de supresión). Irreversible.
+    Antes cancela en Google Play la renovación de sus suscripciones: sin
+    cuenta no podría usarlas y Play le seguiría cobrando."""
     if req.auth is None:
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión."
         )
 
-    uid = req.auth.uid
-    db = firestore.client()
-    stats = _purgar_usuario(db, uid)
-    return {"ok": True, "uid": uid, "stats": stats}
+    return _borrar_cuenta(firestore.client(), req.auth.uid)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -395,6 +453,12 @@ _AVISOS_EMAIL = {
     "Nederlands": ("Nieuw bericht van {nombre}", "{nombre} heeft je geschreven op ZeroHaus:\n“{texto}”\n\nOpen de app om te antwoorden.", "Je hebt een beoordeling ontvangen", "{nombre} gaf je een {n}/5 op ZeroHaus.", "Je ontvangt deze e-mail omdat e-mailmeldingen aan staan. Je kunt ze uitzetten via Instellingen › Meldingen."),
     "Polski": ("Nowa wiadomość od {nombre}", "{nombre} napisał(a) do Ciebie w ZeroHaus:\n„{texto}”\n\nOtwórz aplikację, aby odpowiedzieć.", "Otrzymałeś ocenę", "{nombre} ocenił(a) Cię na {n}/5 w ZeroHaus.", "Otrzymujesz tę wiadomość, bo masz włączone powiadomienia e-mail. Możesz je wyłączyć w Ustawienia › Powiadomienia."),
 }
+
+def _idioma_conocido(idioma) -> str:
+    """El idioma que manda la app si es uno de los 14 conocidos; si no,
+    «Español». Va escrito dentro del prompt de la IA: nunca texto libre."""
+    return idioma if isinstance(idioma, str) and idioma in _AVISOS_EMAIL else "Español"
+
 
 AVISO_CHAT_ESPERA_MS = 30 * 60 * 1000   # como mucho 1 email por conversación cada 30 min
 # Tope de correos al día entre todos (códigos y avisos): la cuenta de Gmail
@@ -565,6 +629,7 @@ def _enviar_push(destino: dict, titulo: str, cuerpo: str, data: dict = None, son
     document="chats/{chatId}/mensajes/{msgId}",
     region=REGION,
     secrets=[SMTP_USUARIO, SMTP_CLAVE],
+    max_instances=MAX_INSTANCIAS_CHAT,
 )
 def on_message_created(event) -> None:
     """Nuevo mensaje de chat: notificación en la app y, según los ajustes de cada
@@ -636,30 +701,25 @@ def _rellenar_escribieron_chat(chat_snap) -> None:
     chat_snap.reference.update({"escribieron": _autores_del_chat(mensajes, participantes)})
 
 
-def _rellenar_escribieron_antiguos(db) -> int:
-    """Chats con mensajes de antes del campo `escribieron` (los que no reciben
-    mensajes nuevos no pasan por on_message_created). Devuelve cuántos."""
-    rellenados = 0
-    for chat in db.collection("chats").where(filter=FieldFilter("fechaUltimoMensaje", ">", 0)).stream():
-        if "escribieron" not in (chat.to_dict() or {}):
-            _rellenar_escribieron_chat(chat)
-            rellenados += 1
-    return rellenados
-
-
 def _nombre_real(db, uid: str, respaldo: str) -> str:
     """Nombre de una persona tal como está en su perfil (/usuarios).
 
     No se usa el nombre que viene en el mensaje o en la reseña: lo escribe el
     móvil y podía ser cualquiera («ZeroHaus Soporte»), y el servidor lo ponía
     en el push y en el email que se envían desde la cuenta de ZeroHaus."""
-    nombre = ""
-    if uid:
-        try:
-            nombre = str((db.collection("usuarios").document(uid).get().to_dict() or {}).get("nombre") or "")
-        except Exception as e:
-            print(f"[NOMBRE] No se pudo leer el perfil de {uid}: {e}")
-    return (nombre.strip() or str(respaldo).strip() or "ZeroHaus")[:60]
+    return (_nombre_perfil(db, uid) or str(respaldo).strip() or "ZeroHaus")[:60]
+
+
+def _nombre_perfil(db, uid: str) -> str:
+    """Nombre de /usuarios/{uid} (60 caracteres como mucho), o "" si no lo hay."""
+    if not uid:
+        return ""
+    try:
+        nombre = str((db.collection("usuarios").document(uid).get().to_dict() or {}).get("nombre") or "")
+    except Exception as e:
+        print(f"[NOMBRE] No se pudo leer el perfil de {uid}: {e}")
+        return ""
+    return nombre.strip()[:60]
 
 
 # Nombre de los adjuntos sin texto (foto, archivo) en los 14 idiomas
@@ -696,28 +756,30 @@ def _resumen_mensaje(msg: dict, idioma: str) -> str:
     secrets=[SMTP_USUARIO, SMTP_CLAVE],
 )
 def on_resena_changed(event) -> None:
-    """Reseña creada, editada o borrada: recalcula la nota del profesional y, si es
-    nueva, le avisa (notificación, push y/o email según sus ajustes)."""
+    """Reseña creada, editada o borrada: recalcula la nota del profesional si
+    cambian la puntuación o el profesional, pone en la reseña el nombre del
+    perfil de su autor y, si es nueva, avisa al profesional (notificación,
+    push y/o email según sus ajustes)."""
     before = event.data.before
     after = event.data.after
-
-    tecnicos_afectados = set()
-    if before is not None and before.exists:
-        tid = (before.to_dict() or {}).get("tecnicoId")
-        if tid:
-            tecnicos_afectados.add(tid)
-    if after is not None and after.exists:
-        tid = (after.to_dict() or {}).get("tecnicoId")
-        if tid:
-            tecnicos_afectados.add(tid)
+    antes = (before.to_dict() or {}) if before is not None and before.exists else None
+    despues = (after.to_dict() or {}) if after is not None and after.exists else None
 
     db = firestore.client()
-    for tecnico_id in tecnicos_afectados:
-        _recalcular_rating(db, tecnico_id)
+    # La nota solo depende del profesional y la puntuación: otras ediciones
+    # (como la corrección del nombre de abajo) no la recalculan
+    def nota(d):
+        return d.get("tecnicoId"), d.get("puntuacion")
+    if antes is None or despues is None or nota(antes) != nota(despues):
+        for tecnico_id in {d.get("tecnicoId") for d in (antes, despues) if d and d.get("tecnicoId")}:
+            _recalcular_rating(db, tecnico_id)
 
-    es_creacion = (before is None or not before.exists) and after is not None and after.exists
+    if despues is not None:
+        _corregir_nombre_resena(db, event.params["resenaId"], despues)
+
+    es_creacion = antes is None and despues is not None
     if es_creacion:
-        data = after.to_dict() or {}
+        data = despues
         tecnico_id = data.get("tecnicoId", "")
         nombre_usuario = _nombre_real(db, data.get("uid", ""), data.get("nombreUsuario", ""))
         puntuacion = int(data.get("puntuacion", 5))
@@ -748,46 +810,35 @@ def on_resena_changed(event) -> None:
                     )
 
 
-def _recalcular_todos_los_ratings(db) -> int:
-    """Pone `rating` y `opiniones` de cada profesional según sus reseñas reales.
-
-    on_resena_changed los mantiene al día; esto corrige perfiles antiguos (de
-    pruebas, o de antes del trigger) cuya nota no sale de reseñas. La app se
-    fía de estos campos y ya no descarga todas las reseñas en cada móvil.
-    Devuelve cuántos perfiles se han corregido."""
-    notas = {}
-    for r in db.collection("resenas").stream():
-        d = r.to_dict() or {}
-        if d.get("tecnicoId"):
-            notas.setdefault(d["tecnicoId"], []).append(int(d.get("puntuacion") or 0))
-    corregidos = 0
-    for t in db.collection("tecnicos").stream():
-        lista = notas.get(t.id, [])
-        rating = round(sum(lista) / len(lista), 2) if lista else 0.0
-        actual = t.to_dict() or {}
-        if actual.get("rating") != rating or actual.get("opiniones") != len(lista):
-            t.reference.update({"rating": rating, "opiniones": len(lista)})
-            corregidos += 1
-    return corregidos
+def _corregir_nombre_resena(db, resena_id: str, resena: dict) -> None:
+    """La lista pública de reseñas muestra `nombreUsuario`, que escribe el
+    móvil: se sustituye por el nombre del perfil del autor. Solo se escribe si
+    es distinto; esa escritura vuelve a disparar on_resena_changed, que ya lo
+    encuentra bien y no recalcula ni avisa. Sin nombre en el perfil no se toca."""
+    nombre = _nombre_perfil(db, resena.get("uid") or "")
+    if not nombre or resena.get("nombreUsuario") == nombre:
+        return
+    try:
+        db.collection("resenas").document(resena_id).update({"nombreUsuario": nombre})
+    except NotFound:
+        pass   # la reseña se borró mientras tanto
+    except Exception as e:
+        print(f"[RESENAS] No se pudo corregir el nombre de la reseña {resena_id}: {e}")
 
 
 def _recalcular_rating(db, tecnico_id: str) -> None:
-    """Recalcula `rating` y `opiniones` del profesional a partir de todas sus reseñas."""
+    """Recalcula `rating` y `opiniones` del profesional a partir de todas sus reseñas.
+    Solo actualiza un perfil que existe: si la cuenta se borró antes de que
+    llegara el trigger de la reseña, no se recrea un perfil vacío."""
     q = db.collection("resenas").where(filter=FieldFilter("tecnicoId", "==", tecnico_id))
     docs = list(q.stream())
     n = len(docs)
-    if n == 0:
-        db.collection("tecnicos").document(tecnico_id).set(
-            {"rating": 0.0, "opiniones": 0},
-            merge=True,
-        )
-        return
     total = sum((d.to_dict() or {}).get("puntuacion", 0) for d in docs)
-    promedio = round(total / n, 2)
-    db.collection("tecnicos").document(tecnico_id).set(
-        {"rating": promedio, "opiniones": n},
-        merge=True,
-    )
+    promedio = round(total / n, 2) if n else 0.0
+    try:
+        db.collection("tecnicos").document(tecnico_id).update({"rating": promedio, "opiniones": n})
+    except NotFound:
+        pass
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -909,17 +960,17 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAUTHENTICATED, "Debes iniciar sesión.")
     uid = req.auth.uid
     usuario = auth.get_user(uid)
-    if usuario.email_verified:
+    db = firestore.client()
+    if usuario.email_verified and _ya_verificada(db, uid):
         return {"verificado": True}
     if not usuario.email:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
 
-    idioma = str((req.data or {}).get("idioma") or "Español")
+    idioma = _idioma_conocido((req.data or {}).get("idioma"))
     email = _normalizar_email(usuario.email)
-    db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
-    hoy = time.strftime("%Y%m%d", time.gmtime())
+    hoy = _hoy_utc()
 
     @firestore.transactional
     def _reservar(txn):
@@ -987,11 +1038,11 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "El código tiene 6 dígitos.")
 
     usuario = auth.get_user(uid)
-    if usuario.email_verified:
+    db = firestore.client()
+    if usuario.email_verified and _ya_verificada(db, uid):
         return {"verificado": True}
     email = _normalizar_email(usuario.email)
 
-    db = firestore.client()
     ref = db.collection("verificaciones_email").document(uid)
     ahora = _ahora_ms()
 
@@ -1032,14 +1083,146 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
             {"restantes": restantes},
         )
 
-    auth.update_user(uid, email_verified=True)
+    no_confirmada = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo verificar el email. Pide un código nuevo en unos minutos.")
     # Si el email de la cuenta cambió entre la comprobación y este momento, la
-    # verificación sería de otro correo: se deshace y el código no vale
-    if _normalizar_email(auth.get_user(uid).email) != email:
-        auth.update_user(uid, email_verified=False)
+    # verificación sería de otro correo: se deshace y el código no vale. Si no
+    # se puede confirmar (Auth no responde), también: falla en cerrado.
+    try:
+        auth.update_user(uid, email_verified=True)
+        email_actual = _normalizar_email(auth.get_user(uid).email)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo confirmar la verificación de {uid}: {e}")
+        _deshacer_o_anotar(db, uid, email)
+        raise no_confirmada
+    if email_actual != email:
+        print(f"[SEGURIDAD] El email de {uid} cambió mientras se verificaba: se deshace")
+        if not _deshacer_o_anotar(db, uid, email):
+            raise no_confirmada
         raise caducado
+    # Verificación confirmada: una marca de un fallo anterior ya no aplica. La
+    # marca guarda el email de aquel código: si la cuenta verifica ahora otro,
+    # la tarea diaria la desharía, así que si no se puede quitar se reintenta.
+    for intento in (1, 2):
+        try:
+            _quitar_marca_deshacer(db, uid)
+            break
+        except Exception as e:
+            print(f"[SEGURIDAD] No se pudo quitar la marca de deshacer de {uid} (intento {intento}): {e}")
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
+
+
+# Si no se puede deshacer una verificación, queda anotado en
+# /verificaciones_email/{uid} (deshacerPendiente y deshacerEmail, el email al
+# que se envió el código: el único que el código verificó). Mientras esté la
+# marca se reintenta al pedir o comprobar un código y en la tarea diaria, y
+# solo se deshace si la cuenta sigue verificada con otro email; si ya tiene
+# ese email o no está verificada, la marca se quita sin tocar la cuenta.
+
+def _quitar_marca_deshacer(db, uid: str) -> None:
+    try:
+        db.collection("verificaciones_email").document(uid).update(
+            {"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
+    except NotFound:
+        pass
+
+def _deshacer_o_anotar(db, uid: str, email: str) -> bool:
+    """Deshace la verificación; si no se puede, deja la marca para
+    reintentarlo. True si se deshizo."""
+    if _deshacer_verificacion(uid):
+        return True
+    try:
+        db.collection("verificaciones_email").document(uid).set(
+            {"deshacerPendiente": True, "deshacerEmail": email}, merge=True)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo anotar el deshacer pendiente de {uid}: {e}")
+    return False
+
+
+def _reintentar_deshacer(db, uid: str) -> str:
+    """Resuelve la marca de deshacer de `uid`:
+    ""            no hay marca;
+    "pendiente"   la cuenta sigue verificada con otro email y aún no se pudo deshacer;
+    "sin_verificar" la cuenta no está verificada (se ha deshecho ahora o ya no
+                  lo estaba): se quita la marca;
+    "legitima"    la cuenta tiene el email al que se envió el código: la
+                  verificación vale y se quita la marca sin tocar nada."""
+    ref = db.collection("verificaciones_email").document(uid)
+    marca = ref.get().to_dict() or {}
+    if marca.get("deshacerPendiente") is not True:
+        return ""
+    try:
+        usuario = auth.get_user(uid)
+    except auth.UserNotFoundError:
+        usuario = None
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo consultar Auth para el deshacer pendiente de {uid}: {e}")
+        return "pendiente"
+    email_del_codigo = _normalizar_email(marca.get("deshacerEmail"))
+    if usuario is None or not usuario.email_verified:
+        estado = "sin_verificar"
+    elif email_del_codigo and _normalizar_email(usuario.email) == email_del_codigo:
+        estado = "legitima"
+    elif _deshacer_verificacion(uid):
+        estado = "sin_verificar"
+        print(f"[SEGURIDAD] Deshecha la verificación pendiente de {uid}")
+    else:
+        return "pendiente"
+    _quitar_marca_deshacer(db, uid)
+    if estado == "legitima":
+        print(f"[SEGURIDAD] Marca de deshacer de {uid} sin efecto: la cuenta tiene el email verificado por el código")
+    return estado
+
+
+def _ya_verificada(db, uid: str) -> bool:
+    """Para una cuenta que Auth da por verificada: True si lo está de verdad
+    (y entonces muestra su perfil, por si falló al marcarlo); False si tenía
+    la verificación por deshacer y ahora se ha deshecho (sigue como una cuenta
+    sin verificar). Si aún no se puede deshacer, UNAVAILABLE."""
+    estado = _reintentar_deshacer(db, uid)
+    if estado == "pendiente":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo verificar el email. Inténtalo de nuevo en unos minutos.")
+    if estado == "sin_verificar":
+        return False
+    _marcar_perfil_verificado(db, uid)
+    return True
+
+
+def _uids_deshacer_pendiente(db) -> set:
+    return {d.id for d in db.collection("verificaciones_email")
+            .where(filter=FieldFilter("deshacerPendiente", "==", True)).stream()}
+
+
+def _reintentar_deshacer_pendientes(db) -> int:
+    """Tarea diaria: resuelve cada marca de deshacer pendiente. Devuelve
+    cuántas se han resuelto (deshechas o sin efecto)."""
+    resueltas = 0
+    for uid in _uids_deshacer_pendiente(db):
+        try:
+            if _reintentar_deshacer(db, uid) in ("sin_verificar", "legitima"):
+                resueltas += 1
+        except Exception as e:
+            print(f"[SEGURIDAD] No se pudo reintentar el deshacer de {uid}: {e}")
+    return resueltas
+
+
+def _deshacer_verificacion(uid: str) -> bool:
+    """Quita la marca de email verificado y cierra las sesiones de la cuenta
+    (un token emitido mientras estaba marcada ya no se renueva). True si la
+    marca se quitó; los fallos quedan en el registro con [SEGURIDAD]."""
+    deshecha = True
+    try:
+        auth.update_user(uid, email_verified=False)
+    except Exception as e:
+        deshecha = False
+        print(f"[SEGURIDAD] No se pudo deshacer la verificación de {uid}: {e}")
+    try:
+        auth.revoke_refresh_tokens(uid)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudieron cerrar las sesiones de {uid}: {e}")
+    return deshecha
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -1076,9 +1259,10 @@ def _email_verificado_en_auth(uid: str) -> bool:
         return False
 
 
-def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
+def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool, oculto: bool = False) -> None:
     """Pone emailVerificado del perfil según Auth, en una transacción. Con
-    `respetar_true` no pisa un true que haya puesto ya la verificación del código."""
+    `respetar_true` no pisa un true que haya puesto ya la verificación del
+    código. Con `oculto` queda en false sin consultar Auth."""
 
     @firestore.transactional
     def _anotar(txn):
@@ -1086,13 +1270,24 @@ def _anotar_email_verificado(db, ref, uid: str, respetar_true: bool) -> None:
         if not snap.exists:
             return
         actual = (snap.to_dict() or {}).get("emailVerificado")
-        if actual is True and respetar_true:
+        if actual is True and respetar_true and not oculto:
             return
-        verificado = _email_verificado_en_auth(uid)
+        verificado = False if oculto else _email_verificado_en_auth(uid)
         if actual is not verificado:
             txn.update(ref, {"emailVerificado": verificado})
 
     _anotar(db.transaction())
+
+
+def _tiene_marca_deshacer(db, uid: str) -> bool:
+    """True si la verificación de `uid` está pendiente de deshacer (o no se
+    puede comprobar: en la duda, el perfil queda oculto)."""
+    try:
+        marca = db.collection("verificaciones_email").document(uid).get().to_dict() or {}
+    except Exception as e:
+        print(f"[TECNICOS] No se pudo leer la verificación de {uid}: {e}")
+        return True
+    return marca.get("deshacerPendiente") is True
 
 
 @firestore_fn.on_document_created(document="tecnicos/{tecnicoId}", region=REGION)
@@ -1109,19 +1304,43 @@ def on_tecnico_creado(event) -> None:
     ref = db.collection("tecnicos").document(event.params["tecnicoId"])
     # Un true que ya venía en el alta no lo puso el servidor: se decide por Auth.
     # Solo se respeta el que apareció después (la verificación del código).
-    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True)
+    # Con una verificación pendiente de deshacer, oculto aunque Auth diga que sí.
+    _anotar_email_verificado(db, ref, uid, respetar_true=creado.get("emailVerificado") is not True,
+                             oculto=_tiene_marca_deshacer(db, uid))
+
+
+AUTH_LOTE = 100   # máximo de identificadores por llamada a auth.get_users
 
 
 def _mostrar_perfiles_verificados(db) -> int:
     """Pone emailVerificado a true en los perfiles ocultos cuya cuenta ya tiene
     el email verificado: cubre un fallo al marcarlo, perfiles cuyo id no es el
-    uid y verificaciones por otra vía. Devuelve cuántos."""
-    corregidos = 0
+    uid y verificaciones por otra vía. Consulta Auth por lotes y un fallo (de
+    un lote o de un perfil) no detiene el resto. No muestra los de cuentas con
+    la verificación pendiente de deshacer. Devuelve cuántos."""
+    pendientes = _uids_deshacer_pendiente(db)
+    ocultos = []
     for d in db.collection("tecnicos").where(filter=FieldFilter("emailVerificado", "==", False)).stream():
         uid = (d.to_dict() or {}).get("uid") or ""
-        if uid and _email_verificado_en_auth(uid):
-            d.reference.update({"emailVerificado": True})
-            corregidos += 1
+        if uid and uid not in pendientes:
+            ocultos.append((d, uid))
+    corregidos = 0
+    for i in range(0, len(ocultos), AUTH_LOTE):
+        lote = ocultos[i:i + AUTH_LOTE]
+        try:
+            resultado = auth.get_users([auth.UidIdentifier(u) for u in sorted({uid for _, uid in lote})])
+            verificados = {u.uid for u in resultado.users if u.email_verified is True}
+        except Exception as e:
+            print(f"[TECNICOS] No se pudo consultar Auth para un lote de perfiles: {e}")
+            continue
+        for d, uid in lote:
+            if uid not in verificados:
+                continue
+            try:
+                d.reference.update({"emailVerificado": True})
+                corregidos += 1
+            except Exception as e:
+                print(f"[TECNICOS] No se pudo mostrar el perfil {d.id}: {e}")
     return corregidos
 
 
@@ -1144,6 +1363,14 @@ def _mostrar_perfiles_verificados(db) -> int:
 GEMINI_MODELOS = [m for m in os.environ.get("GEMINI_MODEL", "gemini-3.5-flash,gemini-3.8-flash").split(",") if m]
 GEMINI_UBICACIONES = ["europe-west1", "global"]
 IA_LIMITE_DIARIO = int(os.environ.get("IA_LIMITE_DIARIO", "10"))
+# Tope de consultas a la IA al día entre todos los usuarios: acota el coste
+# aunque alguien use muchas cuentas
+IA_LIMITE_GLOBAL_DIARIO = int(os.environ.get("IA_LIMITE_GLOBAL_DIARIO", "500"))
+# Lo que escribe el usuario (informe y vivienda) entra recortado en el prompt
+IA_TEXTO_MAX = 200
+IA_RECOMENDACIONES_MAX = 12
+IA_PROMPT_MAX = 8000
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 _ESQUEMA_IA = {
     "type": "OBJECT",
@@ -1175,26 +1402,57 @@ _CAMPOS_VIVIENDA_IA = [
 ]
 
 
+def _dato_ia(valor):
+    """Un dato del usuario tal como entra en el prompt: los números tal cual y
+    el resto como texto de IA_TEXTO_MAX caracteres, sin caracteres de control."""
+    if valor is None or isinstance(valor, (bool, int, float)):
+        return valor
+    return _CONTROL.sub(" ", str(valor)[:IA_TEXTO_MAX])
+
+
 def _prompt_ia(informe: dict, vivienda: dict, idioma: str) -> str:
     """Construye el prompt para Gemini SIN datos personales (ni nombre, ni
-    dirección, ni email): solo características técnicas y resultados."""
-    datos_vivienda = {k: vivienda.get(k) for k in _CAMPOS_VIVIENDA_IA if vivienda.get(k) not in (None, "", 0)}
+    dirección, ni email): solo características técnicas y resultados.
+
+    Los campos los escribe el usuario en Firestore: cada texto se recorta a
+    IA_TEXTO_MAX caracteres, van como mucho IA_RECOMENDACIONES_MAX mejoras y
+    el prompt no pasa de IA_PROMPT_MAX caracteres (si hace falta, sobran antes
+    las mejoras, que ya están en el informe, que los datos de la vivienda)."""
+    idioma = _idioma_conocido(idioma)
+    datos_vivienda = {
+        k: _dato_ia(vivienda.get(k)) for k in _CAMPOS_VIVIENDA_IA if vivienda.get(k) not in (None, "", 0)
+    }
+    mejoras = informe.get("recomendaciones")
     recomendaciones = [
-        {"mejora": r.get("titulo"), "ahorro_eur_anio": r.get("ahorroEuros"), "ahorro_pct": r.get("ahorroEstimado")}
-        for r in (informe.get("recomendaciones") or [])
-    ]
+        {"mejora": _dato_ia(r.get("titulo")), "ahorro_eur_anio": _dato_ia(r.get("ahorroEuros")),
+         "ahorro_pct": _dato_ia(r.get("ahorroEstimado"))}
+        for r in (mejoras if isinstance(mejoras, list) else []) if isinstance(r, dict)
+    ][:IA_RECOMENDACIONES_MAX]
     resultado = {
-        "etiqueta": informe.get("etiqueta"),
-        "consumo_kwh_anio": informe.get("consumoEstimado"),
-        "consumo_kwh_m2_anio": informe.get("consumoPorM2"),
-        "emisiones_kg_co2_anio": informe.get("emisiones"),
-        "coste_eur_anio": informe.get("costeAnual"),
+        "etiqueta": _dato_ia(informe.get("etiqueta")),
+        "consumo_kwh_anio": _dato_ia(informe.get("consumoEstimado")),
+        "consumo_kwh_m2_anio": _dato_ia(informe.get("consumoPorM2")),
+        "emisiones_kg_co2_anio": _dato_ia(informe.get("emisiones")),
+        "coste_eur_anio": _dato_ia(informe.get("costeAnual")),
     }
     # Si el usuario añadió su factura de la luz: consumo real y precio que paga
-    if (informe.get("consumoLuzFactura") or 0) > 0:
-        resultado["consumo_luz_estimado_kwh_anio"] = informe.get("consumoLuzEstimado")
-        resultado["consumo_luz_real_factura_kwh_anio"] = informe.get("consumoLuzFactura")
-        resultado["precio_luz_factura_eur_kwh"] = informe.get("precioLuz")
+    factura = informe.get("consumoLuzFactura")
+    if isinstance(factura, (int, float)) and factura > 0:
+        resultado["consumo_luz_estimado_kwh_anio"] = _dato_ia(informe.get("consumoLuzEstimado"))
+        resultado["consumo_luz_real_factura_kwh_anio"] = _dato_ia(factura)
+        resultado["precio_luz_factura_eur_kwh"] = _dato_ia(informe.get("precioLuz"))
+
+    prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    while len(prompt) > IA_PROMPT_MAX and recomendaciones:
+        recomendaciones.pop()
+        prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    while len(prompt) > IA_PROMPT_MAX and datos_vivienda:
+        datos_vivienda.popitem()
+        prompt = _texto_prompt_ia(datos_vivienda, resultado, recomendaciones, idioma)
+    return prompt
+
+
+def _texto_prompt_ia(datos_vivienda: dict, resultado: dict, recomendaciones: list, idioma: str) -> str:
     return (
         "Eres un asesor de eficiencia energética de viviendas en España. "
         "Con los datos de esta vivienda y su informe, da consejos concretos, "
@@ -1247,24 +1505,39 @@ def _llamar_gemini(contenido, esquema: dict = _ESQUEMA_IA, temperatura: float = 
 
 def _consumir_cupo_ia(db, uid: str) -> None:
     """Gasta una consulta del límite diario de IA del usuario (compartido por
-    los consejos y la lectura de facturas). Transaccional para que no se cuele
-    en paralelo; si no quedan, lanza RESOURCE_EXHAUSTED."""
-    hoy = time.strftime("%Y%m%d", time.gmtime())
+    los consejos y la lectura de facturas) y del tope del día entre todos
+    (/limites_ia_global/{AAAAMMDD}), en la misma transacción para que no se
+    cuele en paralelo. Si no quedan, lanza RESOURCE_EXHAUSTED sin gastar nada."""
+    hoy = _hoy_utc()
     limite_ref = db.collection("limites_ia").document(uid)
+    global_ref = db.collection("limites_ia_global").document(hoy)
 
     @firestore.transactional
     def _consumir(txn):
         d = (limite_ref.get(transaction=txn).to_dict() or {})
+        g = (global_ref.get(transaction=txn).to_dict() or {})
         usados = int(d.get("usados") or 0) if d.get("dia") == hoy else 0
+        usados_global = int(g.get("usados") or 0)
         if usados >= IA_LIMITE_DIARIO:
-            return False
+            return "usuario"
+        if usados_global >= IA_LIMITE_GLOBAL_DIARIO:
+            return "global"
         txn.set(limite_ref, {"dia": hoy, "usados": usados + 1})
-        return True
+        txn.set(global_ref, {"usados": usados_global + 1})
+        return ""
 
-    if not _consumir(db.transaction()):
+    agotado = _consumir(db.transaction())
+    if agotado == "usuario":
         raise https_fn.HttpsError(
             https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
             "Has alcanzado el límite diario de consultas a la IA.",
+        )
+    if agotado == "global":
+        print("[IA] Tope diario global de consultas alcanzado")
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.RESOURCE_EXHAUSTED,
+            "Hoy se ha alcanzado el límite de consultas a la IA. Inténtalo mañana.",
+            {"motivo": "global"},
         )
 
 
@@ -1292,6 +1565,7 @@ def _limpiar_respuesta_ia(r: dict) -> dict:
     enforce_app_check=True,
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
+    max_instances=MAX_INSTANCIAS_IA,
 )
 def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     """Consejos personalizados para un informe del usuario, generados con Gemini.
@@ -1302,7 +1576,7 @@ def generar_sugerencias_ia(req: https_fn.CallableRequest) -> dict:
     uid = _exigir_email_verificado(req)
     data = req.data or {}
     informe_id = str(data.get("informeId") or "")
-    idioma = str(data.get("idioma") or "Español")[:30]
+    idioma = _idioma_conocido(data.get("idioma"))
     regenerar = bool(data.get("regenerar"))
     if not informe_id or "/" in informe_id:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.INVALID_ARGUMENT, "informeId inválido.")
@@ -1412,6 +1686,7 @@ def _validar_factura(r: dict) -> dict:
     enforce_app_check=True,
     timeout_sec=120,
     memory=options.MemoryOption.MB_512,
+    max_instances=MAX_INSTANCIAS_IA,
 )
 def leer_factura(req: https_fn.CallableRequest) -> dict:
     """Lee una factura de la luz con Gemini. Args: mime (image/jpeg, image/png,
@@ -1470,18 +1745,36 @@ TIPOS_EVENTO = {"visita", "chat", "llamada"}
 )
 def on_evento_perfil(event) -> None:
     """Suma una visita o un contacto a las estadísticas del profesional
-    (/estadisticas/{tecnicoId}), por tipo y por día."""
+    (/estadisticas/{tecnicoId}), por tipo y por día.
+
+    Idempotente: Firestore puede entregar el mismo evento más de una vez. En
+    una transacción se suma solo si el evento no está marcado `contado`, y se
+    marca a la vez."""
     datos = event.data.to_dict() if event.data else {}
     tipo = datos.get("tipo")
     dia = str(datos.get("dia") or "")
     if tipo not in TIPOS_EVENTO or len(dia) != 8:
         return
     tecnico_id = event.params["tecnicoId"]
-    firestore.client().collection("estadisticas").document(tecnico_id).set({
-        "total": {tipo: firestore.Increment(1)},
-        "dias": {dia: {tipo: firestore.Increment(1)}},
-        "actualizado": _ahora_ms(),
-    }, merge=True)
+    db = firestore.client()
+    evento_ref = (
+        db.collection("tecnicos").document(tecnico_id).collection("eventos").document(event.params["eventoId"])
+    )
+    estadisticas_ref = db.collection("estadisticas").document(tecnico_id)
+
+    @firestore.transactional
+    def _contar(txn):
+        snap = evento_ref.get(transaction=txn)
+        if not snap.exists or (snap.to_dict() or {}).get("contado") is True:
+            return
+        txn.set(estadisticas_ref, {
+            "total": {tipo: firestore.Increment(1)},
+            "dias": {dia: {tipo: firestore.Increment(1)}},
+            "actualizado": _ahora_ms(),
+        }, merge=True)
+        txn.update(evento_ref, {"contado": True})
+
+    _contar(db.transaction())
 
 
 NOTIFICACIONES_DIAS = 90
@@ -1597,6 +1890,125 @@ def _acknowledge_play(product_id: str, token: str) -> None:
             print(f"[SUSCRIPCION] acknowledge HTTP {r.status_code}: {r.text[:300]}")
     except Exception as e:
         print(f"[SUSCRIPCION] acknowledge falló: {e}")
+
+
+# Estados en los que Play ya no va a cobrar: no hace falta cancelar nada
+ESTADOS_SIN_RENOVACION = {
+    "SUBSCRIPTION_STATE_CANCELED",
+    "SUBSCRIPTION_STATE_EXPIRED",
+    "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED",
+}
+# Sin acceso ahora (activa=False), pero Play aún puede volver a cobrar
+ESTADOS_PENDIENTES_DE_COBRO = {"SUBSCRIPTION_STATE_ON_HOLD", "SUBSCRIPTION_STATE_PAUSED"}
+
+
+def _cancelar_en_play(token: str) -> str:
+    """Cancela la renovación de una suscripción en Google Play con
+    purchases.subscriptionsv2.cancel (la de purchases.subscriptions está
+    obsoleta). DEVELOPER_REQUESTED_STOP_PAYMENTS: no se puede restaurar y no
+    hay más cobros; no reembolsa el periodo ya pagado.
+
+    Devuelve "cancelada" si Play la ha cancelado ahora, "no_renueva" si ya no
+    se iba a cobrar (Play no conoce el token, o está cancelada o caducada) y
+    "sin_permiso" si Play niega el permiso (401, o 403 de permisos): es un
+    fallo de configuración nuestro y no puede impedir que alguien borre su
+    cuenta. Ante un fallo pasajero (5xx, red, 403 por cuota) con la
+    suscripción aún activa, lanza UNAVAILABLE (reintentable)."""
+    no_disponible = https_fn.HttpsError(
+        https_fn.FunctionsErrorCode.UNAVAILABLE,
+        "No se pudo cancelar la suscripción en Google Play. Inténtalo de nuevo en unos minutos.",
+        {"motivo": "play"},
+    )
+    try:
+        sesion = _sesion_play()
+    except Exception as e:
+        print(f"[SUSCRIPCION] ERROR: sin credenciales para la API de Google Play: {e}")
+        raise no_disponible
+    try:
+        r = sesion.post(
+            f"{ANDROID_PUBLISHER}/purchases/subscriptionsv2/tokens/{token}:cancel",
+            json={"cancellationContext": {"cancellationType": "DEVELOPER_REQUESTED_STOP_PAYMENTS"}},
+            timeout=15,
+        )
+        if r.status_code < 300:
+            return "cancelada"
+        if _play_niega_permiso(r):
+            print(f"[SUSCRIPCION] ERROR: sin permiso para cancelar en Play (HTTP {r.status_code}). "
+                  f"Revisa los permisos de la cuenta de servicio en Play Console: {r.text[:300]}")
+            return "sin_permiso"
+        print(f"[SUSCRIPCION] cancel HTTP {r.status_code}: {r.text[:300]}")
+    except Exception as e:
+        print(f"[SUSCRIPCION] cancel falló: {e}")
+    # No se canceló: se sigue solo si Play confirma que ya no se va a cobrar
+    data = _consultar_play(token)
+    if data == {} or (data and data.get("subscriptionState") in ESTADOS_SIN_RENOVACION):
+        return "no_renueva"
+    raise no_disponible
+
+
+# Razones de los errores de Google que indican falta de permiso
+_RAZONES_SIN_PERMISO = {
+    "permissiondenied", "forbidden", "insufficientpermissions",
+    "iam_permission_denied", "access_token_scope_insufficient",
+}
+
+
+def _play_niega_permiso(r) -> bool:
+    """True si la respuesta de Play es una falta de permiso: 401, o 403 con
+    status PERMISSION_DENIED o una razón de permisos. Google también responde
+    403 por cuota o límites (rateLimitExceeded, quotaExceeded,
+    dailyLimitExceeded…): eso es pasajero y manda aunque el status sea
+    PERMISSION_DENIED."""
+    if r.status_code == 401:
+        return True
+    if r.status_code != 403:
+        return False
+    try:
+        error = (r.json() or {}).get("error")
+    except Exception:
+        error = None
+    if not isinstance(error, dict):
+        return False
+    razones = {
+        str(e.get("reason") or "").lower()
+        for e in (error.get("errors") or []) + (error.get("details") or [])
+        if isinstance(e, dict)
+    }
+    if any(marca in razon for razon in razones for marca in ("quota", "limit", "exceeded")):
+        return False
+    return error.get("status") == "PERMISSION_DENIED" or bool(razones & _RAZONES_SIN_PERMISO)
+
+
+def _suscripciones_por_cancelar(db, uid: str) -> list:
+    """Tokens de las suscripciones de Play de `uid` que aún pueden cobrarse:
+    vigentes, o en retención o pausa (según lo último que sabemos de Play)."""
+    tokens = []
+    for d in db.collection("suscripciones").where(filter=FieldFilter("uid", "==", uid)).stream():
+        s = d.to_dict() or {}
+        estado = s.get("estadoPlay")
+        if s.get("origen") != "play" or estado in ESTADOS_SIN_RENOVACION:
+            continue
+        if not s.get("activa") and estado not in ESTADOS_PENDIENTES_DE_COBRO:
+            continue   # caducada o sustituida por un cambio de plan
+        tokens.append(d.id)
+    return tokens
+
+
+def _cancelar_suscripciones_play(db, uid: str) -> tuple:
+    """Antes de borrar una cuenta: cancela en Google Play la renovación de
+    sus suscripciones que aún pueden cobrarse (vigentes, o en retención o
+    pausa). Ante un fallo pasajero de Play lanza UNAVAILABLE y la cuenta no se
+    borra: se puede reintentar. Devuelve (canceladas, sin_permiso): cuántas se
+    han cancelado y cuántas tiene que cancelar el usuario en Google Play."""
+    canceladas = sin_permiso = 0
+    for token in _suscripciones_por_cancelar(db, uid):
+        resultado = _cancelar_en_play(token)
+        if resultado == "cancelada":
+            print(f"[SUSCRIPCION] Renovación cancelada en Play al borrar la cuenta {uid}")
+            canceladas += 1
+        elif resultado == "sin_permiso":
+            sin_permiso += 1
+    return canceladas, sin_permiso
 
 
 def _validar_token_suscripcion(product_id: str, token: str, uid: str):
@@ -1849,28 +2261,21 @@ def on_play_rtdn(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) ->
     _sincronizar_token(firestore.client(), token)
 
 
-@scheduler_fn.on_schedule(
-    schedule="every day 05:00",
-    timezone=scheduler_fn.Timezone("Europe/Madrid"),
-    region=REGION,
-)
-def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
-    """Red de seguridad por si falla o no está configurado RTDN, limpieza
-    diaria (eventos de estadísticas y notificaciones antiguas), nota de los
-    profesionales recalculada con sus reseñas, autores de los chats antiguos,
-    cuentas bloqueadas desactivadas en Auth y perfiles profesionales ocultos
-    de cuentas que ya verificaron su email."""
-    db = firestore.client()
+def _revisar_suscripciones(db) -> int:
+    """Re-sincroniza con Play las suscripciones que caducan pronto o ya
+    caducaron y recalcula el plan visible de los profesionales con el plan
+    vencido (p. ej. caducó el destacado pero sigue vigente el verificado).
+    Un fallo con una suscripción no detiene el resto. Devuelve cuántas se revisaron."""
     ahora = _ahora_ms()
     limite = ahora + 3 * DIA_MS
-
-    # 1) Suscripciones que caducan pronto o ya caducaron: re-sincronizar con Play
+    revisadas = 0
     for d in db.collection("suscripciones").where(filter=FieldFilter("activa", "==", True)).stream():
         if int((d.to_dict() or {}).get("fechaFin") or 0) < limite:
-            _sincronizar_token(db, d.id)
-
-    # 2) Profesionales con el plan visible vencido (p. ej. caducó el destacado
-    #    pero sigue vigente el verificado): recalcular
+            try:
+                _sincronizar_token(db, d.id)
+                revisadas += 1
+            except Exception as e:
+                print(f"[SUSCRIPCION] No se pudo revisar {d.id[:12]}…: {e}")
     vencidos = (
         db.collection("tecnicos")
         .where(filter=FieldFilter("suscripcionHasta", ">", 0))
@@ -1878,43 +2283,43 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
         .stream()
     )
     for d in vencidos:
-        _recalcular_plan(db, d.id)
+        try:
+            _recalcular_plan(db, d.id)
+        except Exception as e:
+            print(f"[SUSCRIPCION] No se pudo recalcular el plan de {d.id}: {e}")
+    return revisadas
 
-    # 3) Privacidad: eventos individuales de estadísticas de más de 48 h
-    try:
-        print(f"[ESTADISTICAS] Eventos antiguos borrados: {_purgar_eventos_antiguos(db)}")
-    except Exception as e:
-        print(f"[ESTADISTICAS] No se pudieron purgar eventos: {e}")
 
-    # 4) Notificaciones antiguas (el historial de la app muestra las últimas)
-    try:
-        print(f"[NOTIFICACIONES] Antiguas borradas: {_purgar_notificaciones_antiguas(db)}")
-    except Exception as e:
-        print(f"[NOTIFICACIONES] No se pudieron purgar: {e}")
-
-    # 5) Nota de los profesionales = la de sus reseñas reales
-    try:
-        print(f"[VALORACIONES] Perfiles corregidos: {_recalcular_todos_los_ratings(db)}")
-    except Exception as e:
-        print(f"[VALORACIONES] No se pudieron recalcular: {e}")
-
-    # 6) Quién ha escrito en los chats antiguos (requisito de las reseñas)
-    try:
-        print(f"[CHAT] Chats antiguos con autores anotados: {_rellenar_escribieron_antiguos(db)}")
-    except Exception as e:
-        print(f"[CHAT] No se pudieron anotar los autores: {e}")
-
-    # 7) Usuarios bloqueados con la cuenta de Auth aún activa
-    try:
-        print(f"[ADMIN] Cuentas bloqueadas desactivadas en Auth: {_sincronizar_bloqueados(db)}")
-    except Exception as e:
-        print(f"[ADMIN] No se pudieron sincronizar los bloqueos: {e}")
-
-    # 8) Perfiles profesionales ocultos de cuentas que ya verificaron su email
-    try:
-        print(f"[TECNICOS] Perfiles ocultos ya verificados: {_mostrar_perfiles_verificados(db)}")
-    except Exception as e:
-        print(f"[TECNICOS] No se pudieron revisar los perfiles ocultos: {e}")
+@scheduler_fn.on_schedule(
+    schedule="every day 05:00",
+    timezone=scheduler_fn.Timezone("Europe/Madrid"),
+    region=REGION,
+    # Con los 60 s por defecto, al crecer los datos se cortaba antes de llegar
+    # a los últimos pasos. 540 s bastan (en 2.ª generación se admiten hasta 1800)
+    timeout_sec=540,
+)
+def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
+    """Revisión diaria. Primero lo que afecta a la seguridad y a los pagos:
+    cuentas bloqueadas desactivadas en Auth, suscripciones (red de seguridad
+    por si falla o no está configurado RTDN) y perfiles profesionales ocultos
+    de cuentas ya verificadas; después, la limpieza (eventos de estadísticas y
+    notificaciones antiguas). Cada paso va aparte: un fallo no detiene los demás."""
+    db = firestore.client()
+    pasos = (
+        ("[ADMIN] Cuentas bloqueadas desactivadas en Auth", _sincronizar_bloqueados),
+        ("[SEGURIDAD] Marcas de deshacer verificación resueltas", _reintentar_deshacer_pendientes),
+        ("[SUSCRIPCION] Suscripciones revisadas con Play", _revisar_suscripciones),
+        ("[TECNICOS] Perfiles ocultos ya verificados", _mostrar_perfiles_verificados),
+        # Privacidad: eventos individuales de estadísticas de más de 48 h
+        ("[ESTADISTICAS] Eventos antiguos borrados", _purgar_eventos_antiguos),
+        # El historial de la app muestra las últimas
+        ("[NOTIFICACIONES] Notificaciones antiguas borradas", _purgar_notificaciones_antiguas),
+    )
+    for texto, paso in pasos:
+        try:
+            print(f"{texto}: {paso(db)}")
+        except Exception as e:
+            print(f"{texto}: no se pudo completar: {e}")
 
 
 # ══ Precio de la luz automático (Red Eléctrica → Remote Config) ══
