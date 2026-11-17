@@ -41,18 +41,18 @@ Estado: ☐ pendiente · ☑ hecho. «Cuándo» indica la fase que lo necesita.
 - Cómo: Cloud Console → **APIs y servicios → Biblioteca** → *Cloud Vision API* → Habilitar.
 - Respóndeme: «hecho B5».
 
-**B6 · Cambio de email solo con verificación** (ya; cierra la causa de A-03)
+**B6 · Cambio de email solo con verificación** ☑ 2026-11-17 (ya estaba activo)
 - Cómo: console.firebase.google.com → proyecto → **Authentication → Configuración → Acciones de los usuarios** → marcar *Protección de enumeración de correos electrónicos (recomendado)* → Guardar. Con ella, Auth no deja cambiar el email de una cuenta sin verificar el nuevo.
 - Comprobar: la casilla queda marcada tras recargar la página.
 - Respóndeme: «hecho B6» y si estaba ya marcada.
 
-**B7 · Permiso de la cuenta de servicio para cancelar suscripciones** (antes de desplegar el bloque A)
+**B7 · Permiso de la cuenta de servicio para cancelar suscripciones** ☑ 2026-11-17 (`140712303137-compute@…`, solo ZeroHaus: ver datos financieros y gestionar pedidos y suscripciones; cubre también el acceso a la API de C1)
 - Por qué: al borrar una cuenta, el servidor cancela antes la renovación en Google Play. Sin este permiso, quien tenga una suscripción activa no podrá borrar su cuenta.
 - Cómo: Play Console → **Usuarios y permisos** → la cuenta de servicio de Functions (`…-compute@developer.gserviceaccount.com`) → **Permisos de la aplicación** → ZeroHaus → marcar *Gestionar pedidos y suscripciones* → Aplicar.
 - Comprobar: el permiso aparece marcado al volver a abrir la cuenta.
 - Respóndeme: «hecho B7».
 
-**B8 · Privacidad: identificador anónimo de Crashlytics** (antes de publicar la versión con el PR #49)
+**B8 · Privacidad: identificador anónimo de Crashlytics** ☑ 2026-11-17 (web en #53 y desplegada; Play guardado, pendiente de enviar a revisión con la próxima versión)
 - Qué: Crashlytics recibe ahora un identificador de usuario (SHA-256 del uid). Es un seudónimo y sigue siendo dato personal.
 - Cómo: en `public/privacidad.html`, apartado de Crashlytics, añadir «un identificador seudónimo de la cuenta, para agrupar los fallos de un mismo usuario». En Play Console → **Contenido de la app → Seguridad de los datos**, marcar *Identificadores de usuario* recogido para *Analíticas* / *Diagnóstico*, no compartido. Te puedo redactar el texto de la web si me lo pides.
 - Respóndeme: «hecho B8».
