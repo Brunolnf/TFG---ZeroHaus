@@ -1,0 +1,80 @@
+# Pasos manuales previstos (proyecto entero)
+
+Los secretos nunca se pegan en el chat: van a la variable o archivo indicado.
+Estado: ☐ pendiente · ☑ hecho. «Cuándo» indica la fase que lo necesita.
+
+## A. Decisiones
+
+| ID | Decisión | Estado |
+|----|----------|--------|
+| A1 | Los PR los fusiona el usuario. Los de Dependabot los fusiona Claude con el CI en verde. | ☑ 2026-11-12 |
+| A2 | Pago con retención: comisión, plazo de liberación e importe máximo configurables en Remote Config; valores propuestos en `docs/plan.md` §2. | ☑ a falta del OK del plan |
+| A3 | Pagos solo en modo test; los pagos reales quedan fuera del alcance. | ☑ 2026-11-12 |
+| A4 | `docs/auditoria.md` no se sube al repo hasta desplegar los arreglos altos. | ☑ 2026-11-12 |
+| A5 | Quién revisa el código de `critical-implementer` (Opus): la tabla pone al revisor en Opus y a la vez pide que no revise el modelo que escribió. En el PR #48 revisó Fable. | ☐ «Fable» u «Opus» |
+
+## B. Cuentas y claves
+
+**B1 · Stripe en modo test** (F3, bloque de pagos)
+- Cómo: dashboard.stripe.com → crear cuenta (sin activar pagos reales) → interruptor «Modo de prueba» activado → menú **Connect** → *Empezar* → tipo *Plataforma o marketplace*. Después **Desarrolladores → Claves de API**.
+- Dónde guardar: clave secreta `sk_test_…` con `firebase functions:secrets:set STRIPE_SECRET_KEY` (la pide el terminal); clave publicable `pk_test_…` en `local.properties` del checkout principal como `STRIPE_PUBLISHABLE_KEY=…`.
+- El secreto del webhook (`STRIPE_WEBHOOK_SECRET`) se crea después del primer despliegue: **Desarrolladores → Webhooks → Añadir endpoint** con la URL que te daré.
+- Comprobar: `firebase functions:secrets:get STRIPE_SECRET_KEY` lista una versión activa.
+- Respóndeme: «hecho B1».
+
+**B2 · Alertas de coste** (F3, bloque de observabilidad)
+- Cómo: console.cloud.google.com → proyecto `zerohaus-2a865` → **Facturación → Presupuestos y alertas → Crear presupuesto** → ámbito: este proyecto → importe mensual → umbrales 50 %, 90 % y 100 % → avisos por correo a los administradores de facturación.
+- Comprobar: el presupuesto aparece en la lista con sus tres umbrales.
+- Respóndeme: «hecho B2» y el importe elegido.
+
+**B3 · Alertas de Crashlytics** (F3)
+- Cómo: console.firebase.google.com → proyecto → ⚙ **Configuración del proyecto → Alertas** → Crashlytics → activar correo para *problemas fatales nuevos*, *regresiones* y *alertas de velocidad*.
+- Comprobar: los tres interruptores quedan activados.
+- Respóndeme: «hecho B3».
+
+**B4 · App Check con Play Integrity** (F4, después de publicar)
+- Cómo: Play Console → app → **Integridad de la app → Firma de apps** → copiar la huella SHA-256 de la clave de firma de la app. Firebase → **App Check → Apps** → `es.zerohaus.app` → Play Integrity → pegar la huella. Con las métricas de solicitudes verificadas por encima del 95 %: **App Check → APIs** → Firestore y Storage → *Aplicar*.
+- Comprobar: en APIs aparece «Aplicado» y la app sigue leyendo datos.
+- Respóndeme: «hecho B4».
+
+**B5 · API de OCR** (F3, solo si en F2 se elige Cloud Vision en vez de Gemini en Vertex, que ya está activo)
+- Cómo: Cloud Console → **APIs y servicios → Biblioteca** → *Cloud Vision API* → Habilitar.
+- Respóndeme: «hecho B5».
+
+**B6 · Cambio de email solo con verificación** (ya; cierra la causa de A-03)
+- Cómo: console.firebase.google.com → proyecto → **Authentication → Configuración → Acciones de los usuarios** → marcar *Protección de enumeración de correos electrónicos (recomendado)* → Guardar. Con ella, Auth no deja cambiar el email de una cuenta sin verificar el nuevo.
+- Comprobar: la casilla queda marcada tras recargar la página.
+- Respóndeme: «hecho B6» y si estaba ya marcada.
+
+**B7 · Permiso de la cuenta de servicio para cancelar suscripciones** (antes de desplegar el bloque A)
+- Por qué: al borrar una cuenta, el servidor cancela antes la renovación en Google Play. Sin este permiso, quien tenga una suscripción activa no podrá borrar su cuenta.
+- Cómo: Play Console → **Usuarios y permisos** → la cuenta de servicio de Functions (`…-compute@developer.gserviceaccount.com`) → **Permisos de la aplicación** → ZeroHaus → marcar *Gestionar pedidos y suscripciones* → Aplicar.
+- Comprobar: el permiso aparece marcado al volver a abrir la cuenta.
+- Respóndeme: «hecho B7».
+
+**B8 · Privacidad: identificador anónimo de Crashlytics** (antes de publicar la versión con el PR #49)
+- Qué: Crashlytics recibe ahora un identificador de usuario (SHA-256 del uid). Es un seudónimo y sigue siendo dato personal.
+- Cómo: en `public/privacidad.html`, apartado de Crashlytics, añadir «un identificador seudónimo de la cuenta, para agrupar los fallos de un mismo usuario». En Play Console → **Contenido de la app → Seguridad de los datos**, marcar *Identificadores de usuario* recogido para *Analíticas* / *Diagnóstico*, no compartido. Te puedo redactar el texto de la web si me lo pides.
+- Respóndeme: «hecho B8».
+
+## C. Play Console (F4)
+
+**C1 · Suscripciones y API** — **Monetizar → Suscripciones**: activos `verificado_trimestral`, `verificado_anual`, `destacado_mensual`, `destacado_anuncios_mensual`. **Configuración → Acceso a API**: cuenta de servicio de Functions con permiso de datos financieros. Comprobar: una compra de prueba activa el plan en la app.
+
+**C2 · Notificaciones en tiempo real** — Cloud Console → Pub/Sub → tema `play-rtdn` → Permisos → añadir `google-play-developer-notifications@system.gserviceaccount.com` como *Publicador de Pub/Sub*. Play Console → **Monetizar → Configuración de monetización** → nombre del tema → *Enviar notificación de prueba*. Comprobar: la prueba aparece en el log de `on_play_rtdn`.
+
+**C3 · Publicación** — subir el AAB firmado a prueba interna o cerrada, ficha, seguridad de los datos, clasificación de contenido y cuenta de prueba con email verificado para los revisores. Si la cuenta personal de desarrollador es posterior al 13-11-2023, Google exige prueba cerrada con 12 testers durante 14 días (**confirmar en la ayuda oficial de Play Console**).
+
+**C4 · Testers de licencia** — Play Console → **Configuración → Pruebas de licencias** → añadir tu cuenta de Google, para comprar sin cargo.
+
+## D. Despliegues (F4, te doy los comandos y el orden)
+
+`firebase deploy --only functions` → `--only firestore:rules,storage` → `--only hosting`. Antes del primero deben existir todos los secretos (B1).
+
+## E. Móvil físico (F4)
+
+Compra de suscripción con tester de licencia, pago de Stripe con la tarjeta de prueba `4242 4242 4242 4242`, foto de un certificado para el OCR y recepción de un push.
+
+## F. Entorno local (solo si fallan las suites)
+
+La ruta del worktree es muy larga. Si Gradle o el venv de Python fallan por longitud de ruta: activar rutas largas de Windows (PowerShell como administrador: `New-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem -Name LongPathsEnabled -Value 1 -PropertyType DWORD -Force`) y `git config --global core.longpaths true`.
