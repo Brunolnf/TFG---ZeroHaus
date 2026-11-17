@@ -317,7 +317,8 @@ service cloud.firestore {
           && d.keys().hasAll(['nombreUsuario', 'fecha'])
           && d.get('id', docId) == docId
           && d.nombreUsuario is string
-          && d.nombreUsuario.size() <= 60
+          // Como los nombres del chat: el administrador puede poner más de 60
+          && d.nombreUsuario.size() <= 100
           && fechaNoFutura(d.fecha)
           && d.get('chatId', '') is string
           && d.get('chatId', '').size() <= 128

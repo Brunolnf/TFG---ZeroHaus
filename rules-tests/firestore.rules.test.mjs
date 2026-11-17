@@ -564,9 +564,11 @@ describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ id: "otro_pro" })));
   });
 
-  it("el nombre del autor es un texto de hasta 60 caracteres", async () => {
+  it("el nombre del autor es un texto de hasta 100 caracteres", async () => {
     const db = verificado("cliente");
-    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(61) })));
+    // El administrador puede poner nombres de más de 60: esos usuarios también valoran
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(100) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(101) })));
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: 7 })));
     const { nombreUsuario, ...sinNombre } = resenaApp();
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinNombre));
@@ -585,7 +587,7 @@ describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
     await env.withSecurityRulesDisabled((ctx) =>
       setDoc(doc(ctx.firestore(), "resenas/cliente_pro"), resenaApp()));
     const db = verificado("cliente");
-    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { nombreUsuario: "x".repeat(61) }));
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { nombreUsuario: "x".repeat(101) }));
     await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { fecha: Date.now() + DIA + MINUTO }));
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA + MINUTO })));
     await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
