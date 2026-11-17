@@ -203,13 +203,14 @@ class TareaDiariaTest(unittest.TestCase):
             return ejecutar
         with mock.patch.object(main.firestore, "client", lambda: None), \
                 mock.patch.object(main, "_sincronizar_bloqueados", paso("bloqueos", falla=True)), \
+                mock.patch.object(main, "_reintentar_deshacer_pendientes", paso("deshacer", falla=True)), \
                 mock.patch.object(main, "_revisar_suscripciones", paso("suscripciones", falla=True)), \
                 mock.patch.object(main, "_mostrar_perfiles_verificados", paso("perfiles", falla=True)), \
                 mock.patch.object(main, "_purgar_eventos_antiguos", paso("eventos", falla=True)), \
                 mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones")), \
                 mock.patch("builtins.print"):
             inspect.unwrap(main.revisar_suscripciones_diario)(None)
-        self.assertEqual(orden, ["bloqueos", "suscripciones", "perfiles", "eventos", "notificaciones"])
+        self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "eventos", "notificaciones"])
 
     def test_tiene_el_tiempo_maximo_de_una_tarea_programada(self):
         self.assertEqual(main.revisar_suscripciones_diario.__firebase_endpoint__.timeoutSeconds, 540)
@@ -718,6 +719,51 @@ class CodigoVerificacionTest(_ConServiciosFalsos):
         self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
         self.revoke.assert_called_once_with("u1")
         self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+        # Queda anotado para reintentarlo, con el email al que se envió el código
+        self.assertIs(self.db.docs["verificaciones_email/u1"]["deshacerPendiente"], True)
+        self.assertEqual(self.db.docs["verificaciones_email/u1"]["deshacerEmail"], "a@x.es")
+
+    def deshacer_pendiente(self, uid, email):
+        """Estado tras fallar el deshacer: Auth la da por verificada y queda la marca."""
+        self.usuarios[uid].email_verified = True
+        self.db.docs.setdefault(f"verificaciones_email/{uid}", {}).update(
+            {"deshacerPendiente": True, "deshacerEmail": email})
+        self.db.docs[f"tecnicos/{uid}"] = {"uid": uid, "emailVerificado": False}
+
+    def test_con_un_deshacer_pendiente_pedir_codigo_lo_reintenta_y_envia_otro(self):
+        self.usuario("u1", "b@x.es", False)
+        self.deshacer_pendiente("u1", "a@x.es")
+        with mock.patch("builtins.print"):
+            self.assertTrue(llamar(main.enviar_codigo_verificacion, "u1", idioma="Español")["enviado"])
+        self.update_user.assert_called_once_with("u1", email_verified=False)
+        self.revoke.assert_called_once_with("u1")
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+
+    def test_si_el_deshacer_pendiente_sigue_fallando_no_se_da_por_verificada(self):
+        self.usuario("u1", "b@x.es", False)
+        self.deshacer_pendiente("u1", "a@x.es")
+        self.update_user.side_effect = RuntimeError("Auth no responde")
+        for funcion, datos in ((main.enviar_codigo_verificacion, {"idioma": "Español"}),
+                               (main.verificar_codigo_email, {"codigo": "123456"})):
+            with self.subTest(funcion=funcion.__name__), mock.patch("builtins.print"), \
+                    self.assertRaises(main.https_fn.HttpsError) as error:
+                llamar(funcion, "u1", **datos)
+            self.assertEqual(error.exception.code, main.https_fn.FunctionsErrorCode.UNAVAILABLE)
+        self.assertIs(self.db.docs["verificaciones_email/u1"]["deshacerPendiente"], True)
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], False)
+        self.assertEqual(self.codigos, [])
+
+    def test_con_un_deshacer_pendiente_el_codigo_solo_vale_tras_deshacerlo(self):
+        self.usuario("u1", "a@x.es", False)
+        codigo = self.pedir_codigo("u1")
+        self.deshacer_pendiente("u1", "a@x.es")
+        with mock.patch("builtins.print"):
+            self.assertEqual(self.verificar("u1", codigo), {"verificado": True})
+        self.assertEqual(self.update_user.call_args_list,
+                         [mock.call("u1", email_verified=False), mock.call("u1", email_verified=True)])
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+        self.assertIs(self.db.docs["tecnicos/u1"]["emailVerificado"], True)
 
     def test_los_envios_del_dia_cuentan_con_el_reloj_utc_de_los_cupos(self):
         self.usuario("u1", "a@x.es", False)
@@ -817,6 +863,33 @@ class PerfilEmailVerificadoTest(_ConServiciosFalsos):
         self.assertEqual(sorted(self.lotes_get_users), [50, 100])
         self.assertIs(self.db.docs["tecnicos/p7"]["emailVerificado"], False)
         self.assertIs(self.db.docs["tecnicos/p149"]["emailVerificado"], True)
+
+    def test_la_tarea_diaria_reintenta_los_deshacer_pendientes(self):
+        self.usuario("u1", "u1@x.es", True)
+        self.usuario("u2", "u2@x.es", True)
+        self.db.docs.update({
+            "verificaciones_email/u1": {"deshacerPendiente": True, "deshacerEmail": "otro1@x.es"},
+            "verificaciones_email/u2": {"deshacerPendiente": True, "deshacerEmail": "otro2@x.es"},
+            "tecnicos/u2": {"uid": "u2", "emailVerificado": False},
+        })
+
+        def deshacer(uid, **cambios):
+            if uid == "u2":
+                raise RuntimeError("Auth no responde")
+        self.update_user.side_effect = deshacer
+        with mock.patch("builtins.print"):
+            inspect.unwrap(main.revisar_suscripciones_diario)(None)
+        self.update_user.assert_any_call("u1", email_verified=False)
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/u1"])
+        self.assertIs(self.db.docs["verificaciones_email/u2"]["deshacerPendiente"], True)
+        # Auth aún la da por verificada, pero su perfil no se muestra
+        self.assertIs(self.db.docs["tecnicos/u2"]["emailVerificado"], False)
+
+    def test_el_administrador_al_verificar_quita_el_deshacer_pendiente(self):
+        self.usuario("p1", "p1@x.es", False)
+        self.db.docs["verificaciones_email/p1"] = {"deshacerPendiente": True, "deshacerEmail": "x@x.es"}
+        llamar(main.marcar_email_verificado, "admin", admin=True, uid="p1")
+        self.assertNotIn("deshacerPendiente", self.db.docs["verificaciones_email/p1"])
 
     def test_si_la_cuenta_ya_estaba_verificada_el_perfil_se_hace_visible(self):
         self.usuario("p1", "p1@x.es", True)

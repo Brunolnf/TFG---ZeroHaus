@@ -318,7 +318,14 @@ def marcar_email_verificado(req: https_fn.CallableRequest) -> dict:
         auth.update_user(uid, email_verified=True)
     except auth.UserNotFoundError:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.NOT_FOUND, "No existe esa cuenta.")
-    _marcar_perfil_verificado(firestore.client(), uid)
+    db = firestore.client()
+    # Una verificación pendiente de deshacer ya no aplica: si no, se desharía esta
+    try:
+        db.collection("verificaciones_email").document(uid).update(
+            {"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
+    except NotFound:
+        pass
+    _marcar_perfil_verificado(db, uid)
     print(f"[ADMIN] {req.auth.uid} marcó como verificado el email de {uid}")
     return {"ok": True}
 
@@ -941,9 +948,7 @@ def enviar_codigo_verificacion(req: https_fn.CallableRequest) -> dict:
     uid = req.auth.uid
     usuario = auth.get_user(uid)
     db = firestore.client()
-    if usuario.email_verified:
-        # Verificada por otra vía o tras un fallo al marcar el perfil: se muestra
-        _marcar_perfil_verificado(db, uid)
+    if usuario.email_verified and _ya_verificada(db, uid):
         return {"verificado": True}
     if not usuario.email:
         raise https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION, "La cuenta no tiene email.")
@@ -1021,8 +1026,7 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
 
     usuario = auth.get_user(uid)
     db = firestore.client()
-    if usuario.email_verified:
-        _marcar_perfil_verificado(db, uid)
+    if usuario.email_verified and _ya_verificada(db, uid):
         return {"verificado": True}
     email = _normalizar_email(usuario.email)
 
@@ -1076,15 +1080,79 @@ def verificar_codigo_email(req: https_fn.CallableRequest) -> dict:
         email_actual = _normalizar_email(auth.get_user(uid).email)
     except Exception as e:
         print(f"[SEGURIDAD] No se pudo confirmar la verificación de {uid}: {e}")
-        _deshacer_verificacion(uid)
+        _deshacer_o_anotar(db, uid, email)
         raise no_confirmada
     if email_actual != email:
         print(f"[SEGURIDAD] El email de {uid} cambió mientras se verificaba: se deshace")
-        if not _deshacer_verificacion(uid):
+        if not _deshacer_o_anotar(db, uid, email):
             raise no_confirmada
         raise caducado
     _marcar_perfil_verificado(db, uid)
     return {"verificado": True}
+
+
+# Si no se puede deshacer una verificación, queda anotado en
+# /verificaciones_email/{uid} (deshacerPendiente y deshacerEmail, el email al
+# que se envió el código). Mientras esté la marca, la cuenta no se da por
+# verificada: se reintenta al pedir o comprobar un código y en la tarea diaria.
+
+def _deshacer_o_anotar(db, uid: str, email: str) -> bool:
+    """Deshace la verificación; si no se puede, deja la marca para
+    reintentarlo. True si se deshizo."""
+    if _deshacer_verificacion(uid):
+        return True
+    try:
+        db.collection("verificaciones_email").document(uid).set(
+            {"deshacerPendiente": True, "deshacerEmail": email}, merge=True)
+    except Exception as e:
+        print(f"[SEGURIDAD] No se pudo anotar el deshacer pendiente de {uid}: {e}")
+    return False
+
+
+def _reintentar_deshacer(db, uid: str) -> str:
+    """"" si la cuenta no tiene nada por deshacer; "deshecha" si lo tenía y
+    ahora se ha deshecho (se quita la marca); "pendiente" si sigue sin poderse."""
+    ref = db.collection("verificaciones_email").document(uid)
+    if (ref.get().to_dict() or {}).get("deshacerPendiente") is not True:
+        return ""
+    if not _deshacer_verificacion(uid):
+        return "pendiente"
+    ref.update({"deshacerPendiente": firestore.DELETE_FIELD, "deshacerEmail": firestore.DELETE_FIELD})
+    print(f"[SEGURIDAD] Deshecha la verificación pendiente de {uid}")
+    return "deshecha"
+
+
+def _ya_verificada(db, uid: str) -> bool:
+    """Para una cuenta que Auth da por verificada: True si lo está de verdad
+    (y entonces muestra su perfil, por si falló al marcarlo); False si tenía
+    la verificación por deshacer y ahora se ha deshecho (sigue como una cuenta
+    sin verificar). Si aún no se puede deshacer, UNAVAILABLE."""
+    estado = _reintentar_deshacer(db, uid)
+    if estado == "pendiente":
+        raise https_fn.HttpsError(
+            https_fn.FunctionsErrorCode.UNAVAILABLE, "No se pudo verificar el email. Inténtalo de nuevo en unos minutos.")
+    if estado == "deshecha":
+        return False
+    _marcar_perfil_verificado(db, uid)
+    return True
+
+
+def _uids_deshacer_pendiente(db) -> set:
+    return {d.id for d in db.collection("verificaciones_email")
+            .where(filter=FieldFilter("deshacerPendiente", "==", True)).stream()}
+
+
+def _reintentar_deshacer_pendientes(db) -> int:
+    """Tarea diaria: reintenta cada verificación pendiente de deshacer.
+    Devuelve cuántas se han deshecho."""
+    deshechas = 0
+    for uid in _uids_deshacer_pendiente(db):
+        try:
+            if _reintentar_deshacer(db, uid) == "deshecha":
+                deshechas += 1
+        except Exception as e:
+            print(f"[SEGURIDAD] No se pudo reintentar el deshacer de {uid}: {e}")
+    return deshechas
 
 
 def _deshacer_verificacion(uid: str) -> bool:
@@ -1181,11 +1249,13 @@ def _mostrar_perfiles_verificados(db) -> int:
     """Pone emailVerificado a true en los perfiles ocultos cuya cuenta ya tiene
     el email verificado: cubre un fallo al marcarlo, perfiles cuyo id no es el
     uid y verificaciones por otra vía. Consulta Auth por lotes y un fallo (de
-    un lote o de un perfil) no detiene el resto. Devuelve cuántos."""
+    un lote o de un perfil) no detiene el resto. No muestra los de cuentas con
+    la verificación pendiente de deshacer. Devuelve cuántos."""
+    pendientes = _uids_deshacer_pendiente(db)
     ocultos = []
     for d in db.collection("tecnicos").where(filter=FieldFilter("emailVerificado", "==", False)).stream():
         uid = (d.to_dict() or {}).get("uid") or ""
-        if uid:
+        if uid and uid not in pendientes:
             ocultos.append((d, uid))
     corregidos = 0
     for i in range(0, len(ocultos), AUTH_LOTE):
@@ -2121,6 +2191,7 @@ def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     db = firestore.client()
     pasos = (
         ("[ADMIN] Cuentas bloqueadas desactivadas en Auth", _sincronizar_bloqueados),
+        ("[SEGURIDAD] Verificaciones pendientes deshechas", _reintentar_deshacer_pendientes),
         ("[SUSCRIPCION] Suscripciones revisadas con Play", _revisar_suscripciones),
         ("[TECNICOS] Perfiles ocultos ya verificados", _mostrar_perfiles_verificados),
         # Privacidad: eventos individuales de estadísticas de más de 48 h
