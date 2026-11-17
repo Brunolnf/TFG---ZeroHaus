@@ -24,6 +24,8 @@ data class AjustesEstado(
     val eliminandoCuenta: Boolean = false,
     /** Profesional con plan vigente (null = aún sin saber: se muestra el aviso por defecto). */
     val planVigente: Boolean? = null,
+    /** Cuenta ya borrada pero con la suscripción por cancelar a mano en Play; sobrevive a la recreación. */
+    val avisoCancelarEnPlay: Boolean = false,
     val mensajeToast: String? = null,
     val error: String? = null
 )
@@ -109,17 +111,20 @@ class AjustesViewModel : ViewModel() {
         }
     }
 
+    /** Si queda una suscripción por cancelar en Play se activa `avisoCancelarEnPlay`; si no, [onExito]. */
     fun eliminarCuenta(onExito: () -> Unit) {
         estado = estado.copy(eliminandoCuenta = true, error = null, mensajeToast = null)
         repoAuth.eliminarMiCuenta { r ->
-            r.onSuccess {
-                estado = estado.copy(eliminandoCuenta = false)
-                onExito()
+            r.onSuccess { cancelarEnPlay ->
+                estado = estado.copy(eliminandoCuenta = false, avisoCancelarEnPlay = cancelarEnPlay)
+                if (!cancelarEnPlay) onExito()
             }.onFailure {
                 estado = estado.copy(eliminandoCuenta = false, error = it.message)
             }
         }
     }
+
+    fun descartarAvisoCancelarEnPlay() { estado = estado.copy(avisoCancelarEnPlay = false) }
 
     fun mostrarMensaje(msg: String) { estado = estado.copy(mensajeToast = msg) }
     fun mostrarError(msg: String) { estado = estado.copy(error = msg) }

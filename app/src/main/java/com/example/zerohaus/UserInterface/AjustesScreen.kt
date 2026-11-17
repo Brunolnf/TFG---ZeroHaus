@@ -30,7 +30,7 @@ import com.example.zerohaus.BuildConfig
 import com.example.zerohaus.ViewModel.AjustesViewModel
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.AppPreferencias
-import com.example.zerohaus.Util.BillingManager
+import com.example.zerohaus.Util.BorradoCuenta
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.NotificacionesLocales
 
@@ -380,8 +380,27 @@ fun AjustesScreen(
         )
     }
 
+    // ── Aviso: cuenta borrada pero la suscripción hay que cancelarla a mano ──
+    if (estado.avisoCancelarEnPlay) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(c.ajustesCuentaBorradaTitulo, fontWeight = FontWeight.SemiBold) },
+            text = { Text(c.ajustesCuentaBorradaCancelarPlay) },
+            confirmButton = {
+                TextButton(onClick = { abrirUrl(BorradoCuenta.URL_SUSCRIPCIONES_PLAY) }) {
+                    Text(c.ajustesCuentaBorradaAbrirPlay, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.descartarAvisoCancelarEnPlay(); onCerrarSesion() }) {
+                    Text(c.ajustesCuentaBorradaCerrar)
+                }
+            }
+        )
+    }
+
     // ── Diálogo: eliminar cuenta ──
-    if (mostrarEliminar) {
+    if (mostrarEliminar && !estado.avisoCancelarEnPlay) {
         AlertDialog(
             onDismissRequest = { if (!estado.eliminandoCuenta) mostrarEliminar = false },
             icon = { Icon(Icons.Filled.DeleteForever, null, tint = rojo) },
@@ -389,18 +408,14 @@ fun AjustesScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(c.ajustesEliminarMensaje)
-                    // Borrar la cuenta no cancela la suscripción de Google Play:
-                    // un profesional seguiría pagando sin saberlo
+                    // Al borrar la cuenta el servidor cancela la renovación en
+                    // Google Play; el periodo ya pagado se pierde sin reembolso
                     val esProfesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
                     if (esProfesional) {
                         Text(c.ajustesEliminarAvisoSuscripcion, color = rojo, fontSize = 13.sp)
                         if (estado.planVigente != false) {
                             Text(c.ajustesEliminarPerdidaPeriodo, color = rojo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         }
-                        TextButton(
-                            onClick = { abrirUrl(BillingManager.urlGestionSuscripcion(PLAY_ID)) },
-                            contentPadding = PaddingValues(0.dp)
-                        ) { Text(c.subGestionar) }
                     }
                 }
             },
