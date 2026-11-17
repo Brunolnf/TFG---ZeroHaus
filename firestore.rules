@@ -98,13 +98,25 @@ service cloud.firestore {
     function idChatValido(chatId) {
       return chatId.matches('[A-Za-z0-9_-]{1,128}');
     }
+    // Campos del modelo Usuario de la app (lo que escribe al registrarse)
+    function camposModeloUsuario() {
+      return ['uid', 'nombre', 'email', 'tipoUsuario', 'fotoPerfil', 'fechaRegistro',
+              'bloqueado', 'eliminado'];
+    }
+    // URL de descarga de la foto de perfil (unos 200 caracteres)
+    function fotoPerfilValida(foto) {
+      return foto is string && foto.size() <= 1024;
+    }
 
     match /usuarios/{userId} {
       // Leer y crear tu propio perfil se permite antes de verificar: el registro
       // lo crea justo después de crear la cuenta y el login comprueba bloqueos.
       allow read: if esMioSinVerificar(userId) || esAdmin();
+      // El email es el de la cuenta: la app guarda el que se escribió en el
+      // registro (puede llevar mayúsculas) y Auth lo guarda en minúsculas.
       allow create: if (esMioSinVerificar(userId)
                     && tamanoDocMaximo()
+                    && request.resource.data.keys().hasOnly(camposModeloUsuario())
                     && request.resource.data.uid == userId
                     && request.resource.data.tipoUsuario in ['Propietario', 'Técnico', 'Empresa']
                     && request.resource.data.bloqueado == false
@@ -112,8 +124,13 @@ service cloud.firestore {
                     && request.resource.data.nombre is string
                     && request.resource.data.nombre.size() <= 60
                     && request.resource.data.email is string
-                    && request.resource.data.email.size() <= 254)
+                    && request.resource.data.email.size() <= 254
+                    && request.resource.data.email.lower() == request.auth.token.email.lower()
+                    && fotoPerfilValida(request.resource.data.get('fotoPerfil', ''))
+                    && request.resource.data.get('fechaRegistro', 0) is int)
                     || esAdmin();
+      // El dueño solo cambia su nombre y su foto (lo que edita la app); la
+      // foto se comprueba si cambia, para no bloquear perfiles antiguos.
       allow update: if esAdmin()
                     || (esMio(userId)
                         && tamanoDocMaximo()
@@ -123,6 +140,10 @@ service cloud.firestore {
                         && noMuta('fechaRegistro')
                         && noMuta('bloqueado')
                         && noMuta('eliminado')
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['nombre', 'fotoPerfil'])
+                        && (!('fotoPerfil' in request.resource.data.diff(resource.data).affectedKeys())
+                            || fotoPerfilValida(request.resource.data.fotoPerfil))
                         && (!('nombre' in request.resource.data.keys())
                             || (request.resource.data.nombre is string
                                 && request.resource.data.nombre.size() <= 60)));
@@ -264,13 +285,49 @@ service cloud.firestore {
     // real: los dos han escrito en el chat, o sea, el profesional ha
     // contestado. `escribieron` solo lo pone la Cloud Function de mensajes
     // (antes bastaba con abrir un chat o escribirle uno mismo).
+    // En perfiles antiguos el id no es el uid: además de tecnicoId != uid()
+    // hace falta que el dueño del perfil no sea quien valora.
     function conversacionReal(chatId, tecnicoId) {
       let chat = get(/databases/$(database)/documents/chats/$(chatId)).data;
       let prof = get(/databases/$(database)/documents/tecnicos/$(tecnicoId)).data;
-      return uid() in chat.participantes
+      return prof.uid != uid()
+          && uid() in chat.participantes
           && prof.uid in chat.participantes
           && uid() in chat.get('escribieron', [])
           && prof.uid in chat.get('escribieron', []);
+    }
+
+    // Fechas escritas con el reloj del móvil: como mucho 24 h por delante del
+    // servidor (el mismo margen que fechaUltimoMensaje), para no dejar sin
+    // chat ni reseñas a los móviles con la hora adelantada; en el chat el
+    // adjunto ya está subido cuando se escribe el mensaje. Sin límite inferior.
+    function fechaNoFutura(fecha) {
+      return fecha is int && fecha <= request.time.toMillis() + 86400000;
+    }
+    // Campos del modelo Resena de la app (lo que escribe al serializarlo entero)
+    function camposModeloResena() {
+      return ['id', 'tecnicoId', 'uid', 'nombreUsuario', 'puntuacion', 'comentario', 'chatId', 'fecha'];
+    }
+    // La lista de reseñas es pública: solo los campos del modelo, el nombre
+    // con tope y una fecha que no se adelante para salir la primera (la app
+    // ordena por fecha; sin el campo, al leerla toma la hora actual).
+    function resenaValida(docId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(camposModeloResena())
+          && d.keys().hasAll(['nombreUsuario', 'fecha'])
+          && d.get('id', docId) == docId
+          && d.nombreUsuario is string
+          // Como los nombres del chat: el administrador puede poner más de 60
+          && d.nombreUsuario.size() <= 100
+          && fechaNoFutura(d.fecha)
+          && d.get('chatId', '') is string
+          && d.get('chatId', '').size() <= 128
+          && d.puntuacion is number
+          && d.puntuacion >= 1
+          && d.puntuacion <= 5
+          && d.puntuacion == int(d.puntuacion)
+          && (!('comentario' in d.keys())
+              || (d.comentario is string && d.comentario.size() <= 1000));
     }
 
     match /resenas/{docId} {
@@ -284,14 +341,8 @@ service cloud.firestore {
                     && request.resource.data.tecnicoId != uid()
                     && docId == uid() + '_' + request.resource.data.tecnicoId
                     && request.resource.data.chatId is string
-                    && conversacionReal(request.resource.data.chatId, request.resource.data.tecnicoId)
-                    && request.resource.data.puntuacion is number
-                    && request.resource.data.puntuacion >= 1
-                    && request.resource.data.puntuacion <= 5
-                    && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
-                    && (!('comentario' in request.resource.data.keys())
-                        || (request.resource.data.comentario is string
-                            && request.resource.data.comentario.size() <= 1000)))
+                    && resenaValida(docId)
+                    && conversacionReal(request.resource.data.chatId, request.resource.data.tecnicoId))
                     || esAdmin();
       allow update: if esAdmin()
                     || (logueado()
@@ -301,29 +352,51 @@ service cloud.firestore {
                         && noMuta('tecnicoId')
                         && request.resource.data.diff(resource.data).affectedKeys()
                              .hasOnly(['puntuacion', 'comentario', 'fecha', 'nombreUsuario', 'chatId', 'id'])
-                        && request.resource.data.puntuacion is number
-                        && request.resource.data.puntuacion >= 1
-                        && request.resource.data.puntuacion <= 5
-                        && request.resource.data.puntuacion == int(request.resource.data.puntuacion)
-                        && (!('comentario' in request.resource.data.keys())
-                            || (request.resource.data.comentario is string
-                                && request.resource.data.comentario.size() <= 1000)));
+                        && resenaValida(docId));
       allow delete: if (logueado() && resource.data.uid == uid()) || esAdmin();
     }
 
+    // Campos del modelo Chat de la app (lo que escribe al abrir una conversación)
+    function camposModeloChat() {
+      return ['id', 'participantes', 'nombresParticipantes', 'ultimoMensaje',
+              'fechaUltimoMensaje', 'noLeidosPor', 'escribieron'];
+    }
+    function participanteValido(p) {
+      return p is string && p.size() > 0 && p.size() <= 128;
+    }
+    function nombreParticipanteValido(nombres, p) {
+      return !(p in nombres) || (nombres[p] is string && nombres[p].size() <= 100);
+    }
+    function noLeidosInicialValido(noLeidos, p) {
+      return !(p in noLeidos) || noLeidos[p] == 0;
+    }
     // Un chat nuevo nace vacío, entre dos personas distintas y con los nombres
     // solo de sus participantes (antes se podía crear ya "con mensajes", que es
-    // lo que exigen las reseñas).
+    // lo que exigen las reseñas). Solo los campos del modelo, con tipo y tope.
     function chatNuevoValido(chatId) {
       let d = request.resource.data;
       return idChatValido(chatId)
+          && d.keys().hasOnly(camposModeloChat())
+          && d.get('id', chatId) == chatId
           && d.participantes is list
           && d.participantes.size() == 2
+          && participanteValido(d.participantes[0])
+          && participanteValido(d.participantes[1])
           && uid() in d.participantes
           && d.participantes[0] != d.participantes[1]
-          && (!('nombresParticipantes' in d) || d.nombresParticipantes.keys().hasOnly(d.participantes))
+          && (!('nombresParticipantes' in d)
+              || (d.nombresParticipantes is map
+                  && d.nombresParticipantes.keys().hasOnly(d.participantes)
+                  && nombreParticipanteValido(d.nombresParticipantes, d.participantes[0])
+                  && nombreParticipanteValido(d.nombresParticipantes, d.participantes[1])))
+          && (!('noLeidosPor' in d)
+              || (d.noLeidosPor is map
+                  && d.noLeidosPor.keys().hasOnly(d.participantes)
+                  && noLeidosInicialValido(d.noLeidosPor, d.participantes[0])
+                  && noLeidosInicialValido(d.noLeidosPor, d.participantes[1])))
           && d.get('fechaUltimoMensaje', 0) == 0
           && d.get('ultimoMensaje', '') == ''
+          && d.get('escribieron', []) is list
           && d.get('escribieron', []).size() == 0;
     }
     // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
@@ -346,6 +419,9 @@ service cloud.firestore {
       return d.keys().hasOnly(['id', 'chatId', 'emisorUid', 'emisorNombre', 'texto', 'fecha',
                                'leido', 'tipo', 'mediaUrl', 'mediaNombre', 'mediaBytes'])
           && d.emisorUid == uid()
+          // Sin límite inferior: los mensajes escritos sin conexión llegan tarde
+          && 'fecha' in d
+          && fechaNoFutura(d.fecha)
           && d.get('tipo', 'texto') in ['texto', 'imagen', 'archivo']
           && d.get('texto', '') is string && d.get('texto', '').size() <= 2000
           && d.get('emisorNombre', '') is string && d.get('emisorNombre', '').size() <= 100

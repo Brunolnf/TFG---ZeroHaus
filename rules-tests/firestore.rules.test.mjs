@@ -535,3 +535,183 @@ describe("perfil profesional: alta con los campos del modelo y emailVerificado",
     }));
   });
 });
+
+const MINUTO = 60 * 1000;
+const DIA = 24 * 60 * MINUTO;
+
+// Quinta auditoría (2026-11): campos de las reseñas y autovaloración
+describe("reseñas: campos del modelo, nombre, fecha y autovaloración", () => {
+  // Lo que escribe la app (el objeto Resena entero, versión 2.3)
+  const resenaApp = (extra = {}) => ({
+    id: "cliente_pro", tecnicoId: "pro", uid: "cliente", nombreUsuario: "Cliente",
+    puntuacion: 5, comentario: "Genial", chatId: "con_mensajes", fecha: Date.now(), ...extra,
+  });
+
+  it("la app publica y vuelve a valorar con el objeto entero", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp()));
+    // Volver a valorar sobrescribe la reseña con la fecha nueva
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ puntuacion: 3, comentario: "Regular" })));
+    // Un móvil con la hora adelantada sigue pudiendo valorar (justo por debajo del margen de 24 h)
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + MINUTO })));
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA - MINUTO })));
+  });
+
+  it("no admite campos fuera del modelo ni otro id", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ relleno: "x".repeat(10000) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ id: "otro_pro" })));
+  });
+
+  it("el nombre del autor es un texto de hasta 100 caracteres", async () => {
+    const db = verificado("cliente");
+    // El administrador puede poner nombres de más de 60: esos usuarios también valoran
+    await assertSucceeds(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(100) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: "x".repeat(101) })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ nombreUsuario: 7 })));
+    const { nombreUsuario, ...sinNombre } = resenaApp();
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinNombre));
+  });
+
+  it("la fecha es un número y no puede estar en el futuro", async () => {
+    const db = verificado("cliente");
+    // Margen de 24 h para móviles con la hora adelantada: justo por encima, no
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA + MINUTO })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: "9999999999999" })));
+    const { fecha, ...sinFecha } = resenaApp();
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), sinFecha));
+  });
+
+  it("al editar se aplican los mismos límites", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "resenas/cliente_pro"), resenaApp()));
+    const db = verificado("cliente");
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { nombreUsuario: "x".repeat(101) }));
+    await assertFails(updateDoc(doc(db, "resenas/cliente_pro"), { fecha: Date.now() + DIA + MINUTO }));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ fecha: Date.now() + DIA + MINUTO })));
+    await assertFails(setDoc(doc(db, "resenas/cliente_pro"), resenaApp({ verificada: true })));
+    await assertSucceeds(updateDoc(doc(db, "resenas/cliente_pro"), { puntuacion: 4, fecha: Date.now() }));
+  });
+
+  it("el dueño de un perfil antiguo (id distinto del uid) no puede valorarse a sí mismo", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "tecnicos/antiguo"), {
+        uid: "cliente", nombre: "Antiguo", rating: 0, opiniones: 0, proyectosCompletados: 0,
+        tipoProfesional: "TECNICO", emailContacto: "cliente@x.es",
+      }));
+    await assertFails(setDoc(doc(verificado("cliente"), "resenas/cliente_antiguo"),
+      resenaApp({ id: "cliente_antiguo", tecnicoId: "antiguo" })));
+  });
+});
+
+// Quinta auditoría (2026-11): chat nuevo, fecha de los mensajes y /usuarios
+describe("chat nuevo y fecha de los mensajes", () => {
+  // Lo que escribe la app al abrir una conversación (el objeto Chat entero)
+  const chatApp = (extra = {}) => ({
+    id: "c3", participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "Cliente", pro: "Pro" },
+    ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 }, escribieron: [],
+    ...extra,
+  });
+  // Mensaje de texto tal como lo escribe la app (MensajeChat)
+  const mensajeApp = (extra = {}) => ({
+    id: "m20", chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente",
+    texto: "hola", fecha: Date.now(), leido: false, tipo: "texto", mediaUrl: "", mediaNombre: "", mediaBytes: 0,
+    ...extra,
+  });
+
+  it("se crea un chat como lo escribe la app", async () => {
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/c3"), chatApp()));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/c4"),
+      chatApp({ id: "c4", nombresParticipantes: { cliente: "x".repeat(100), pro: "Pro" } })));
+  });
+
+  it("un chat nuevo no lleva campos fuera del modelo ni otro id", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ relleno: "x".repeat(10000) })));
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ id: "otro" })));
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ participantes: ["cliente", "x".repeat(5000)] })));
+  });
+
+  it("los nombres de los participantes son textos de hasta 100 caracteres", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/c3"),
+      chatApp({ nombresParticipantes: { cliente: "Cliente", pro: "x".repeat(101) } })));
+    await assertFails(setDoc(doc(db, "chats/c3"),
+      chatApp({ nombresParticipantes: { cliente: { falso: true }, pro: "Pro" } })));
+  });
+
+  it("los no leídos de un chat nuevo empiezan a cero", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ noLeidosPor: { cliente: 0, pro: "x".repeat(5000) } })));
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ noLeidosPor: { cliente: 0, pro: 99 } })));
+    await assertFails(setDoc(doc(db, "chats/c3"), chatApp({ escribieron: "" })));
+  });
+
+  it("la fecha del mensaje es un número que no está en el futuro", async () => {
+    const db = verificado("cliente");
+    // Justo por encima del margen de 24 h
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), mensajeApp({ fecha: Date.now() + DIA + MINUTO })));
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), mensajeApp({ fecha: "mañana" })));
+    const { fecha, ...sinFecha } = mensajeApp();
+    await assertFails(setDoc(doc(db, "chats/con_mensajes/mensajes/m20"), sinFecha));
+  });
+
+  it("los mensajes escritos sin conexión llegan tarde y se aceptan", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m21"),
+      mensajeApp({ id: "m21", fecha: Date.now() - 7 * DIA })));
+    // Móvil con la hora adelantada, justo por debajo del margen de 24 h
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m22"),
+      mensajeApp({ id: "m22", fecha: Date.now() + MINUTO })));
+    await assertSucceeds(setDoc(doc(db, "chats/con_mensajes/mensajes/m23"),
+      mensajeApp({ id: "m23", fecha: Date.now() + DIA - MINUTO })));
+  });
+});
+
+describe("/usuarios: email de la cuenta y topes", () => {
+  const sesion = (uid, email, emailVerificado = false) =>
+    env.authenticatedContext(uid, { email, email_verified: emailVerificado }).firestore();
+  // Lo que escribe la app al registrarse (el objeto Usuario entero)
+  const usuarioApp = (extra = {}) => ({
+    uid: "nuevo", nombre: "Nuevo", email: "nuevo@x.es", tipoUsuario: "Propietario", fotoPerfil: "",
+    fechaRegistro: Date.now(), bloqueado: false, eliminado: false, ...extra,
+  });
+  const URL_FOTO = "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/"
+    + "perfiles%2Fnuevo%2Ffoto_perfil?alt=media&token=0b9f3c1e-1234-4abc-9def-0123456789ab";
+
+  it("el registro como lo hace la app sigue permitido, aunque el email lleve mayúsculas", async () => {
+    await assertSucceeds(setDoc(doc(sesion("nuevo", "nuevo@x.es"), "usuarios/nuevo"), usuarioApp()));
+    await env.clearFirestore();
+    await assertSucceeds(setDoc(doc(sesion("nuevo", "nuevo@x.es"), "usuarios/nuevo"),
+      usuarioApp({ email: "Nuevo@X.es" })));
+  });
+
+  it("el email del perfil tiene que ser el de la cuenta", async () => {
+    await assertFails(setDoc(doc(sesion("nuevo", "nuevo@x.es"), "usuarios/nuevo"),
+      usuarioApp({ email: "otra.persona@x.es" })));
+  });
+
+  it("el administrador crea el perfil de otra cuenta con su email (panel de administración)", async () => {
+    const admin = env.authenticatedContext("admin", { email: "admin@x.es", email_verified: true, admin: true }).firestore();
+    await assertSucceeds(setDoc(doc(admin, "usuarios/creado"),
+      usuarioApp({ uid: "creado", nombre: "Creado por el admin", email: "creado@x.es" })));
+  });
+
+  it("al registrarse no se admiten campos fuera del modelo ni gigantes", async () => {
+    const db = sesion("nuevo", "nuevo@x.es");
+    await assertFails(setDoc(doc(db, "usuarios/nuevo"), usuarioApp({ relleno: "x".repeat(10000) })));
+    await assertFails(setDoc(doc(db, "usuarios/nuevo"), usuarioApp({ fotoPerfil: "x".repeat(5000) })));
+    await assertFails(setDoc(doc(db, "usuarios/nuevo"), usuarioApp({ fechaRegistro: "x".repeat(5000) })));
+  });
+
+  it("al editar el perfil solo cambian el nombre y la foto, con tope", async () => {
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "usuarios/nuevo"), usuarioApp()));
+    const db = sesion("nuevo", "nuevo@x.es", true);
+    // Lo que hace la app al guardar el perfil o subir la foto
+    await assertSucceeds(setDoc(doc(db, "usuarios/nuevo"), { nombre: "Nuevo Nombre", fotoPerfil: URL_FOTO }, { merge: true }));
+    await assertFails(updateDoc(doc(db, "usuarios/nuevo"), { relleno: "x".repeat(10000) }));
+    await assertFails(updateDoc(doc(db, "usuarios/nuevo"), { fotoPerfil: "x".repeat(5000) }));
+  });
+});
