@@ -88,13 +88,19 @@ SMTP_PUERTO = int(os.environ.get("SMTP_PUERTO", "465"))
 REGION = "europe-west1"
 
 # Techo de instancias: una ráfaga de mensajes, eventos o llamadas no escala sin
-# límite (ni el coste). Cada instancia atiende varias peticiones a la vez. Va
-# antes de cualquier función: el decorador lee las opciones globales al definirla.
+# límite (ni el coste). Va antes de cualquier función: el decorador lee las
+# opciones globales al definirla.
+#
+# CPU y concurrencia: con cpu=None, firebase-tools asigna 1 CPU a las funciones
+# de hasta 2 GB y, con 1 CPU, una concurrencia de 80 peticiones por instancia
+# (deploy/functions/prepare.js, resolveCpuAndConcurrency; docs de Firebase,
+# «Manage functions»). Sin cpu=None, set_global_options pondría "gcf_gen1":
+# 0,167 CPU con 256 MB y una sola petición a la vez por instancia.
 MAX_INSTANCIAS = 10
-MAX_INSTANCIAS_CHAT = 20   # on_message_created: un mensaje por cada envío del chat
+# on_message_created recibe un evento por mensaje: con margen para que una
+# ráfaga de chat no se quede sin instancias y se pierdan avisos
+MAX_INSTANCIAS_CHAT = 50
 MAX_INSTANCIAS_IA = 3      # Gemini: cada llamada cuesta dinero
-# cpu=None mantiene la CPU de 2.ª generación: sin él, set_global_options pone
-# "gcf_gen1" (menos CPU y una sola petición por instancia).
 options.set_global_options(region=REGION, max_instances=MAX_INSTANCIAS, cpu=None)
 
 COLECCIONES_POR_CAMPO_UID = [

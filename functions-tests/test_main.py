@@ -277,7 +277,7 @@ class ConfiguracionTest(unittest.TestCase):
         for nombre, endpoint in funciones.items():
             with self.subTest(funcion=nombre):
                 self.assertIsInstance(endpoint.maxInstances, int)
-                self.assertTrue(1 <= endpoint.maxInstances <= 20, endpoint.maxInstances)
+                self.assertTrue(1 <= endpoint.maxInstances <= 50, endpoint.maxInstances)
                 self.assertEqual(endpoint.region, [main.REGION])
                 # set_global_options pone cpu="gcf_gen1" si no se indica (y con
                 # ello concurrencia 1): las funciones siguen con la CPU de 2.ª gen.
@@ -286,7 +286,8 @@ class ConfiguracionTest(unittest.TestCase):
     def test_el_chat_admite_mas_instancias_y_la_ia_menos(self):
         funciones = self.funciones_desplegables()
         normal = funciones["activar_suscripcion"].maxInstances
-        self.assertGreater(funciones["on_message_created"].maxInstances, normal)
+        self.assertEqual(normal, 10)
+        self.assertEqual(funciones["on_message_created"].maxInstances, 50)   # ráfagas de chat
         self.assertLess(funciones["generar_sugerencias_ia"].maxInstances, normal)
         self.assertLess(funciones["leer_factura"].maxInstances, normal)
 
