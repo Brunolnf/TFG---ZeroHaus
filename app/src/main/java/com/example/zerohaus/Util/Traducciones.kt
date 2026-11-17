@@ -702,6 +702,7 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Si tienes una suscripción de profesional, cancélala antes en Google Play: borrar la cuenta no detiene los cobros.",
     "comOpinion" to "opinión",
     "comValoracion" to "valoración",
+    "ajustesEliminarPerdidaPeriodo" to "Tienes un plan vigente: si borras la cuenta perderás el periodo ya pagado, sin reembolso.",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1365,6 +1366,7 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "If you have a professional subscription, cancel it in Google Play first: deleting your account doesn't stop the charges.",
     "comOpinion" to "review",
     "comValoracion" to "review",
+    "ajustesEliminarPerdidaPeriodo" to "You have an active plan: if you delete the account you will lose the period you have already paid for, with no refund.",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2028,6 +2030,7 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Si tens una subscripció de professional, cancel·la-la abans a Google Play: esborrar el compte no atura els cobraments.",
     "comOpinion" to "opinió",
     "comValoracion" to "valoració",
+    "ajustesEliminarPerdidaPeriodo" to "Tens un pla vigent: si esborres el compte perdràs el període ja pagat, sense reemborsament.",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2691,6 +2694,7 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Profesionalen harpidetza baduzu, ezeztatu lehenik Google Play-n: kontua ezabatzeak ez ditu kobrantzak geldiarazten.",
     "comOpinion" to "iritzi",
     "comValoracion" to "balorazio",
+    "ajustesEliminarPerdidaPeriodo" to "Plan indarrean duzu: kontua ezabatzen baduzu, jada ordaindutako aldia galduko duzu, itzulketarik gabe.",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3354,6 +3358,7 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Se tes unha subscrición de profesional, cancélaa antes en Google Play: borrar a conta non detén os cobros.",
     "comOpinion" to "opinión",
     "comValoracion" to "valoración",
+    "ajustesEliminarPerdidaPeriodo" to "Tes un plan vixente: se borras a conta perderás o período xa pagado, sen reembolso.",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4017,6 +4022,7 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Se tiver uma subscrição de profissional, cancele-a primeiro no Google Play: eliminar a conta não interrompe as cobranças.",
     "comOpinion" to "avaliação",
     "comValoracion" to "avaliação",
+    "ajustesEliminarPerdidaPeriodo" to "Tens um plano ativo: se eliminares a conta, perderás o período já pago, sem reembolso.",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4680,6 +4686,7 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Si vous avez un abonnement professionnel, résiliez-le d'abord dans Google Play : supprimer votre compte n'arrête pas les prélèvements.",
     "comOpinion" to "avis",
     "comValoracion" to "avis",
+    "ajustesEliminarPerdidaPeriodo" to "Vous avez un abonnement en cours : si vous supprimez le compte, vous perdrez la période déjà payée, sans remboursement.",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5343,6 +5350,7 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Wenn du ein Profi-Abo hast, kündige es zuerst in Google Play: Das Löschen des Kontos stoppt die Abbuchungen nicht.",
     "comOpinion" to "Bewertung",
     "comValoracion" to "Bewertung",
+    "ajustesEliminarPerdidaPeriodo" to "Du hast einen laufenden Tarif: Wenn du das Konto löschst, verlierst du den bereits bezahlten Zeitraum, ohne Erstattung.",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6006,6 +6014,7 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Se hai un abbonamento da professionista, annullalo prima su Google Play: eliminare l'account non interrompe gli addebiti.",
     "comOpinion" to "recensione",
     "comValoracion" to "recensione",
+    "ajustesEliminarPerdidaPeriodo" to "Hai un piano attivo: se elimini l'account perderai il periodo già pagato, senza rimborso.",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6669,6 +6678,7 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "إذا كان لديك اشتراك احترافي، فألغِه أولاً من Google Play: حذف الحساب لا يوقف الدفعات.",
     "comOpinion" to "تقييم",
     "comValoracion" to "تقييم",
+    "ajustesEliminarPerdidaPeriodo" to "لديك خطة سارية: إذا حذفت الحساب فستفقد الفترة المدفوعة بالفعل، دون استرداد.",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7332,6 +7342,7 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "如果您有专业版订阅，请先在 Google Play 中取消：删除账户不会停止扣费。",
     "comOpinion" to "条评价",
     "comValoracion" to "条评价",
+    "ajustesEliminarPerdidaPeriodo" to "你有一个仍在有效期内的套餐：删除账户后，已支付的时段将作废，不予退款。",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7995,6 +8006,7 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Dacă ai un abonament de profesionist, anulează-l mai întâi din Google Play: ștergerea contului nu oprește plățile.",
     "comOpinion" to "recenzie",
     "comValoracion" to "recenzie",
+    "ajustesEliminarPerdidaPeriodo" to "Ai un plan activ: dacă ștergi contul, vei pierde perioada deja plătită, fără rambursare.",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8658,6 +8670,7 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Heb je een abonnement voor vakmensen? Zeg het eerst op in Google Play: je account verwijderen stopt de betalingen niet.",
     "comOpinion" to "beoordeling",
     "comValoracion" to "beoordeling",
+    "ajustesEliminarPerdidaPeriodo" to "Je hebt een lopend abonnement: als je het account verwijdert, verlies je de al betaalde periode, zonder terugbetaling.",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9321,4 +9334,5 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "ajustesEliminarAvisoSuscripcion" to "Jeśli masz subskrypcję dla specjalistów, najpierw anuluj ją w Google Play: usunięcie konta nie zatrzymuje płatności.",
     "comOpinion" to "opinia",
     "comValoracion" to "opinia",
+    "ajustesEliminarPerdidaPeriodo" to "Masz aktywny plan: jeśli usuniesz konto, stracisz już opłacony okres bez zwrotu pieniędzy.",
 ), respaldo = espanol) }

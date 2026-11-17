@@ -394,6 +394,9 @@ fun AjustesScreen(
                     val esProfesional = AppEstado.tipoUsuarioCache == "Técnico" || AppEstado.tipoUsuarioCache == "Empresa"
                     if (esProfesional) {
                         Text(c.ajustesEliminarAvisoSuscripcion, color = rojo, fontSize = 13.sp)
+                        if (estado.planVigente != false) {
+                            Text(c.ajustesEliminarPerdidaPeriodo, color = rojo, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
                         TextButton(
                             onClick = { abrirUrl(BillingManager.urlGestionSuscripcion(PLAY_ID)) },
                             contentPadding = PaddingValues(0.dp)

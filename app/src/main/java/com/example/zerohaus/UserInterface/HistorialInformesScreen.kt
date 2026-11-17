@@ -449,7 +449,7 @@ private fun generarPdfParaChat(
     informe: InformeEnergetico
 ): java.io.File {
     // Reutiliza la función de generación de PDF de CompartirInforme
-    val dir = java.io.File(context.cacheDir, "informes")
+    val dir = java.io.File(context.cacheDir, "compartidos")
     dir.mkdirs()
     val nombreSeguro = informe.nombreVivienda
         .lowercase()

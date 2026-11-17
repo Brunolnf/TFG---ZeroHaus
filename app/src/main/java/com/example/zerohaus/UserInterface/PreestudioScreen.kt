@@ -286,14 +286,15 @@ private fun TarjetaFactura(estado: PreestudioEstado, viewModel: PreestudioViewMo
     val ctx = LocalContext.current
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
-    // La foto se guarda en la caché privada de la app (cache/factura, la
+    // La foto se guarda en la caché privada de la app (cache/compartidos, la
     // carpeta que file_paths.xml deja escribir a la cámara) y se borra tras enviarla
-    val archivoFoto = remember { File(File(ctx.cacheDir, "factura").apply { mkdirs() }, "factura.jpg") }
+    val archivoFoto = remember { File(File(ctx.cacheDir, "compartidos").apply { mkdirs() }, "factura.jpg") }
     val uriFoto = remember {
         runCatching { FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", archivoFoto) }.getOrNull()
     }
     val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok && uriFoto != null) viewModel.leerFactura(ctx.applicationContext, uriFoto, archivoFoto)
+        else archivoFoto.delete() // foto cancelada: no dejar rastro
     }
     val selector = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) viewModel.leerFactura(ctx.applicationContext, uri)

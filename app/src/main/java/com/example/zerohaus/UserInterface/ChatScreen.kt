@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.zerohaus.Util.AdjuntosChat
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.MensajeChat
@@ -379,7 +380,7 @@ fun ChatScreen(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = url,
+                    model = url.takeIf { AdjuntosChat.esUrlSegura(it) },
                     contentDescription = cad.chatImagen,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -448,7 +449,7 @@ fun ChatScreen(
                 if (esImagen) {
                     // Imagen a pantalla completa con zoom
                     AsyncImage(
-                        model = msg.mediaUrl,
+                        model = msg.mediaUrl.takeIf { AdjuntosChat.esUrlSegura(it) },
                         contentDescription = msg.mediaNombre,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -509,6 +510,10 @@ fun ChatScreen(
                         Button(
                             onClick = {
                                 archivoAmpliado = null
+                                if (!AdjuntosChat.esUrlSegura(msg.mediaUrl)) {
+                                    errorLocal = cad.sinAppParaAbrir
+                                    return@Button
+                                }
                                 try {
                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(msg.mediaUrl)))
                                 } catch (_: ActivityNotFoundException) {
@@ -647,7 +652,7 @@ private fun BurbujaMensaje(
             ) {
                 Column {
                     AsyncImage(
-                        model = msg.mediaUrl,
+                        model = msg.mediaUrl.takeIf { AdjuntosChat.esUrlSegura(it) },
                         contentDescription = cad.chatImagen,
                         modifier = Modifier
                             .fillMaxWidth()

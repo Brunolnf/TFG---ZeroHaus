@@ -217,7 +217,7 @@ private fun generarPdf(context: Context, informe: InformeEnergetico): File {
 
     doc.finishPage(page)
 
-    val dir = File(context.cacheDir, "informes")
+    val dir = File(context.cacheDir, "compartidos")
     dir.mkdirs()
     val nombreSeguro = informe.nombreVivienda
         .lowercase()

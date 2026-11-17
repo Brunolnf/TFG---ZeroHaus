@@ -748,6 +748,7 @@ class AppCadenas internal constructor(
     val ajustesEliminarAvisoSuscripcion: String get() = t("ajustesEliminarAvisoSuscripcion")
     val comOpinion: String get() = t("comOpinion")
     val comValoracion: String get() = t("comValoracion")
+    val ajustesEliminarPerdidaPeriodo: String get() = t("ajustesEliminarPerdidaPeriodo")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
