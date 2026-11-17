@@ -22,7 +22,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.Source
 import com.google.firebase.functions.FirebaseFunctions
-import com.google.firebase.functions.FirebaseFunctionsException
 
 /**
  * Autenticación y cuenta: login (con comprobación de bloqueo), registro,
@@ -283,12 +282,10 @@ class RepositorioAutenticacion {
             }
             .addOnFailureListener { e ->
                 Diagnostico.errorDeFuncion("eliminar_mi_cuenta", e)
-                val fe = e as? FirebaseFunctionsException
-                callback(Result.failure(Exception(when {
-                    e.esFalloDeRed() -> textos().errorRed
-                    BorradoCuenta.esFalloTransitorioDePlay(fe?.code?.name, fe?.details) ->
-                        textos().ajustesEliminarErrorPlay
-                    else -> textos().ajustesEliminarError
+                callback(Result.failure(Exception(when (BorradoCuenta.clasificarError(e)) {
+                    BorradoCuenta.TipoError.RED -> textos().errorRed
+                    BorradoCuenta.TipoError.PLAY -> textos().ajustesEliminarErrorPlay
+                    BorradoCuenta.TipoError.OTRO -> textos().ajustesEliminarError
                 })))
             }
     }

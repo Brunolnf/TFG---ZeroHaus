@@ -1,5 +1,7 @@
 package com.example.zerohaus.Util
 
+import com.google.firebase.functions.FirebaseFunctionsException
+
 /**
  * Interpretación pura de la respuesta de `eliminar_mi_cuenta`, que cancela la
  * renovación en Google Play antes de borrar la cuenta.
@@ -22,4 +24,19 @@ object BorradoCuenta {
      */
     fun esFalloTransitorioDePlay(codigo: String?, detalles: Any?): Boolean =
         codigo == "UNAVAILABLE" && (detalles as? Map<*, *>)?.get("motivo") == "play"
+
+    enum class TipoError { RED, PLAY, OTRO }
+
+    /** Clasifica el fallo de `eliminar_mi_cuenta` para elegir el mensaje a mostrar. */
+    fun clasificarError(e: Exception): TipoError {
+        val fe = e as? FirebaseFunctionsException
+        return clasificar(e.esFalloDeRed(), fe?.code?.name, fe?.details)
+    }
+
+    /** Parte pura de [clasificarError]: la red tiene prioridad sobre el fallo de Play. */
+    fun clasificar(esFalloDeRed: Boolean, codigo: String?, detalles: Any?): TipoError = when {
+        esFalloDeRed -> TipoError.RED
+        esFalloTransitorioDePlay(codigo, detalles) -> TipoError.PLAY
+        else -> TipoError.OTRO
+    }
 }

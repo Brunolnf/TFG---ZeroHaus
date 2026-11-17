@@ -70,7 +70,6 @@ fun AjustesScreen(
 
     var mostrarCambiarPass by remember { mutableStateOf(false) }
     var mostrarEliminar by remember { mutableStateOf(false) }
-    var avisoCancelarEnPlay by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.cargarAjustes() }
 
@@ -382,7 +381,7 @@ fun AjustesScreen(
     }
 
     // ── Aviso: cuenta borrada pero la suscripción hay que cancelarla a mano ──
-    if (avisoCancelarEnPlay) {
+    if (estado.avisoCancelarEnPlay) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text(c.ajustesCuentaBorradaTitulo, fontWeight = FontWeight.SemiBold) },
@@ -393,7 +392,7 @@ fun AjustesScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { avisoCancelarEnPlay = false; onCerrarSesion() }) {
+                TextButton(onClick = { viewModel.descartarAvisoCancelarEnPlay(); onCerrarSesion() }) {
                     Text(c.ajustesCuentaBorradaCerrar)
                 }
             }
@@ -401,7 +400,7 @@ fun AjustesScreen(
     }
 
     // ── Diálogo: eliminar cuenta ──
-    if (mostrarEliminar) {
+    if (mostrarEliminar && !estado.avisoCancelarEnPlay) {
         AlertDialog(
             onDismissRequest = { if (!estado.eliminandoCuenta) mostrarEliminar = false },
             icon = { Icon(Icons.Filled.DeleteForever, null, tint = rojo) },
@@ -424,10 +423,9 @@ fun AjustesScreen(
                 TextButton(
                     enabled = !estado.eliminandoCuenta,
                     onClick = {
-                        viewModel.eliminarCuenta { cancelarEnPlay ->
+                        viewModel.eliminarCuenta {
                             mostrarEliminar = false
-                            // La sesión sigue abierta hasta que el usuario lea el aviso
-                            if (cancelarEnPlay) avisoCancelarEnPlay = true else onCerrarSesion()
+                            onCerrarSesion()
                         }
                     }
                 ) {
