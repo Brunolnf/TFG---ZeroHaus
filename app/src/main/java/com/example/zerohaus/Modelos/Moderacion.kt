@@ -80,9 +80,6 @@ object Moderacion {
         return datos
     }
 
-    /** Uid al que se denuncia/bloquea en un perfil: el campo `uid`; en perfiles antiguos el id no lo es. */
-    fun uidDePerfil(uid: String, idDocumento: String) = uid.ifBlank { idDocumento }
-
     /** Id de la reseña a denunciar: el guardado o, si falta, el determinista `{uid}_{tecnicoId}`. */
     fun referenciaResena(id: String, uidAutor: String, tecnicoId: String) =
         id.ifBlank { "${uidAutor}_$tecnicoId" }
@@ -94,15 +91,51 @@ object Moderacion {
                 compareBy<UsuarioBloqueado>({ it.nombre == null }, { it.nombre?.lowercase() }, { it.uid })
             )
 
-    /** Resumen de la evidencia que copia el servidor, una línea `clave: valor` por campo (recortada). */
-    fun resumenEvidencia(evidencia: Map<String, Any?>, maxCampos: Int = 6, maxValor: Int = 120): String =
-        evidencia.entries
-            .filter { it.value != null && it.value.toString().isNotBlank() }
+    const val MAX_MENSAJES_EVIDENCIA = 10
+
+    /**
+     * Resumen de la evidencia que copia el servidor. Chat: `mensajes` (lista de
+     * `{texto, tipo, fecha, mediaUrl}`), una línea por mensaje (máx. 10, con
+     * «[imagen]» o «[PDF]» si no hay texto). Reseña, perfil y nota: una línea
+     * `clave: valor` por campo, recortada.
+     */
+    fun resumenEvidencia(evidencia: Map<String, Any?>, maxCampos: Int = 6, maxValor: Int = 120): String {
+        fun recortar(t: String) = if (t.length > maxValor) t.take(maxValor) + "…" else t
+        val lineas = evidencia.entries
+            .filter { it.key != "mensajes" && it.value != null && it.value.toString().isNotBlank() }
             .take(maxCampos)
-            .joinToString("\n") { (k, v) ->
-                val texto = v.toString()
-                "$k: " + if (texto.length > maxValor) texto.take(maxValor) + "…" else texto
+            .map { (k, v) -> "$k: " + recortar(v.toString()) }
+        val mensajes = (evidencia["mensajes"] as? List<*>).orEmpty()
+            .filterIsInstance<Map<*, *>>()
+            .take(MAX_MENSAJES_EVIDENCIA)
+            .map { m ->
+                val texto = (m["texto"] as? String).orEmpty().trim()
+                when {
+                    texto.isNotEmpty() -> "- " + recortar(texto)
+                    m["tipo"] == "imagen" -> "- [imagen]"
+                    m["tipo"] == "archivo" -> "- [PDF]"
+                    else -> "- [sin texto]"
+                }
             }
+        return (lineas + mensajes).joinToString("\n")
+    }
+
+    fun etiquetaMotivo(id: String) = when (id) {
+        "spam" -> "Spam"
+        "acoso" -> "Acoso"
+        "fraude" -> "Fraude"
+        "inapropiado" -> "Inapropiado"
+        "suplantacion" -> "Suplantación"
+        "otro" -> "Otro"
+        else -> id.ifBlank { "?" }
+    }
+
+    fun etiquetaContexto(id: String) = when (id) {
+        "chat" -> "Chat"
+        "perfil" -> "Perfil"
+        "resena" -> "Reseña"
+        else -> id.ifBlank { "?" }
+    }
 
     /** Un envío rechazado por las reglas (por ejemplo, hay un bloqueo entre los dos). */
     fun esPermisoDenegado(e: Throwable?): Boolean =

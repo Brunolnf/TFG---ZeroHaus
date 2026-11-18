@@ -1169,6 +1169,15 @@ class PurgaTest(_ConPurga):
         self.assertEqual(sorted(self.db.docs), ["bloqueos/x_y", "denuncias/x_y"])
         self.assertEqual((stats["bloqueos"], stats["denuncias"]), (2, 2))
 
+    def test_borra_su_contador_de_denuncias(self):
+        # El id lleva el uid: no se queda tras borrar la cuenta
+        self.db.docs.update({
+            "limites_denuncias_autor/p1_20261117": {"uid": "p1", "dia": "20261117", "denuncias": 3},
+            "limites_denuncias_autor/x_20261117": {"uid": "x", "dia": "20261117", "denuncias": 1},
+        })
+        main._purgar_usuario(self.db, "p1")
+        self.assertEqual(sorted(self.db.docs), ["limites_denuncias_autor/x_20261117"])
+
 
 def _respuesta_http(codigo, datos=None):
     return SimpleNamespace(status_code=codigo, text="", json=lambda: dict(datos or {}))
@@ -1453,12 +1462,12 @@ class DenunciaTest(_ConServiciosFalsos):
             "chats/ajeno": {"participantes": ["otro", "pro"]},
         })
 
-    def denunciar(self, autor="cliente", contexto="chat", referencia="c1", **extra):
-        """Crea /denuncias/{autor}_pro como la app y devuelve el evento del trigger."""
-        datos = {"autor": autor, "objetivo": "pro", "contexto": contexto, "referencia": referencia,
+    def denunciar(self, autor="cliente", contexto="chat", referencia="c1", objetivo="pro", **extra):
+        """Crea /denuncias/{autor}_{objetivo} como la app y devuelve el evento del trigger."""
+        datos = {"autor": autor, "objetivo": objetivo, "contexto": contexto, "referencia": referencia,
                  "motivo": "acoso", "comentario": "Me insulta", "fecha": 1, **extra}
-        self.db.docs[f"denuncias/{autor}_pro"] = dict(datos)
-        return evento_creado(datos, denunciaId=f"{autor}_pro")
+        self.db.docs[f"denuncias/{autor}_{objetivo}"] = dict(datos)
+        return evento_creado(datos, denunciaId=f"{autor}_{objetivo}")
 
     def entregar(self, evento):
         with mock.patch("builtins.print"):
@@ -1576,6 +1585,52 @@ class DenunciaTest(_ConServiciosFalsos):
         denuncia = self.entregar(self.denunciar())
         self.assertEqual(self.correos, [])
         self.assertIn("evidencia", denuncia)
+        # Sin cupo común no se gasta el de denuncias
+        self.assertNotIn(f"limites_denuncias/{self.hoy()}", self.db.docs)
+
+    def test_sin_cupo_de_denuncias_no_se_gasta_el_comun(self):
+        self.db.docs[f"limites_denuncias/{self.hoy()}"] = {"avisos": main.AVISOS_DENUNCIA_MAX_DIA}
+        self.entregar(self.denunciar())
+        self.assertEqual(self.correos, [])
+        self.assertNotIn(f"limites_correo/{self.hoy()}", self.db.docs)
+
+    def test_mas_de_5_denuncias_de_un_autor_en_el_dia_se_guardan_sin_avisar(self):
+        for i in range(6):
+            denuncia = self.entregar(self.denunciar(objetivo=f"o{i}"))
+            self.assertEqual(denuncia["estado"], "pendiente")   # la evidencia se guarda igual
+            self.assertIn("evidencia", denuncia)
+            self.assertEqual(denuncia.get("exceso"), True if i == 5 else None, i)
+        self.assertEqual(len(self.correos), 5)
+        self.assertEqual(self.db.docs[f"limites_denuncias_autor/cliente_{self.hoy()}"],
+                         {"uid": "cliente", "dia": self.hoy(), "denuncias": 6})
+        # La sexta no gasta cupos de correo; otro autor sigue avisando
+        self.assertEqual(self.db.docs[f"limites_denuncias/{self.hoy()}"], {"avisos": 5})
+        self.entregar(self.denunciar(autor="otra"))
+        self.assertEqual(len(self.correos), 6)
+
+    def test_el_tope_por_autor_se_reinicia_cada_dia(self):
+        self.db.docs["limites_denuncias_autor/cliente_20000101"] = {"uid": "cliente", "dia": "20000101",
+                                                                     "denuncias": 9}
+        denuncia = self.entregar(self.denunciar())
+        self.assertNotIn("exceso", denuncia)
+        self.assertEqual(len(self.correos), 1)
+
+    def test_un_evento_repetido_no_cuenta_dos_veces_para_el_autor(self):
+        evento = self.denunciar()
+        self.entregar(evento)
+        self.entregar(evento)
+        self.assertEqual(self.db.docs[f"limites_denuncias_autor/cliente_{self.hoy()}"]["denuncias"], 1)
+
+    def test_una_referencia_con_barra_no_lee_otra_ruta_en_ningun_contexto(self):
+        self.db.docs.update({
+            "resenas/x/y/z": {"uid": "pro", "puntuacion": 1, "comentario": "no", "fecha": 1},
+            "tecnicos/x/y/z": {"uid": "pro", "nombre": "no", "descripcion": "no"},
+        })
+        self.mensaje("p1", "pro", 1)
+        for contexto, referencia in (("chat", "c1/mensajes/p1"), ("resena", "x/y/z"), ("perfil", "x/y/z")):
+            with self.subTest(contexto=contexto):
+                evidencia = self.entregar(self.denunciar(contexto=contexto, referencia=referencia))["evidencia"]
+                self.assertEqual(evidencia, {"nota": "Referencia no válida: no se copia evidencia."})
 
 
 class MensajeConBloqueoTest(_ConServiciosFalsos):

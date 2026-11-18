@@ -101,7 +101,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun escucharBloqueos() {
         if (listenerBloqueos != null || FirebaseAuth.getInstance().currentUser == null) return
-        listenerBloqueos = repoModeracion.escucharMisBloqueos { misBloqueados = it }
+        listenerBloqueos = repoModeracion.escucharMisBloqueos(
+            alFallar = { listenerBloqueos?.remove(); listenerBloqueos = null }
+        ) { misBloqueados = it }
     }
 
     /** Denuncia al otro participante del chat abierto. */

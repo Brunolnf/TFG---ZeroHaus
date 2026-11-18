@@ -30,7 +30,7 @@ data class PerfilTecnicoEstado(
     val esMiPerfil: Boolean = false,
     // Chat con mensajes entre el cliente y el profesional: requisito para valorar
     val chatIdConversacion: String? = null,
-    // Uid del dueño del perfil (el id del documento no lo es en perfiles antiguos)
+    // Uid del dueño del perfil (campo `uid`; vacío si el perfil no lo tiene: sin denunciar ni bloquear)
     val uidProfesional: String = "",
     // Uids que he bloqueado
     val bloqueados: Set<String> = emptySet()
@@ -108,7 +108,7 @@ class PerfilTecnicoViewModel : ViewModel() {
                 resenas = resenas,
                 yaValorado = miUid != null && resenas.any { it.uid == miUid },
                 esMiPerfil = esMiPerfil,
-                uidProfesional = Moderacion.uidDePerfil(tecnico?.uid.orEmpty(), tecnicoId),
+                uidProfesional = tecnico?.uid.orEmpty(),
                 chatIdConversacion = chatId,
                 cargando = false
             )

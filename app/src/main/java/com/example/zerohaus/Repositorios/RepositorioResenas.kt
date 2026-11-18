@@ -18,7 +18,7 @@ class RepositorioResenas {
             .whereEqualTo("tecnicoId", tecnicoId)
             .getOrTimeout { snap ->
                 callback(snap?.documents
-                    ?.mapNotNull { it.toObject(Resena::class.java) }
+                    ?.mapNotNull { d -> d.toObject(Resena::class.java)?.copy(id = d.id) }
                     ?.sortedByDescending { it.fecha } ?: emptyList())
             }
     }

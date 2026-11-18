@@ -535,10 +535,13 @@ service cloud.firestore {
           && d.objetivo != uid()
           && denunciaId == uid() + '_' + d.objetivo
           && d.contexto in ['chat', 'perfil', 'resena']
-          // chatId, id del doc de /tecnicos o id de la reseña
+          // chatId, id del doc de /tecnicos o id de la reseña: ids automáticos,
+          // uids o uid_tecnicoId. Va en el correo al administrador, así que ni
+          // saltos de línea ni enlaces
           && d.referencia is string
           && d.referencia.size() > 0
           && d.referencia.size() <= 300
+          && d.referencia.matches('^[A-Za-z0-9_-]{1,300}$')
           && d.motivo in ['spam', 'acoso', 'fraude', 'inapropiado', 'suplantacion', 'otro']
           && (!('comentario' in d.keys()) || (d.comentario is string && d.comentario.size() <= 1000))
           && fechaNoFutura(d.fecha)

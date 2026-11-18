@@ -292,8 +292,8 @@ private fun DenunciaCard(
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                EtiquetaMini(denuncia.motivo.ifBlank { "?" }, ROJO)
-                EtiquetaMini(denuncia.contexto.ifBlank { "?" }, AZUL)
+                EtiquetaMini(Moderacion.etiquetaMotivo(denuncia.motivo), ROJO)
+                EtiquetaMini(Moderacion.etiquetaContexto(denuncia.contexto), AZUL)
                 EtiquetaMini(denuncia.estado, colorEstado)
                 Spacer(Modifier.weight(1f))
                 Text(fecha, fontSize = 11.sp, color = gris)

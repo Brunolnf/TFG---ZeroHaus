@@ -109,6 +109,8 @@ COLECCIONES_POR_CAMPO_UID = [
     ("informes",        "uid"),
     ("notificaciones",  "uid"),
     ("suscripciones",   "uid"),
+    # Contador diario de denuncias por autor: su id lleva el uid
+    ("limites_denuncias_autor", "uid"),
 ]
 
 # Colecciones donde el usuario aparece en uno de dos campos: las suyas y las
@@ -882,6 +884,10 @@ DENUNCIA_URL_MAX = 2048        # el documento de la denuncia no crece sin límit
 # Avisos de denuncias al día, además del cupo común de avisos: una ráfaga de
 # denuncias no se come el correo de los demás avisos ni el de los códigos
 AVISOS_DENUNCIA_MAX_DIA = int(os.environ.get("AVISOS_DENUNCIA_MAX_DIA", "20"))
+# Denuncias de un mismo autor al día (UTC) que avisan por correo: a partir de
+# la siguiente se guardan con `exceso` y sin correo, para que una sola cuenta
+# no gaste el tope de todos denunciando a muchos usuarios
+DENUNCIAS_MAX_DIA_AUTOR = 5
 CONTEXTOS_DENUNCIA = {"chat", "perfil", "resena"}
 MOTIVOS_DENUNCIA = {"spam", "acoso", "fraude", "inapropiado", "suplantacion", "otro"}
 
@@ -962,18 +968,30 @@ def _evidencia_denuncia(db, d: dict) -> dict:
     return {"nota": "Contexto desconocido: no se copia evidencia."}
 
 
-def _reservar_aviso_denuncia(db) -> bool:
-    """Gasta uno de los AVISOS_DENUNCIA_MAX_DIA avisos de denuncias del día
-    (/limites_denuncias/{día UTC}, solo servidor). False si no quedan."""
-    ref = db.collection("limites_denuncias").document(_hoy_utc())
+def _reservar_aviso_denuncia(db) -> str:
+    """Reserva en una sola transacción un correo del cupo común de avisos
+    (/limites_correo, el de _reservar_cupo_correo) y uno de los
+    AVISOS_DENUNCIA_MAX_DIA de denuncias (/limites_denuncias/{día UTC}, solo
+    servidor). Mira primero el común y después el de denuncias, y solo gasta
+    si quedan los dos: así no se pierde uno cuando el otro está agotado.
+    Devuelve "" si hay correo, o el cupo agotado ("correo" o "denuncias")."""
+    hoy = _hoy_utc()
+    correo_ref = db.collection("limites_correo").document(hoy)
+    denuncias_ref = db.collection("limites_denuncias").document(hoy)
 
     @firestore.transactional
     def _reservar(txn):
-        avisos = int((ref.get(transaction=txn).to_dict() or {}).get("avisos") or 0)
-        if avisos >= AVISOS_DENUNCIA_MAX_DIA:
-            return False
-        txn.set(ref, {"avisos": avisos + 1})
-        return True
+        correo = correo_ref.get(transaction=txn).to_dict() or {}
+        denuncias = denuncias_ref.get(transaction=txn).to_dict() or {}
+        enviados, avisos = int(correo.get("enviados") or 0), int(correo.get("avisos") or 0)
+        if enviados >= CORREOS_MAX_DIA or avisos >= CORREOS_AVISOS_MAX_DIA:
+            return "correo"
+        avisos_denuncias = int(denuncias.get("avisos") or 0)
+        if avisos_denuncias >= AVISOS_DENUNCIA_MAX_DIA:
+            return "denuncias"
+        txn.set(correo_ref, {"enviados": enviados + 1, "avisos": avisos + 1})
+        txn.set(denuncias_ref, {"avisos": avisos_denuncias + 1})
+        return ""
 
     return _reservar(db.transaction())
 
@@ -981,14 +999,12 @@ def _reservar_aviso_denuncia(db) -> bool:
 def _avisar_denuncia(db, denuncia_id: str, d: dict) -> None:
     """Correo al buzón de ZeroHaus (el propio remitente) con lo justo para
     encontrarla en el panel: motivo, contexto e ids; ni el comentario ni la
-    evidencia. Primero el tope de denuncias y después el cupo común de avisos.
-    Nunca rompe el trigger: sin cupo o si falla el SMTP, solo queda en el registro."""
+    evidencia. Nunca rompe el trigger: sin cupo o si falla el SMTP, solo
+    queda en el registro."""
     try:
-        if not _reservar_aviso_denuncia(db):
-            print(f"[DENUNCIAS] Tope diario de avisos de denuncias alcanzado: sin correo por {denuncia_id}")
-            return
-        if not _reservar_cupo_correo(db, aviso=True):
-            print(f"[DENUNCIAS] Tope diario de correos alcanzado: sin correo por {denuncia_id}")
+        agotado = _reservar_aviso_denuncia(db)
+        if agotado:
+            print(f"[DENUNCIAS] Tope diario de {agotado} alcanzado: sin correo por {denuncia_id}")
             return
         motivo = d.get("motivo") if d.get("motivo") in MOTIVOS_DENUNCIA else "otro"
         contexto = d.get("contexto") if d.get("contexto") in CONTEXTOS_DENUNCIA else "?"
@@ -1015,11 +1031,13 @@ def _avisar_denuncia(db, denuncia_id: str, d: dict) -> None:
 )
 def on_denuncia_creada(event) -> None:
     """Denuncia nueva: copia la evidencia, la deja `pendiente` y avisa al
-    administrador.
+    administrador, salvo que su autor pase de DENUNCIAS_MAX_DIA_AUTOR hoy:
+    entonces se guarda con `exceso: true` y sin correo.
 
     Idempotente (Firestore puede entregar el evento más de una vez): si ya
-    tiene `evidencia` no hace nada, y la evidencia se guarda en una
-    transacción que la comprueba otra vez; solo quien la guarda avisa."""
+    tiene `evidencia` no hace nada, y la evidencia y el contador del autor se
+    guardan en una transacción que la comprueba otra vez; solo quien la
+    guarda cuenta y avisa."""
     if event.data is None:
         return
     denuncia_id = event.params["denunciaId"]
@@ -1036,20 +1054,35 @@ def on_denuncia_creada(event) -> None:
         print(f"[DENUNCIAS] No se pudo copiar la evidencia de {denuncia_id}: {e}")
         evidencia = {"nota": "No se pudo copiar la evidencia: revisa el contenido directamente."}
 
+    autor = datos.get("autor") if isinstance(datos.get("autor"), str) else ""
+    hoy = _hoy_utc()
+    # Un autor raro (solo posible con el Admin SDK) cuenta aparte, sin «/» en el id
+    contador_ref = db.collection("limites_denuncias_autor").document(
+        f"{autor}_{hoy}" if autor and "/" not in autor else f"_{hoy}")
+
     @firestore.transactional
     def _guardar(txn):
+        """None si ya estaba guardada o no existe; si no, si es un exceso."""
         actual = ref.get(transaction=txn)
         d = (actual.to_dict() or {}) if actual.exists else None
         if d is None or "evidencia" in d:
-            return False
+            return None
+        contador = contador_ref.get(transaction=txn).to_dict() or {}
+        hechas = int(contador.get("denuncias") or 0) + 1
         cambios = {"evidencia": evidencia}
         if "estado" not in d:   # no se pisa si el administrador ya la gestionó
             cambios["estado"] = "pendiente"
+        if hechas > DENUNCIAS_MAX_DIA_AUTOR:
+            cambios["exceso"] = True
         txn.update(ref, cambios)
-        return True
+        txn.set(contador_ref, {"uid": autor, "dia": hoy, "denuncias": hechas})
+        return hechas > DENUNCIAS_MAX_DIA_AUTOR
 
-    if _guardar(db.transaction()):
+    exceso = _guardar(db.transaction())
+    if exceso is False:
         _avisar_denuncia(db, denuncia_id, datos)
+    elif exceso:
+        print(f"[DENUNCIAS] {denuncia_id}: su autor pasa de {DENUNCIAS_MAX_DIA_AUTOR} hoy, sin correo")
 
 
 # ════════════════════════════════════════════════════════════════════════

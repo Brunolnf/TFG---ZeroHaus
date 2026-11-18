@@ -779,6 +779,15 @@ describe("bloqueos entre usuarios", () => {
     await assertFails(getDoc(doc(verificado("pro"), "bloqueos/otro_pro")));
   });
 
+  it("el bloqueado no puede listar quién le ha bloqueado, ni afinando la consulta", async () => {
+    await sembrar("cliente_pro", bloqueo());
+    const db = verificado("pro");
+    await assertFails(getDocs(query(collection(db, "bloqueos"), where("bloqueado", "==", "pro"))));
+    await assertFails(getDocs(query(collection(db, "bloqueos"),
+      where("bloqueado", "==", "pro"), where("autor", "==", "cliente"))));
+    await assertFails(getDocs(collection(db, "bloqueos")));
+  });
+
   it("el autor desbloquea; el bloqueado no puede quitárselo ni nadie cambiarlo", async () => {
     await sembrar("cliente_pro", bloqueo());
     await assertFails(deleteDoc(doc(verificado("pro"), "bloqueos/cliente_pro")));
@@ -839,6 +848,18 @@ describe("un bloqueo corta el chat en los dos sentidos", () => {
       }
     });
   }
+
+  it("al desbloquear el chat vuelve a funcionar como siempre", async () => {
+    await bloquear("cliente", "pro");
+    await assertFails(setDoc(doc(verificado("pro"), "chats/con_mensajes/mensajes/mc"), mensajeDe("pro", { id: "mc" })));
+    // El autor borra el bloqueo desde la app
+    await assertSucceeds(deleteDoc(doc(verificado("cliente"), "bloqueos/cliente_pro")));
+    await assertSucceeds(setDoc(doc(verificado("pro"), "chats/con_mensajes/mensajes/mc"), mensajeDe("pro", { id: "mc" })));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/mb"), mensajeDe("cliente")));
+    await assertSucceeds(updateDoc(doc(verificado("pro"), "chats/con_mensajes"),
+      { ultimoMensaje: "hola", fechaUltimoMensaje: Date.now(), "noLeidosPor.cliente": 1 }));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/nuevoA"), chatNuevo("nuevoA")));
+  });
 
   it("un bloqueo entre otros dos no afecta a este chat", async () => {
     await bloquear("cliente", "otro");
@@ -935,6 +956,20 @@ describe("denuncias", () => {
     await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ fecha: "hoy" })));
     await assertSucceeds(setDoc(doc(db, "denuncias/cliente_pro"),
       denuncia({ referencia: "x".repeat(300), comentario: "x".repeat(1000) })));
+  });
+
+  it("la referencia es un id como los de la app: sin saltos de línea, enlaces ni rutas", async () => {
+    const db = verificado("cliente");
+    for (const referencia of ["con\nsalto", "https://malicioso.example/x", "con espacios",
+                              "con_mensajes/mensajes/m1", "ñandú", "a<b>", "x".repeat(301)]) {
+      await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ referencia })), JSON.stringify(referencia));
+    }
+    // Id automático de un chat, uid de un perfil e id `{uid}_{tecnicoId}` de una reseña
+    for (const referencia of ["AbCdEfGhIj0123456789", "aB3dE6gH9jK2mN5pQ8sT1vW4yZ7b",
+                              "uidCliente_uidPro", "perfil-antiguo_1"]) {
+      await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "denuncias/cliente_pro")));
+      await assertSucceeds(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ referencia })), referencia);
+    }
   });
 
   it("el autor sabe si ya denunció; el denunciado y los demás no la leen", async () => {

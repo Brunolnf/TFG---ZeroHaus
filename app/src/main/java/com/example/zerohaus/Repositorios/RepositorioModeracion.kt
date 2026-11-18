@@ -6,9 +6,11 @@ import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Modelos.MotivoDenuncia
 import com.example.zerohaus.Modelos.ResultadoDenuncia
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 
 /**
  * Denuncias y bloqueos entre usuarios.
@@ -25,13 +27,28 @@ class RepositorioModeracion {
 
     private fun uid() = auth.currentUser?.uid ?: ""
 
+    /** Documento de Firestore visto por los flujos de moderación. */
+    private fun remoto(ref: DocumentReference) = object : DocumentoRemoto {
+        override fun existeEnServidor(callback: (Boolean?) -> Unit) {
+            ref.get(Source.SERVER)
+                .addOnSuccessListener { callback(it.exists()) }
+                .addOnFailureListener { callback(null) }
+        }
+
+        override fun crear(datos: Map<String, Any>, callback: (ResultadoEscritura) -> Unit) {
+            ref.set(datos)
+                .addOnSuccessListener { callback(ResultadoEscritura.OK) }
+                .addOnFailureListener {
+                    callback(if (Moderacion.esPermisoDenegado(it)) ResultadoEscritura.DENEGADO else ResultadoEscritura.FALLO)
+                }
+        }
+    }
+
     fun bloquear(otroUid: String, callback: (Boolean) -> Unit) {
         val miUid = uid()
         if (miUid.isBlank() || otroUid.isBlank() || miUid == otroUid) { callback(false); return }
-        db.collection("bloqueos").document(Moderacion.idBloqueo(miUid, otroUid))
-            .set(Moderacion.datosBloqueo(miUid, otroUid))
-            .addOnSuccessListener { callback(true) }
-            .addOnFailureListener { callback(false) }
+        val ref = db.collection("bloqueos").document(Moderacion.idBloqueo(miUid, otroUid))
+        FlujosModeracion.bloquear(remoto(ref), Moderacion.datosBloqueo(miUid, otroUid), callback)
     }
 
     fun desbloquear(otroUid: String, callback: (Boolean) -> Unit) {
@@ -43,12 +60,12 @@ class RepositorioModeracion {
             .addOnFailureListener { callback(false) }
     }
 
-    /** Uids que he bloqueado, en tiempo real. */
-    fun escucharMisBloqueos(callback: (Set<String>) -> Unit): ListenerRegistration {
+    /** Uids que he bloqueado, en tiempo real. [alFallar] avisa de que el listener ha muerto. */
+    fun escucharMisBloqueos(alFallar: () -> Unit = {}, callback: (Set<String>) -> Unit): ListenerRegistration {
         return db.collection("bloqueos")
             .whereEqualTo("autor", uid())
             .addSnapshotListener { snap, error ->
-                if (error != null || snap == null) return@addSnapshotListener
+                if (error != null || snap == null) { alFallar(); return@addSnapshotListener }
                 callback(snap.documents.mapNotNull { it.getString("bloqueado") }.toSet())
             }
     }
@@ -70,17 +87,11 @@ class RepositorioModeracion {
             callback(ResultadoDenuncia.ERROR); return
         }
         val ref = db.collection("denuncias").document(Moderacion.idDenuncia(miUid, objetivoUid))
-        ref.get()
-            .addOnSuccessListener { snap ->
-                if (snap.exists()) {
-                    callback(ResultadoDenuncia.YA_DENUNCIADA)
-                } else {
-                    ref.set(Moderacion.datosDenuncia(miUid, objetivoUid, contexto, referencia, motivo, comentario))
-                        .addOnSuccessListener { callback(ResultadoDenuncia.ENVIADA) }
-                        .addOnFailureListener { callback(ResultadoDenuncia.ERROR) }
-                }
-            }
-            .addOnFailureListener { callback(ResultadoDenuncia.ERROR) }
+        FlujosModeracion.denunciar(
+            remoto(ref),
+            Moderacion.datosDenuncia(miUid, objetivoUid, contexto, referencia, motivo, comentario),
+            callback
+        )
     }
 
     /** Administrador: denuncias de la más reciente a la más antigua (null si falla la lectura). */
@@ -118,28 +129,30 @@ class RepositorioModeracion {
     /**
      * Nombres de los usuarios [uids]: primero los de mis chats, luego el perfil
      * público de profesional; los que no se resuelven no salen en el mapa.
+     * Ver [FlujosModeracion.resolverNombres].
      */
-    fun resolverNombres(uids: Set<String>, callback: (Map<String, String>) -> Unit) {
-        if (uids.isEmpty()) { callback(emptyMap()); return }
-        val nombres = mutableMapOf<String, String>()
-        db.collection("chats").whereArrayContains("participantes", uid()).get()
-            .addOnCompleteListener { t ->
-                t.result?.documents?.forEach { d ->
-                    (d.get("nombresParticipantes") as? Map<*, *>)?.forEach { (k, v) ->
-                        if (k is String && k in uids && v is String && v.isNotBlank()) nombres[k] = v
-                    }
-                }
-                val faltan = uids - nombres.keys
-                if (faltan.isEmpty()) { callback(nombres); return@addOnCompleteListener }
-                var pendientes = faltan.size
-                faltan.forEach { u ->
-                    db.collection("tecnicos").whereEqualTo("uid", u).limit(1).get()
-                        .addOnCompleteListener { tt ->
-                            tt.result?.documents?.firstOrNull()?.getString("nombre")
-                                ?.takeIf { it.isNotBlank() }?.let { nombres[u] = it }
-                            if (--pendientes == 0) callback(nombres)
+    fun resolverNombres(uids: Set<String>, cancelado: () -> Boolean = { false }, callback: (Map<String, String>) -> Unit) {
+        val fuente = object : FuenteNombres {
+            override fun deMisChats(callback: (Map<String, String>?) -> Unit) {
+                db.collection("chats").whereArrayContains("participantes", uid()).get()
+                    .addOnSuccessListener { snap ->
+                        val m = mutableMapOf<String, String>()
+                        snap.documents.forEach { d ->
+                            (d.get("nombresParticipantes") as? Map<*, *>)?.forEach { (k, v) ->
+                                if (k is String && v is String) m[k] = v
+                            }
                         }
-                }
+                        callback(m)
+                    }
+                    .addOnFailureListener { callback(null) }
             }
+
+            override fun dePerfil(uid: String, callback: (String?) -> Unit) {
+                db.collection("tecnicos").whereEqualTo("uid", uid).limit(1).get()
+                    .addOnSuccessListener { callback(it.documents.firstOrNull()?.getString("nombre")) }
+                    .addOnFailureListener { callback(null) }
+            }
+        }
+        FlujosModeracion.resolverNombres(uids, fuente, cancelado, callback)
     }
 }

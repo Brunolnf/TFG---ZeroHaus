@@ -45,6 +45,9 @@ class AjustesViewModel : ViewModel() {
     private val repoAuth = RepositorioAutenticacion()
     private val repoModeracion = RepositorioModeracion()
     private val nombresBloqueados = mutableMapOf<String, String>()
+    // Uids ya intentados (también los que no se resolvieron): no se vuelven a leer
+    private val nombresIntentados = mutableSetOf<String>()
+    private var resolucion = 0
     private val listenerBloqueos = repoModeracion.escucharMisBloqueos { uids -> actualizarBloqueados(uids) }
 
     init {
@@ -54,9 +57,12 @@ class AjustesViewModel : ViewModel() {
 
     private fun actualizarBloqueados(uids: Set<String>) {
         estado = estado.copy(bloqueados = Moderacion.combinarBloqueados(uids, nombresBloqueados))
-        val faltan = uids.filter { it !in nombresBloqueados }.toSet()
+        val faltan = uids.filter { it !in nombresIntentados }.toSet()
         if (faltan.isEmpty()) return
-        repoModeracion.resolverNombres(faltan) { nombres ->
+        // Una resolución nueva cancela la anterior (sus uids sin resolver se piden de nuevo)
+        val miResolucion = ++resolucion
+        repoModeracion.resolverNombres(faltan, cancelado = { miResolucion != resolucion }) { nombres ->
+            nombresIntentados.addAll(faltan)
             nombresBloqueados.putAll(nombres)
             // Los uids actuales, no los de la consulta: el usuario pudo desbloquear mientras tanto
             val actuales = estado.bloqueados.map { it.uid }.toSet()

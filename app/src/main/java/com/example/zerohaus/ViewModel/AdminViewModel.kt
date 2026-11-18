@@ -7,6 +7,7 @@ import com.example.zerohaus.Modelos.Denuncia
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAdmin
 import com.example.zerohaus.Repositorios.RepositorioModeracion
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ListenerRegistration
 
 /**
@@ -50,8 +51,12 @@ class AdminViewModel : ViewModel() {
         cargandoDenuncias.value = true
         listenerDenuncias = repoModeracion.escucharDenuncias { lista ->
             cargandoDenuncias.value = false
-            if (lista == null) { error.value = "No se pudieron cargar las denuncias" }
-            else { denuncias.clear(); denuncias.addAll(lista) }
+            if (lista == null) {
+                // El listener ha muerto: se suelta para poder volver a suscribirse
+                listenerDenuncias?.remove(); listenerDenuncias = null
+                // Al cerrar sesión también falla (permisos): no es un error que mostrar
+                if (FirebaseAuth.getInstance().currentUser != null) error.value = "No se pudieron cargar las denuncias"
+            } else { denuncias.clear(); denuncias.addAll(lista) }
         }
     }
 

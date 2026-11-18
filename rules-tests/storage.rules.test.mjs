@@ -7,7 +7,7 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, setDoc } from "firebase/firestore";
+import { deleteDoc, doc, setDoc } from "firebase/firestore";
 import { deleteObject, getMetadata, ref, updateMetadata, uploadBytes } from "firebase/storage";
 
 let env;
@@ -74,6 +74,37 @@ describe("archivos del chat", () => {
       { contentType: "application/vnd.android.package-archive" }));
     // Un PDF de mentira con otra extensión tampoco
     await assertFails(uploadBytes(ref(st, "chats/c1/m7_app.apk"), pdf, { contentType: "application/pdf" }));
+  });
+});
+
+// Bloque D: con un bloqueo, el mensaje se deniega en Firestore; sin esto el
+// adjunto (hasta 15 MB) quedaría subido y huérfano
+describe("archivos del chat con un bloqueo", () => {
+  const bloquear = (autor, bloqueado) =>
+    env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), `bloqueos/${autor}_${bloqueado}`), { autor, bloqueado, fecha: 1 }));
+
+  for (const [autor, bloqueado] of [["pro", "cliente"], ["cliente", "pro"]]) {
+    it(`si ${autor} bloquea a ${bloqueado}, ${bloqueado} no sube nada al chat`, async () => {
+      await bloquear(autor, bloqueado);
+      await assertFails(uploadBytes(ref(verificado(bloqueado), "chats/c1/b1.jpg"), imagen, jpeg));
+      const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+      await assertFails(uploadBytes(ref(verificado(bloqueado), "chats/c1/b2_doc.pdf"), pdf,
+        { contentType: "application/pdf" }));
+    });
+  }
+
+  it("un bloqueo con otra persona no afecta a este chat", async () => {
+    await bloquear("otro", "cliente");
+    await bloquear("cliente", "otro");
+    await assertSucceeds(uploadBytes(ref(verificado("cliente"), "chats/c1/b3.jpg"), imagen, jpeg));
+  });
+
+  it("al desbloquear se vuelve a poder enviar archivos", async () => {
+    await bloquear("pro", "cliente");
+    await assertFails(uploadBytes(ref(verificado("cliente"), "chats/c1/b4.jpg"), imagen, jpeg));
+    await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "bloqueos/pro_cliente")));
+    await assertSucceeds(uploadBytes(ref(verificado("cliente"), "chats/c1/b4.jpg"), imagen, jpeg));
   });
 });
 

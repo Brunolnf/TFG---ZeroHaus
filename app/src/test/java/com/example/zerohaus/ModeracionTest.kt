@@ -45,11 +45,6 @@ class ModeracionTest {
         assertEquals(listOf("chat", "perfil", "resena"), ContextoDenuncia.values().map { it.id })
     }
 
-    @Test fun uidDePerfilUsaElCampoUidYSoloSiFaltaElIdDelDocumento() {
-        assertEquals("uidReal", Moderacion.uidDePerfil("uidReal", "docAntiguo"))
-        assertEquals("docId", Moderacion.uidDePerfil("", "docId"))
-    }
-
     @Test fun referenciaDeResenaUsaSuIdOElDeterminista() {
         assertEquals("abc", Moderacion.referenciaResena("abc", "autor", "tec"))
         assertEquals("autor_tec", Moderacion.referenciaResena("", "autor", "tec"))
@@ -70,7 +65,37 @@ class ModeracionTest {
             mapOf("texto" to "x".repeat(200), "vacio" to "", "nulo" to null, "autor" to "Pepe"),
             maxCampos = 6, maxValor = 10
         )
-        assertEquals("texto: xxxxxxxxxx…\nautor: Pepe", r)
+        assertEquals("texto: xxxxxxxxxx\u2026\nautor: Pepe", r)
         assertEquals("", Moderacion.resumenEvidencia(emptyMap()))
+    }
+
+    @Test fun resumenDeEvidenciaDeChatUnaLineaPorMensaje() {
+        val mensajes = listOf(
+            mapOf("texto" to "Hola", "tipo" to "texto"),
+            mapOf("texto" to "", "tipo" to "imagen", "mediaUrl" to "u"),
+            mapOf("texto" to "  ", "tipo" to "archivo"),
+            mapOf("texto" to "y".repeat(300), "tipo" to "texto")
+        )
+        val r = Moderacion.resumenEvidencia(mapOf("mensajes" to mensajes), maxValor = 5)
+        assertEquals("- Hola\n- [imagen]\n- [PDF]\n- yyyyy\u2026", r)
+    }
+
+    @Test fun resumenDeEvidenciaDeChatMaximoDiezMensajes() {
+        val mensajes = (1..15).map { mapOf("texto" to "m$it", "tipo" to "texto") }
+        val lineas = Moderacion.resumenEvidencia(mapOf("mensajes" to mensajes)).lines()
+        assertEquals(10, lineas.size)
+        assertEquals("- m10", lineas.last())
+    }
+
+    @Test fun resumenDeEvidenciaDeResenaPerfilYNota() {
+        assertEquals("puntuacion: 1\ncomentario: malo", Moderacion.resumenEvidencia(mapOf("puntuacion" to 1, "comentario" to "malo")))
+        assertEquals("nota: sin datos", Moderacion.resumenEvidencia(mapOf("nota" to "sin datos")))
+    }
+
+    @Test fun etiquetasLegiblesParaMotivoYContexto() {
+        assertEquals("Suplantaci\u00f3n", Moderacion.etiquetaMotivo("suplantacion"))
+        assertEquals("Rese\u00f1a", Moderacion.etiquetaContexto("resena"))
+        assertEquals("raro", Moderacion.etiquetaMotivo("raro"))
+        assertEquals("?", Moderacion.etiquetaContexto(""))
     }
 }
