@@ -83,6 +83,13 @@ fun ChatScreen(
     var archivoAmpliado by remember { mutableStateOf<MensajeChat?>(null) }
     var mensajeAEliminar by remember { mutableStateOf<MensajeChat?>(null) }
 
+    // Moderación: menú, diálogos y aviso de resultado
+    var menuAbierto by remember { mutableStateOf(false) }
+    var mostrarDenuncia by remember { mutableStateOf(false) }
+    var mostrarBloquear by remember { mutableStateOf(false) }
+    var enviandoDenuncia by remember { mutableStateOf(false) }
+    var avisoMod by remember { mutableStateOf<AvisoModeracion?>(null) }
+
     val imagenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.seleccionarImagen(it) } }
@@ -126,9 +133,10 @@ fun ChatScreen(
             // Errores de la pantalla y del envío (antes los del envío no se
             // mostraban: un mensaje que no salía desaparecía sin avisar)
             ZeroToast(
-                mensaje   = errorLocal ?: estado.error,
-                tipo      = if (toastExito && errorLocal != null) ToastTipo.EXITO else ToastTipo.ERROR,
-                alOcultar = { errorLocal = null; toastExito = false; viewModel.limpiarError() }
+                mensaje   = avisoMod?.texto ?: errorLocal ?: estado.error,
+                tipo      = avisoMod?.tipo
+                    ?: if (toastExito && errorLocal != null) ToastTipo.EXITO else ToastTipo.ERROR,
+                alOcultar = { avisoMod = null; errorLocal = null; toastExito = false; viewModel.limpiarError() }
             )
         },
         topBar = {
@@ -165,6 +173,34 @@ fun ChatScreen(
                 navigationIcon = {
                     IconButton(onClick = onVolver) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, cad.volver)
+                    }
+                },
+                actions = {
+                    if (estado.otroUid.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { menuAbierto = true }) {
+                                Icon(Icons.Default.MoreVert, cad.modMasOpciones)
+                            }
+                            DropdownMenu(expanded = menuAbierto, onDismissRequest = { menuAbierto = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(cad.modDenunciar) },
+                                    leadingIcon = { Icon(Icons.Default.Flag, null) },
+                                    onClick = { menuAbierto = false; mostrarDenuncia = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (viewModel.otroBloqueado) cad.modDesbloquear else cad.modBloquear) },
+                                    leadingIcon = {
+                                        Icon(if (viewModel.otroBloqueado) Icons.Default.LockOpen else Icons.Default.Block, null)
+                                    },
+                                    onClick = {
+                                        menuAbierto = false
+                                        if (viewModel.otroBloqueado) {
+                                            viewModel.alternarBloqueo { b, ok -> avisoMod = avisoBloqueo(b, ok, cad) }
+                                        } else mostrarBloquear = true
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             )
@@ -263,6 +299,23 @@ fun ChatScreen(
                             verde = verde, gris = gris,
                             enviando = estado.subiendoMedia
                         )
+                    } else if (viewModel.otroBloqueado) {
+                        // Yo he bloqueado al otro: aviso en lugar de la caja de texto
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(cad.modChatBloqueadoAviso, color = gris, fontSize = 13.sp)
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.alternarBloqueo { b, ok -> avisoMod = avisoBloqueo(b, ok, cad) }
+                                },
+                                shape = RoundedCornerShape(20.dp),
+                                border = BorderStroke(1.dp, verde),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = verde)
+                            ) { Text(cad.modDesbloquear, fontWeight = FontWeight.Medium) }
+                        }
                     } else {
                         Row(
                             modifier = Modifier
@@ -336,6 +389,32 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (mostrarDenuncia) {
+        DialogoDenuncia(
+            titulo = cad.modDenunciaTitulo,
+            enviando = enviandoDenuncia,
+            onEnviar = { motivo, comentario ->
+                enviandoDenuncia = true
+                viewModel.denunciar(motivo, comentario) { r ->
+                    enviandoDenuncia = false
+                    mostrarDenuncia = false
+                    avisoMod = avisoDenuncia(r, cad)
+                }
+            },
+            onCancelar = { mostrarDenuncia = false }
+        )
+    }
+
+    if (mostrarBloquear) {
+        DialogoBloquear(
+            onConfirmar = {
+                mostrarBloquear = false
+                viewModel.alternarBloqueo { b, ok -> avisoMod = avisoBloqueo(b, ok, cad) }
+            },
+            onCancelar = { mostrarBloquear = false }
+        )
     }
 
     mensajeAEliminar?.let { msg ->

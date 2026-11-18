@@ -19,6 +19,7 @@ Triggers de Firestore
   on_resena_changed            Reseña creada/editada/borrada → recalcula la nota y pone el nombre real.
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
   on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
+  on_denuncia_creada           Denuncia nueva → evidencia acotada y aviso al administrador.
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
@@ -108,10 +109,16 @@ COLECCIONES_POR_CAMPO_UID = [
     ("informes",        "uid"),
     ("notificaciones",  "uid"),
     ("suscripciones",   "uid"),
+    # Contador diario de denuncias por autor: su id lleva el uid
+    ("limites_denuncias_autor", "uid"),
 ]
 
+# Colecciones donde el usuario aparece en uno de dos campos: las suyas y las
+# que le tocan (reseñas sobre él, bloqueos que le pusieron, denuncias contra él)
 COLECCIONES_DOBLE_CAMPO = [
-    ("resenas", ["uid", "tecnicoId"]),
+    ("resenas",   ["uid", "tecnicoId"]),
+    ("bloqueos",  ["autor", "bloqueado"]),
+    ("denuncias", ["autor", "objetivo"]),
 ]
 
 DOCS_POR_ID = ["usuarios", "tecnicos", "ajustes", "estadisticas", "limites_ia", "verificaciones_email", "avisos_email"]
@@ -215,8 +222,8 @@ def _purgar_usuario(db, uid: str) -> dict:
     for col, campos in COLECCIONES_DOBLE_CAMPO:
         total = 0
         for campo in campos:
-            # tecnicoId: las reseñas sobre cualquiera de sus perfiles
-            for valor in ([uid] if campo == "uid" else perfiles):
+            # tecnicoId: las reseñas sobre cualquiera de sus perfiles; el resto, por uid
+            for valor in (perfiles if campo == "tecnicoId" else [uid]):
                 q = db.collection(col).where(filter=FieldFilter(campo, "==", valor))
                 total += _borrar_query(db, q)
         stats[col] = total
@@ -661,6 +668,10 @@ def on_message_created(event) -> None:
             print(f"[CHAT] No se pudo anotar quién escribió en {chat_id}: {e}")
 
     for uid in destinatarios:
+        # Las reglas ya impiden escribir con un bloqueo, salvo al administrador
+        # (Admin SDK o claim admin): tampoco se avisa a quien bloqueó o fue bloqueado
+        if _hay_bloqueo(db, emisor_uid, uid):
+            continue
         pref = _preferencias(db, uid)
         textos = _AVISOS_EMAIL.get(pref["idioma"], _AVISOS_EMAIL["Español"])
         cuerpo = _resumen_mensaje(msg, pref["idioma"])
@@ -686,6 +697,20 @@ def on_message_created(event) -> None:
                 db, uid, pref["idioma"], "mensaje", clave_limite=f"chat_{chat_id}",
                 nombre=emisor_nombre, texto=cuerpo[:300],
             )
+
+
+def _hay_bloqueo(db, a: str, b: str) -> bool:
+    """Bloqueo en cualquier sentido entre a y b (/bloqueos/{autor}_{bloqueado}).
+    Si Firestore falla, se avisa igual: las reglas ya cortan el chat y esto
+    solo es una segunda barrera."""
+    if not a or not b:
+        return False
+    bloqueos = db.collection("bloqueos")
+    try:
+        return bloqueos.document(f"{a}_{b}").get().exists or bloqueos.document(f"{b}_{a}").get().exists
+    except Exception as e:
+        print(f"[BLOQUEOS] No se pudo comprobar el bloqueo entre {a} y {b}: {e}")
+        return False
 
 
 def _autores_del_chat(mensajes: list, participantes: list) -> list:
@@ -839,6 +864,225 @@ def _recalcular_rating(db, tecnico_id: str) -> None:
         db.collection("tecnicos").document(tecnico_id).update({"rating": promedio, "opiniones": n})
     except NotFound:
         pass
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Trigger: denuncia nueva → evidencia y aviso al administrador
+# ════════════════════════════════════════════════════════════════════════
+#
+# La app crea /denuncias/{autor}_{objetivo} (una por autor y objetivo; las
+# reglas validan cada campo). Aquí se copia al propio documento una evidencia
+# acotada, para que no se pierda si el denunciado borra lo que escribió, y se
+# avisa por correo al buzón de ZeroHaus. Ni la evidencia ni el estado los
+# puede escribir la app.
+
+# Denuncias: raras, y cada una puede gastar un correo
+MAX_INSTANCIAS_DENUNCIAS = 3
+DENUNCIA_MENSAJES_MAX = 20     # últimos mensajes del denunciado que se copian
+DENUNCIA_TEXTO_MAX = 500       # caracteres por mensaje copiado
+DENUNCIA_URL_MAX = 2048        # el documento de la denuncia no crece sin límite
+# Avisos de denuncias al día, además del cupo común de avisos: una ráfaga de
+# denuncias no se come el correo de los demás avisos ni el de los códigos
+AVISOS_DENUNCIA_MAX_DIA = int(os.environ.get("AVISOS_DENUNCIA_MAX_DIA", "20"))
+# Denuncias de un mismo autor al día (UTC) que avisan por correo: a partir de
+# la siguiente se guardan con `exceso` y sin correo, para que una sola cuenta
+# no gaste el tope de todos denunciando a muchos usuarios
+DENUNCIAS_MAX_DIA_AUTOR = 5
+CONTEXTOS_DENUNCIA = {"chat", "perfil", "resena"}
+MOTIVOS_DENUNCIA = {"spam", "acoso", "fraude", "inapropiado", "suplantacion", "otro"}
+
+
+def _recortar(valor, maximo: int) -> str:
+    """Texto de un campo copiado, con tope ("" si no hay)."""
+    return "" if valor is None else str(valor)[:maximo]
+
+
+def _entero(valor) -> int:
+    """Número entero de un campo copiado (fecha, puntuación), o 0 si no lo es."""
+    return int(valor) if isinstance(valor, (int, float)) and not isinstance(valor, bool) else 0
+
+
+def _evidencia_chat(db, chat_id: str, autor: str, objetivo: str) -> dict:
+    """Últimos mensajes del denunciado en el chat, solo si autor y denunciado
+    participan en él: si no, cualquiera podría copiarse mensajes ajenos en su
+    denuncia (que el autor puede leer). Usa el índice (emisorUid, fecha) de
+    firestore.indexes.json."""
+    chat = db.collection("chats").document(chat_id).get()
+    participantes = (chat.to_dict() or {}).get("participantes") if chat.exists else None
+    if not isinstance(participantes, list) or autor not in participantes or objetivo not in participantes:
+        return {"nota": "El autor y el denunciado no comparten este chat: no se copian mensajes."}
+    consulta = (chat.reference.collection("mensajes")
+                .where(filter=FieldFilter("emisorUid", "==", objetivo))
+                .order_by("fecha", direction=firestore.Query.DESCENDING)
+                .limit(DENUNCIA_MENSAJES_MAX))
+    mensajes = []
+    for d in consulta.stream():
+        m = d.to_dict() or {}
+        mensajes.append({
+            "texto": _recortar(m.get("texto"), DENUNCIA_TEXTO_MAX),
+            "tipo": _recortar(m.get("tipo") or "texto", 20),
+            "fecha": _entero(m.get("fecha")),
+            "mediaUrl": _recortar(m.get("mediaUrl"), DENUNCIA_URL_MAX),
+        })
+    return {"mensajes": mensajes}
+
+
+def _evidencia_resena(db, resena_id: str, objetivo: str) -> dict:
+    """Puntuación, comentario y fecha de la reseña, si la escribió el denunciado."""
+    snap = db.collection("resenas").document(resena_id).get()
+    r = (snap.to_dict() or {}) if snap.exists else {}
+    if not r or r.get("uid") != objetivo:
+        return {"nota": "La reseña no existe o no es del denunciado."}
+    return {
+        "puntuacion": _entero(r.get("puntuacion")),
+        "comentario": _recortar(r.get("comentario"), 1000),
+        "fecha": _entero(r.get("fecha")),
+    }
+
+
+def _evidencia_perfil(db, perfil_id: str, objetivo: str) -> dict:
+    """Nombre y descripción del perfil profesional, si es del denunciado (en
+    los perfiles antiguos el id del documento no es el uid)."""
+    snap = db.collection("tecnicos").document(perfil_id).get()
+    p = (snap.to_dict() or {}) if snap.exists else {}
+    if not p or p.get("uid") != objetivo:
+        return {"nota": "El perfil no existe o no es del denunciado."}
+    return {"nombre": _recortar(p.get("nombre"), 100), "descripcion": _recortar(p.get("descripcion"), 2000)}
+
+
+def _evidencia_denuncia(db, d: dict) -> dict:
+    """Evidencia según el contexto: {mensajes} del chat, la reseña o el perfil
+    (campos sueltos), o {nota} si no hay nada que copiar."""
+    autor, objetivo, referencia = d.get("autor"), d.get("objetivo"), d.get("referencia")
+    # La referencia es un id de documento, nunca una ruta: con «/» se leería otro
+    if not all(isinstance(v, str) and v and "/" not in v for v in (autor, objetivo, referencia)) \
+            or len(referencia) > 300:
+        return {"nota": "Referencia no válida: no se copia evidencia."}
+    contexto = d.get("contexto")
+    if contexto == "chat":
+        return _evidencia_chat(db, referencia, autor, objetivo)
+    if contexto == "resena":
+        return _evidencia_resena(db, referencia, objetivo)
+    if contexto == "perfil":
+        return _evidencia_perfil(db, referencia, objetivo)
+    return {"nota": "Contexto desconocido: no se copia evidencia."}
+
+
+def _reservar_aviso_denuncia(db) -> str:
+    """Reserva en una sola transacción un correo del cupo común de avisos
+    (/limites_correo, el de _reservar_cupo_correo) y uno de los
+    AVISOS_DENUNCIA_MAX_DIA de denuncias (/limites_denuncias/{día UTC}, solo
+    servidor). Mira primero el común y después el de denuncias, y solo gasta
+    si quedan los dos: así no se pierde uno cuando el otro está agotado.
+    Devuelve "" si hay correo, o el cupo agotado ("correo" o "denuncias")."""
+    hoy = _hoy_utc()
+    correo_ref = db.collection("limites_correo").document(hoy)
+    denuncias_ref = db.collection("limites_denuncias").document(hoy)
+
+    @firestore.transactional
+    def _reservar(txn):
+        correo = correo_ref.get(transaction=txn).to_dict() or {}
+        denuncias = denuncias_ref.get(transaction=txn).to_dict() or {}
+        enviados, avisos = int(correo.get("enviados") or 0), int(correo.get("avisos") or 0)
+        if enviados >= CORREOS_MAX_DIA or avisos >= CORREOS_AVISOS_MAX_DIA:
+            return "correo"
+        avisos_denuncias = int(denuncias.get("avisos") or 0)
+        if avisos_denuncias >= AVISOS_DENUNCIA_MAX_DIA:
+            return "denuncias"
+        txn.set(correo_ref, {"enviados": enviados + 1, "avisos": avisos + 1})
+        txn.set(denuncias_ref, {"avisos": avisos_denuncias + 1})
+        return ""
+
+    return _reservar(db.transaction())
+
+
+def _avisar_denuncia(db, denuncia_id: str, d: dict) -> None:
+    """Correo al buzón de ZeroHaus (el propio remitente) con lo justo para
+    encontrarla en el panel: motivo, contexto e ids; ni el comentario ni la
+    evidencia. Nunca rompe el trigger: sin cupo o si falla el SMTP, solo
+    queda en el registro."""
+    try:
+        agotado = _reservar_aviso_denuncia(db)
+        if agotado:
+            print(f"[DENUNCIAS] Tope diario de {agotado} alcanzado: sin correo por {denuncia_id}")
+            return
+        motivo = d.get("motivo") if d.get("motivo") in MOTIVOS_DENUNCIA else "otro"
+        contexto = d.get("contexto") if d.get("contexto") in CONTEXTOS_DENUNCIA else "?"
+        texto = (
+            "Hay una denuncia nueva en ZeroHaus.\n\n"
+            f"Motivo: {motivo}\nContexto: {contexto}\n"
+            f"Denuncia: {_recortar(denuncia_id, 300)}\n"
+            f"Autor: {_recortar(d.get('autor'), 128)}\n"
+            f"Denunciado: {_recortar(d.get('objetivo'), 128)}\n"
+            f"Referencia: {_recortar(d.get('referencia'), 300)}\n\n"
+            "Revísala en el panel de administración de la app."
+        )
+        _enviar_email(SMTP_USUARIO.value, f"Denuncia: {motivo} ({contexto})", texto,
+                      "Aviso automático de ZeroHaus.", "Español")
+    except Exception as e:
+        print(f"[DENUNCIAS] No se pudo avisar de la denuncia {denuncia_id}: {e}")
+
+
+@firestore_fn.on_document_created(
+    document="denuncias/{denunciaId}",
+    region=REGION,
+    secrets=[SMTP_USUARIO, SMTP_CLAVE],
+    max_instances=MAX_INSTANCIAS_DENUNCIAS,
+)
+def on_denuncia_creada(event) -> None:
+    """Denuncia nueva: copia la evidencia, la deja `pendiente` y avisa al
+    administrador, salvo que su autor pase de DENUNCIAS_MAX_DIA_AUTOR hoy:
+    entonces se guarda con `exceso: true` y sin correo.
+
+    Idempotente (Firestore puede entregar el evento más de una vez): si ya
+    tiene `evidencia` no hace nada, y la evidencia y el contador del autor se
+    guardan en una transacción que la comprueba otra vez; solo quien la
+    guarda cuenta y avisa."""
+    if event.data is None:
+        return
+    denuncia_id = event.params["denunciaId"]
+    db = firestore.client()
+    ref = db.collection("denuncias").document(denuncia_id)
+    snap = ref.get()
+    datos = (snap.to_dict() or {}) if snap.exists else None
+    if datos is None or "evidencia" in datos:
+        return   # borrada por el administrador o ya procesada
+    try:
+        evidencia = _evidencia_denuncia(db, datos)
+    except Exception as e:
+        # Sin evidencia se avisa igual: el administrador puede mirar el contenido
+        print(f"[DENUNCIAS] No se pudo copiar la evidencia de {denuncia_id}: {e}")
+        evidencia = {"nota": "No se pudo copiar la evidencia: revisa el contenido directamente."}
+
+    autor = datos.get("autor") if isinstance(datos.get("autor"), str) else ""
+    hoy = _hoy_utc()
+    # Un autor raro (solo posible con el Admin SDK) cuenta aparte, sin «/» en el id
+    contador_ref = db.collection("limites_denuncias_autor").document(
+        f"{autor}_{hoy}" if autor and "/" not in autor else f"_{hoy}")
+
+    @firestore.transactional
+    def _guardar(txn):
+        """None si ya estaba guardada o no existe; si no, si es un exceso."""
+        actual = ref.get(transaction=txn)
+        d = (actual.to_dict() or {}) if actual.exists else None
+        if d is None or "evidencia" in d:
+            return None
+        contador = contador_ref.get(transaction=txn).to_dict() or {}
+        hechas = int(contador.get("denuncias") or 0) + 1
+        cambios = {"evidencia": evidencia}
+        if "estado" not in d:   # no se pisa si el administrador ya la gestionó
+            cambios["estado"] = "pendiente"
+        if hechas > DENUNCIAS_MAX_DIA_AUTOR:
+            cambios["exceso"] = True
+        txn.update(ref, cambios)
+        txn.set(contador_ref, {"uid": autor, "dia": hoy, "denuncias": hechas})
+        return hechas > DENUNCIAS_MAX_DIA_AUTOR
+
+    exceso = _guardar(db.transaction())
+    if exceso is False:
+        _avisar_denuncia(db, denuncia_id, datos)
+    elif exceso:
+        print(f"[DENUNCIAS] {denuncia_id}: su autor pasa de {DENUNCIAS_MAX_DIA_AUTOR} hoy, sin correo")
 
 
 # ════════════════════════════════════════════════════════════════════════

@@ -4,11 +4,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import com.example.zerohaus.Modelos.ContextoDenuncia
+import com.example.zerohaus.Modelos.Moderacion
+import com.example.zerohaus.Modelos.MotivoDenuncia
 import com.example.zerohaus.Modelos.Resena
+import com.example.zerohaus.Modelos.ResultadoDenuncia
 import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Repositorios.*
 import com.example.zerohaus.Util.AppEstado
+import com.google.firebase.firestore.ListenerRegistration
 import com.example.zerohaus.Util.getCadenas
 
 
@@ -25,8 +30,13 @@ data class PerfilTecnicoEstado(
     val error: String? = null,
     val esMiPerfil: Boolean = false,
     // Chat con mensajes entre el cliente y el profesional: requisito para valorar
-    val chatIdConversacion: String? = null
+    val chatIdConversacion: String? = null,
+    // Uid del dueño del perfil (campo `uid`; vacío si el perfil no lo tiene: sin denunciar ni bloquear)
+    val uidProfesional: String = "",
+    // Uids que he bloqueado
+    val bloqueados: Set<String> = emptySet()
 ) {
+    val profesionalBloqueado: Boolean get() = uidProfesional.isNotEmpty() && uidProfesional in bloqueados
     val puedeValorar: Boolean get() = !esMiPerfil && chatIdConversacion != null
 }
 
@@ -44,6 +54,44 @@ class PerfilTecnicoViewModel : ViewModel() {
     private val repoAuth = RepositorioAutenticacion()
     private val repoChat = RepositorioChat()
     private val repoEstadisticas = RepositorioEstadisticas()
+    private val repoModeracion = RepositorioModeracion()
+    private var listenerBloqueos: ListenerRegistration? = null
+
+    /** Si el listener murió por un error se vuelve a suscribir al cargar el perfil. */
+    private fun escucharBloqueos() {
+        if (listenerBloqueos != null) return
+        listenerBloqueos = repoModeracion.escucharMisBloqueos(
+            alFallar = { listenerBloqueos?.remove(); listenerBloqueos = null }
+        ) { b -> estado = estado.copy(bloqueados = b) }
+    }
+
+    init { escucharBloqueos() }
+
+    override fun onCleared() {
+        listenerBloqueos?.remove()
+        super.onCleared()
+    }
+
+    /** Denuncia al profesional dueño del perfil (contexto perfil, referencia = id del perfil). */
+    fun denunciarProfesional(tecnicoId: String, motivo: MotivoDenuncia, comentario: String, onResultado: (ResultadoDenuncia) -> Unit) {
+        val objetivo = estado.uidProfesional
+        if (objetivo.isEmpty() || estado.esMiPerfil) { onResultado(ResultadoDenuncia.ERROR); return }
+        repoModeracion.denunciar(objetivo, ContextoDenuncia.PERFIL, tecnicoId, motivo, comentario, onResultado)
+    }
+
+    /** Denuncia al autor de una reseña ajena (contexto resena, referencia = id de la reseña). */
+    fun denunciarResena(tecnicoId: String, resena: Resena, motivo: MotivoDenuncia, comentario: String, onResultado: (ResultadoDenuncia) -> Unit) {
+        val referencia = Moderacion.referenciaResena(resena.id, resena.uid, tecnicoId)
+        repoModeracion.denunciar(resena.uid, ContextoDenuncia.RESENA, referencia, motivo, comentario, onResultado)
+    }
+
+    /** Bloquea o desbloquea al profesional; onResultado recibe (ahora bloqueado, ok). */
+    fun alternarBloqueo(onResultado: (Boolean, Boolean) -> Unit) {
+        val objetivo = estado.uidProfesional
+        if (objetivo.isEmpty() || estado.esMiPerfil) { onResultado(false, false); return }
+        if (estado.profesionalBloqueado) repoModeracion.desbloquear(objetivo) { ok -> onResultado(false, ok) }
+        else repoModeracion.bloquear(objetivo) { ok -> onResultado(true, ok) }
+    }
     private var visitaRegistrada: String? = null
 
     /** Contacto desde el perfil (chat o llamada) para las estadísticas del profesional. */
@@ -52,6 +100,7 @@ class PerfilTecnicoViewModel : ViewModel() {
     }
 
     fun cargarTecnico(tecnicoId: String) {
+        escucharBloqueos()
         estado = estado.copy(cargando = true)
         // Las lecturas van a la vez (antes en cadena: perfil → reseñas → «ya
         // valorado» → chats) y «ya valorado» sale de las propias reseñas.
@@ -71,6 +120,7 @@ class PerfilTecnicoViewModel : ViewModel() {
                 resenas = resenas,
                 yaValorado = miUid != null && resenas.any { it.uid == miUid },
                 esMiPerfil = esMiPerfil,
+                uidProfesional = tecnico?.uid.orEmpty(),
                 chatIdConversacion = chatId,
                 cargando = false
             )

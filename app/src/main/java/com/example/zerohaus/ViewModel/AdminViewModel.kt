@@ -3,8 +3,12 @@ package com.example.zerohaus.ViewModel
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.example.zerohaus.Modelos.Denuncia
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAdmin
+import com.example.zerohaus.Repositorios.RepositorioModeracion
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.ListenerRegistration
 
 /**
  * Lógica del panel de administración (ver [com.example.zerohaus.Repositorios.RepositorioAdmin]).
@@ -12,6 +16,11 @@ import com.example.zerohaus.Repositorios.RepositorioAdmin
 class AdminViewModel : ViewModel() {
 
     private val repo = RepositorioAdmin()
+    private val repoModeracion = RepositorioModeracion()
+    private var listenerDenuncias: ListenerRegistration? = null
+
+    val denuncias = mutableStateListOf<Denuncia>()
+    val cargandoDenuncias = mutableStateOf(true)
 
     val usuarios = mutableStateListOf<Usuario>()
     val cargando = mutableStateOf(false)
@@ -34,6 +43,46 @@ class AdminViewModel : ViewModel() {
                 cargando.value = false
             }
         }
+    }
+
+    /** Escucha las denuncias en tiempo real (más recientes primero). */
+    fun escucharDenuncias() {
+        if (listenerDenuncias != null) return
+        cargandoDenuncias.value = true
+        listenerDenuncias = repoModeracion.escucharDenuncias { lista ->
+            cargandoDenuncias.value = false
+            if (lista == null) {
+                // El listener ha muerto: se suelta para poder volver a suscribirse
+                listenerDenuncias?.remove(); listenerDenuncias = null
+                // Al cerrar sesión también falla (permisos): no es un error que mostrar
+                if (FirebaseAuth.getInstance().currentUser != null) error.value = "No se pudieron cargar las denuncias"
+            } else { denuncias.clear(); denuncias.addAll(lista) }
+        }
+    }
+
+    fun marcarDenuncia(denuncia: Denuncia, estado: String) {
+        repoModeracion.marcarEstado(denuncia.id, estado) { ok ->
+            if (ok) mensaje.value = "Denuncia $estado" else error.value = "No se pudo actualizar la denuncia"
+        }
+    }
+
+    /** Bloquea la cuenta del denunciado con la function `bloquear_usuario`. */
+    fun bloquearCuenta(uid: String) {
+        repo.setBloqueado(uid, true) { result ->
+            result
+                .onSuccess { mensaje.value = "Cuenta bloqueada"; cargar() }
+                .onFailure { error.value = it.message }
+        }
+    }
+
+    /** Nombre del usuario si está en la lista cargada; si no, el uid abreviado. */
+    fun nombreDe(uid: String): String =
+        usuarios.firstOrNull { it.uid == uid }?.nombre?.takeIf { it.isNotBlank() }
+            ?: uid.take(8).ifEmpty { "?" }
+
+    override fun onCleared() {
+        listenerDenuncias?.remove()
+        super.onCleared()
     }
 
     fun usuariosFiltrados(): List<Usuario> {

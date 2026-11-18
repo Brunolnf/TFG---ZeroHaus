@@ -38,6 +38,8 @@ import com.example.zerohaus.Repositorios.RepositorioEstadisticas
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.Util.Telefono
 import com.example.zerohaus.ViewModel.PerfilTecnicoViewModel
+import com.example.zerohaus.Modelos.Resena
+import com.google.firebase.auth.FirebaseAuth
 import com.example.zerohaus.Util.TextosEnergia
 import java.util.*
 import com.example.zerohaus.Modelos.Especialidades
@@ -71,15 +73,24 @@ fun PerfilTecnicoScreen(
     var comentario by remember { mutableStateOf("") }
     var errorLocal by remember { mutableStateOf<String?>(null) }
 
+    // Moderación: menú, diálogos y aviso de resultado
+    var menuAbierto by remember { mutableStateOf(false) }
+    var mostrarDenuncia by remember { mutableStateOf(false) }
+    var mostrarBloquear by remember { mutableStateOf(false) }
+    var resenaADenunciar by remember { mutableStateOf<Resena?>(null) }
+    var enviandoDenuncia by remember { mutableStateOf(false) }
+    var avisoMod by remember { mutableStateOf<AvisoModeracion?>(null) }
+    val miUid = FirebaseAuth.getInstance().currentUser?.uid
+
     LaunchedEffect(tecnicoId) { viewModel.cargarTecnico(tecnicoId) }
 
     Scaffold(
         containerColor = fondo,
         snackbarHost = {
             ZeroToast(
-                mensaje   = errorLocal ?: estado.error,
-                tipo      = ToastTipo.ERROR,
-                alOcultar = { errorLocal = null; viewModel.limpiarMensajes() }
+                mensaje   = avisoMod?.texto ?: errorLocal ?: estado.error,
+                tipo      = avisoMod?.tipo ?: ToastTipo.ERROR,
+                alOcultar = { avisoMod = null; errorLocal = null; viewModel.limpiarMensajes() }
             )
         },
         topBar = {
@@ -97,6 +108,35 @@ fun PerfilTecnicoScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onVolver) { Icon(Icons.AutoMirrored.Filled.ArrowBack, c.volver) }
+                },
+                actions = {
+                    // Denunciar y bloquear: nunca en el propio perfil
+                    if (estado.tecnico != null && !estado.esMiPerfil && estado.uidProfesional.isNotEmpty()) {
+                        Box {
+                            IconButton(onClick = { menuAbierto = true }) {
+                                Icon(Icons.Default.MoreVert, c.modMasOpciones)
+                            }
+                            DropdownMenu(expanded = menuAbierto, onDismissRequest = { menuAbierto = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(c.modDenunciar) },
+                                    leadingIcon = { Icon(Icons.Default.Flag, null) },
+                                    onClick = { menuAbierto = false; mostrarDenuncia = true }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(if (estado.profesionalBloqueado) c.modDesbloquear else c.modBloquear) },
+                                    leadingIcon = {
+                                        Icon(if (estado.profesionalBloqueado) Icons.Default.LockOpen else Icons.Default.Block, null)
+                                    },
+                                    onClick = {
+                                        menuAbierto = false
+                                        if (estado.profesionalBloqueado) {
+                                            viewModel.alternarBloqueo { b, ok -> avisoMod = avisoBloqueo(b, ok, c) }
+                                        } else mostrarBloquear = true
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -446,6 +486,17 @@ fun PerfilTecnicoScreen(
                                     Text(r.nombreUsuario, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                     Text(sdf.format(Date(r.fecha)), color = gris, fontSize = 11.sp)
                                 }
+                                // Reseñas ajenas: se pueden denunciar (objetivo = su autor)
+                                if (r.uid.isNotBlank() && r.uid != miUid) {
+                                    TextButton(
+                                        onClick = { resenaADenunciar = r },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                    ) {
+                                        Icon(Icons.Default.Flag, null, Modifier.size(14.dp), tint = gris)
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(c.modDenunciarResena, color = gris, fontSize = 11.sp)
+                                    }
+                                }
                             }
                             Spacer(Modifier.height(6.dp))
                             FilaEstrellas(r.puntuacion.toDouble(), tamano = 16.dp)
@@ -458,6 +509,47 @@ fun PerfilTecnicoScreen(
                 }
             }
         }
+    }
+
+    // ---- DIÁLOGOS DE MODERACIÓN ----
+    if (mostrarDenuncia) {
+        DialogoDenuncia(
+            titulo = c.modDenunciaTitulo,
+            enviando = enviandoDenuncia,
+            onEnviar = { motivo, comentario ->
+                enviandoDenuncia = true
+                viewModel.denunciarProfesional(tecnicoId, motivo, comentario) { r ->
+                    enviandoDenuncia = false
+                    mostrarDenuncia = false
+                    avisoMod = avisoDenuncia(r, c)
+                }
+            },
+            onCancelar = { mostrarDenuncia = false }
+        )
+    }
+    resenaADenunciar?.let { resena ->
+        DialogoDenuncia(
+            titulo = c.modDenunciarResena,
+            enviando = enviandoDenuncia,
+            onEnviar = { motivo, comentario ->
+                enviandoDenuncia = true
+                viewModel.denunciarResena(tecnicoId, resena, motivo, comentario) { r ->
+                    enviandoDenuncia = false
+                    resenaADenunciar = null
+                    avisoMod = avisoDenuncia(r, c)
+                }
+            },
+            onCancelar = { resenaADenunciar = null }
+        )
+    }
+    if (mostrarBloquear) {
+        DialogoBloquear(
+            onConfirmar = {
+                mostrarBloquear = false
+                viewModel.alternarBloqueo { b, ok -> avisoMod = avisoBloqueo(b, ok, c) }
+            },
+            onCancelar = { mostrarBloquear = false }
+        )
     }
 
     // ---- DIÁLOGO RESEÑA ----

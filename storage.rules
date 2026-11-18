@@ -14,6 +14,22 @@ service firebase.storage {
       return request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
     }
 
+    // El otro participante de un chat de dos
+    function otroParticipante(p) {
+      return p[0] == request.auth.uid ? p[1] : p[0];
+    }
+    // Participante del chat al que el otro no ha bloqueado: con un bloqueo el
+    // mensaje se deniega en Firestore y el adjunto (hasta 15 MB) quedaría
+    // huérfano. Storage solo deja leer 2 documentos de Firestore por
+    // evaluación: el chat (una vez) y el bloqueo del otro hacia quien sube,
+    // que es a quien hay que cortar. El contrario lo puso quien sube.
+    function puedeSubirAlChat(chatId) {
+      let p = firestore.get(/databases/(default)/documents/chats/$(chatId)).data.participantes;
+      return request.auth.uid in p
+          && (p.size() < 2
+              || !firestore.exists(/databases/(default)/documents/bloqueos/$(otroParticipante(p) + '_' + request.auth.uid)));
+    }
+
     // Imágenes y archivos del chat — solo participantes del chat
     // Usamos cross-service rules para consultar la membresía en Firestore.
     match /chats/{chatId}/{archivo=**} {
@@ -29,13 +45,12 @@ service firebase.storage {
       // Solo fotos y PDF: antes valía cualquier archivo (también una APK)
       allow create: if verificado()
                     && resource == null
-                    && request.auth.uid in firestore.get(
-                         /databases/(default)/documents/chats/$(chatId)
-                       ).data.participantes
                     && request.resource.size < 15 * 1024 * 1024
                     && (imagenPermitida()
                         || (request.resource.contentType == 'application/pdf'
-                            && request.resource.name.lower().matches('.+[.]pdf')));
+                            && request.resource.name.lower().matches('.+[.]pdf')))
+                    // Al final: las lecturas de Firestore solo si lo demás vale
+                    && puedeSubirAlChat(chatId);
       allow update, delete: if false;
     }
 
