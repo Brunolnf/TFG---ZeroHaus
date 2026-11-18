@@ -27,6 +27,34 @@
       },
       "valueType": "STRING",
       "description": "Último día de obras con deducción IRPF por eficiencia energética (AAAA-MM-DD). Si se prorroga, cámbialo y la app la seguirá mostrando."
+    },
+    "pagos_habilitados": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN",
+      "description": "Interruptor del pago con retención. Lo aplica el servidor (caché de 5 min): con false no se crea ni se cobra ningún pago. Apagado mientras Stripe esté en modo test. Si algún parámetro de pago no es válido, el servidor lo apaga."
+    },
+    "pago_comision_pct": {
+      "defaultValue": {
+        "value": "10"
+      },
+      "valueType": "NUMBER",
+      "description": "Comisión de ZeroHaus sobre el importe del pago (%). Entre 0 y 30, con 2 decimales como mucho. Cada pago guarda la de cuando se creó."
+    },
+    "pago_liberacion_dias": {
+      "defaultValue": {
+        "value": "7"
+      },
+      "valueType": "NUMBER",
+      "description": "Días desde que el profesional marca el trabajo como terminado hasta que el dinero se le libera solo, si el cliente no abre disputa. Entero entre 1 y 30. Cada pago guarda los de cuando se creó."
+    },
+    "pago_importe_max_eur": {
+      "defaultValue": {
+        "value": "3000"
+      },
+      "valueType": "NUMBER",
+      "description": "Importe máximo por pago (€). Entero entre 10 y 10000. El mínimo es fijo: 10 €."
     }
   }
 }

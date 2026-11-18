@@ -565,8 +565,40 @@ service cloud.firestore {
       allow create, update: if (esMioSinVerificar(userId) && tamanoDocMaximo()) || esAdmin();
     }
 
-    // /verificaciones_email (huellas de los códigos) y /limites_ia: solo las
-    // Cloud Functions con Admin SDK. Caen en el deny-all de abajo.
+    // Pagos con retención (bloque E). Los crea y los mueve de estado SOLO el
+    // servidor (Cloud Functions con Admin SDK, que no pasa por estas reglas):
+    // importe, comisión, neto, estado y los ids de Stripe deciden cuánto dinero
+    // se libera y a quién, así que nadie los escribe desde la app, tampoco el
+    // administrador (resolver una disputa o reembolsar va por Cloud Functions,
+    // que además hablan con Stripe: un cambio solo en Firestore lo descuadraría).
+    function esParteDelPago() {
+      return logueado()
+          && (resource.data.cliente == uid() || resource.data.profesional == uid());
+    }
+    match /pagos/{pagoId} {
+      // get y list: solo las dos partes y el administrador. Para list la regla
+      // se evalúa sobre la consulta, no documento a documento: pasa la de la
+      // app (where cliente == uid o where profesional == uid, con o sin
+      // chatId) y se deniega cualquiera que no filtre por la propia parte,
+      // aunque los resultados fueran a ser solo suyos.
+      allow read: if esParteDelPago() || esAdmin();
+      allow write: if false;
+    }
+
+    // Estado de la cuenta de Stripe Connect del profesional ({uid}): lo copia el
+    // webhook de Stripe. Si la app pudiera escribirlo, un profesional se
+    // marcaría chargesEnabled sin terminar el alta o apuntaría a otra cuenta.
+    match /cuentas_stripe/{userId} {
+      allow read: if esMio(userId) || esAdmin();
+      allow write: if false;
+    }
+
+    // /verificaciones_email (huellas de los códigos), /limites_ia,
+    // /eventos_stripe (ids de los webhooks ya procesados, para que un evento
+    // repetido no cobre ni libere dos veces) y /limites_pagos (cupos de
+    // solicitudes de pago): solo las Cloud Functions con Admin SDK. Caen en el
+    // deny-all de abajo; si el cliente pudiera borrar un evento, el servidor lo
+    // volvería a aplicar, y reiniciar su límite le dejaría saltárselo.
 
     // La feature de certificados está eliminada: no se define regla, así que
     // cae en el deny-all de abajo. NO abrir esta colección sin schema real.
