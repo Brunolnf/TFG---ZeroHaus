@@ -131,7 +131,7 @@ class RepositorioModeracion {
      * público de profesional; los que no se resuelven no salen en el mapa.
      * Ver [FlujosModeracion.resolverNombres].
      */
-    fun resolverNombres(uids: Set<String>, cancelado: () -> Boolean = { false }, callback: (Map<String, String>) -> Unit) {
+    fun resolverNombres(uids: Set<String>, cancelado: () -> Boolean = { false }, callback: (Map<String, String>, Set<String>) -> Unit) {
         val fuente = object : FuenteNombres {
             override fun deMisChats(callback: (Map<String, String>?) -> Unit) {
                 db.collection("chats").whereArrayContains("participantes", uid()).get()
@@ -147,10 +147,10 @@ class RepositorioModeracion {
                     .addOnFailureListener { callback(null) }
             }
 
-            override fun dePerfil(uid: String, callback: (String?) -> Unit) {
+            override fun dePerfil(uid: String, callback: (Result<String?>) -> Unit) {
                 db.collection("tecnicos").whereEqualTo("uid", uid).limit(1).get()
-                    .addOnSuccessListener { callback(it.documents.firstOrNull()?.getString("nombre")) }
-                    .addOnFailureListener { callback(null) }
+                    .addOnSuccessListener { callback(Result.success(it.documents.firstOrNull()?.getString("nombre"))) }
+                    .addOnFailureListener { callback(Result.failure(it)) }
             }
         }
         FlujosModeracion.resolverNombres(uids, fuente, cancelado, callback)

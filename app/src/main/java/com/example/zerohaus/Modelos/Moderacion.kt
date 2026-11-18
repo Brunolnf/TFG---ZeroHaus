@@ -105,8 +105,8 @@ object Moderacion {
             .filter { it.key != "mensajes" && it.value != null && it.value.toString().isNotBlank() }
             .take(maxCampos)
             .map { (k, v) -> "$k: " + recortar(v.toString()) }
-        val mensajes = (evidencia["mensajes"] as? List<*>).orEmpty()
-            .filterIsInstance<Map<*, *>>()
+        val todos = (evidencia["mensajes"] as? List<*>)?.filterIsInstance<Map<*, *>>()
+        val mensajes = (todos.orEmpty())
             .take(MAX_MENSAJES_EVIDENCIA)
             .map { m ->
                 val texto = (m["texto"] as? String).orEmpty().trim()
@@ -117,7 +117,13 @@ object Moderacion {
                     else -> "- [sin texto]"
                 }
             }
-        return (lineas + mensajes).joinToString("\n")
+        val extra = when {
+            todos == null -> emptyList()
+            todos.isEmpty() -> listOf("Sin mensajes copiados")
+            todos.size > MAX_MENSAJES_EVIDENCIA -> listOf("… y ${todos.size - MAX_MENSAJES_EVIDENCIA} más")
+            else -> emptyList()
+        }
+        return (lineas + mensajes + extra).joinToString("\n")
     }
 
     fun etiquetaMotivo(id: String) = when (id) {

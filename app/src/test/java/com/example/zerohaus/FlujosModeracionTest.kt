@@ -66,55 +66,73 @@ class FlujosModeracionTest {
         return r!!
     }
 
-    @Test fun bloquearNuevoOk() = assertEquals(true, bloquear(Doc(mutableListOf())))
-
-    @Test fun bloquearYaBloqueadoCuentaComoExito() {
-        assertEquals(true, bloquear(Doc(mutableListOf(true), ResultadoEscritura.DENEGADO)))
+    @Test fun bloquearNuevoOk() {
+        val d = Doc(mutableListOf(false))
+        assertEquals(true, bloquear(d))
+        assertEquals(1, d.escrituras)
     }
 
-    @Test fun bloquearDenegadoSinDocumentoOFalloEsError() {
-        assertEquals(false, bloquear(Doc(mutableListOf(false), ResultadoEscritura.DENEGADO)))
-        assertEquals(false, bloquear(Doc(mutableListOf(), ResultadoEscritura.FALLO)))
+    @Test fun bloquearYaBloqueadoEsExitoSinEscribir() {
+        val d = Doc(mutableListOf(true))
+        assertEquals(true, bloquear(d))
+        assertEquals(0, d.escrituras)
+    }
+
+    @Test fun bloquearSinConexionFallaEnseguidaSinEscribir() {
+        val d = Doc(mutableListOf(null))
+        assertEquals(false, bloquear(d))
+        assertEquals(0, d.escrituras)
+    }
+
+    @Test fun bloquearDenegadoSegunExistaOno() {
+        assertEquals(true, bloquear(Doc(mutableListOf(false, true), ResultadoEscritura.DENEGADO)))
+        assertEquals(false, bloquear(Doc(mutableListOf(false, false), ResultadoEscritura.DENEGADO)))
+        assertEquals(false, bloquear(Doc(mutableListOf(false), ResultadoEscritura.FALLO)))
     }
 
     // ---- resolverNombres
 
     private class Fuente(
         val chats: Map<String, String>?,
-        val perfiles: Map<String, String?>
+        val perfiles: Map<String, String?>,
+        val errores: Set<String> = emptySet()
     ) : FuenteNombres {
         val consultasPerfil = mutableListOf<String>()
         override fun deMisChats(callback: (Map<String, String>?) -> Unit) = callback(chats)
-        override fun dePerfil(uid: String, callback: (String?) -> Unit) {
-            consultasPerfil += uid; callback(perfiles[uid])
+        override fun dePerfil(uid: String, callback: (Result<String?>) -> Unit) {
+            consultasPerfil += uid
+            callback(if (uid in errores) Result.failure(RuntimeException("x")) else Result.success(perfiles[uid]))
         }
     }
 
+    private fun resolver(uids: Set<String>, f: Fuente): Pair<Map<String, String>, Set<String>> {
+        var r: Pair<Map<String, String>, Set<String>>? = null
+        FlujosModeracion.resolverNombres(uids, f) { n, fallidos -> r = n to fallidos }
+        return r!!
+    }
+
     @Test fun nombresDeChatsYPerfiles() {
-        var r: Map<String, String>? = null
-        FlujosModeracion.resolverNombres(setOf("a", "b", "c"), Fuente(mapOf("a" to "Ana", "z" to "Otro"), mapOf("b" to "Berta"))) { r = it }
-        assertEquals(mapOf("a" to "Ana", "b" to "Berta"), r)
+        val (n, fallidos) = resolver(setOf("a", "b", "c"), Fuente(mapOf("a" to "Ana", "z" to "Otro"), mapOf("b" to "Berta")))
+        assertEquals(mapOf("a" to "Ana", "b" to "Berta"), n)
+        assertEquals(emptySet<String>(), fallidos)
     }
 
     @Test fun tareaDeChatsFallidaNoRompeYSigueConPerfiles() {
-        var r: Map<String, String>? = null
         val f = Fuente(null, mapOf("a" to "Ana"))
-        FlujosModeracion.resolverNombres(setOf("a", "b"), f) { r = it }
-        assertEquals(mapOf("a" to "Ana"), r)
+        val (n, _) = resolver(setOf("a", "b"), f)
+        assertEquals(mapOf("a" to "Ana"), n)
         assertEquals(setOf("a", "b"), f.consultasPerfil.toSet())
     }
 
-    @Test fun perfilesFallidosTambienBajanElContador() {
-        var llamadas = 0
-        var r: Map<String, String>? = null
-        FlujosModeracion.resolverNombres(setOf("a", "b"), Fuente(emptyMap(), mapOf("a" to null, "b" to null))) { llamadas++; r = it }
-        assertEquals(1, llamadas)
-        assertEquals(emptyMap<String, String>(), r)
+    @Test fun perfilesFallidosBajanElContadorYSeDevuelvenComoFallidos() {
+        val (n, fallidos) = resolver(setOf("a", "b", "c"), Fuente(emptyMap(), mapOf("c" to null), errores = setOf("a", "b")))
+        assertEquals(emptyMap<String, String>(), n)
+        assertEquals(setOf("a", "b"), fallidos)   // «c» se leyó y no tiene nombre: no es un fallo
     }
 
     @Test fun canceladoNoLlamaAlCallback() {
         var llamadas = 0
-        FlujosModeracion.resolverNombres(setOf("a"), Fuente(emptyMap(), emptyMap()), cancelado = { true }) { llamadas++ }
+        FlujosModeracion.resolverNombres(setOf("a"), Fuente(emptyMap(), emptyMap()), cancelado = { true }) { _, _ -> llamadas++ }
         assertEquals(0, llamadas)
     }
 }

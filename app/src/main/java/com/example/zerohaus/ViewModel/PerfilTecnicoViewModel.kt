@@ -13,6 +13,7 @@ import com.example.zerohaus.Modelos.Tecnico
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Repositorios.*
 import com.example.zerohaus.Util.AppEstado
+import com.google.firebase.firestore.ListenerRegistration
 import com.example.zerohaus.Util.getCadenas
 
 
@@ -54,10 +55,20 @@ class PerfilTecnicoViewModel : ViewModel() {
     private val repoChat = RepositorioChat()
     private val repoEstadisticas = RepositorioEstadisticas()
     private val repoModeracion = RepositorioModeracion()
-    private val listenerBloqueos = repoModeracion.escucharMisBloqueos { b -> estado = estado.copy(bloqueados = b) }
+    private var listenerBloqueos: ListenerRegistration? = null
+
+    /** Si el listener murió por un error se vuelve a suscribir al cargar el perfil. */
+    private fun escucharBloqueos() {
+        if (listenerBloqueos != null) return
+        listenerBloqueos = repoModeracion.escucharMisBloqueos(
+            alFallar = { listenerBloqueos?.remove(); listenerBloqueos = null }
+        ) { b -> estado = estado.copy(bloqueados = b) }
+    }
+
+    init { escucharBloqueos() }
 
     override fun onCleared() {
-        listenerBloqueos.remove()
+        listenerBloqueos?.remove()
         super.onCleared()
     }
 
@@ -89,6 +100,7 @@ class PerfilTecnicoViewModel : ViewModel() {
     }
 
     fun cargarTecnico(tecnicoId: String) {
+        escucharBloqueos()
         estado = estado.copy(cargando = true)
         // Las lecturas van a la vez (antes en cadena: perfil → reseñas → «ya
         // valorado» → chats) y «ya valorado» sale de las propias reseñas.

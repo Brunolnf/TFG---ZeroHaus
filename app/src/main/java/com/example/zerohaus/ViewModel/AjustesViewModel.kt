@@ -9,6 +9,7 @@ import com.example.zerohaus.Modelos.AjustesUsuario
 import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Modelos.UsuarioBloqueado
 import com.example.zerohaus.Repositorios.RepositorioModeracion
+import com.google.firebase.firestore.ListenerRegistration
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.example.zerohaus.Repositorios.RepositorioAjustes
@@ -48,9 +49,18 @@ class AjustesViewModel : ViewModel() {
     // Uids ya intentados (también los que no se resolvieron): no se vuelven a leer
     private val nombresIntentados = mutableSetOf<String>()
     private var resolucion = 0
-    private val listenerBloqueos = repoModeracion.escucharMisBloqueos { uids -> actualizarBloqueados(uids) }
+    private var listenerBloqueos: ListenerRegistration? = null
+
+    /** Si el listener murió por un error se vuelve a suscribir al recargar. */
+    private fun escucharBloqueos() {
+        if (listenerBloqueos != null) return
+        listenerBloqueos = repoModeracion.escucharMisBloqueos(
+            alFallar = { listenerBloqueos?.remove(); listenerBloqueos = null }
+        ) { uids -> actualizarBloqueados(uids) }
+    }
 
     init {
+        escucharBloqueos()
         cargarAjustes()
         cargarPlan()
     }
@@ -61,8 +71,9 @@ class AjustesViewModel : ViewModel() {
         if (faltan.isEmpty()) return
         // Una resolución nueva cancela la anterior (sus uids sin resolver se piden de nuevo)
         val miResolucion = ++resolucion
-        repoModeracion.resolverNombres(faltan, cancelado = { miResolucion != resolucion }) { nombres ->
-            nombresIntentados.addAll(faltan)
+        repoModeracion.resolverNombres(faltan, cancelado = { miResolucion != resolucion }) { nombres, fallidos ->
+            // Los que fallaron por error se reintentan la próxima vez
+            nombresIntentados.addAll(faltan - fallidos)
             nombresBloqueados.putAll(nombres)
             // Los uids actuales, no los de la consulta: el usuario pudo desbloquear mientras tanto
             val actuales = estado.bloqueados.map { it.uid }.toSet()
@@ -79,7 +90,7 @@ class AjustesViewModel : ViewModel() {
     }
 
     override fun onCleared() {
-        listenerBloqueos.remove()
+        listenerBloqueos?.remove()
         super.onCleared()
     }
 
@@ -92,6 +103,7 @@ class AjustesViewModel : ViewModel() {
     }
 
     fun cargarAjustes() {
+        escucharBloqueos()
         estado = estado.copy(cargando = true)
         repo.obtenerAjustes { remoto ->
             // Sin documento (o sin conexión) valen los del dispositivo; antes se

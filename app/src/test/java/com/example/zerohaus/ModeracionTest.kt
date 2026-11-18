@@ -80,11 +80,16 @@ class ModeracionTest {
         assertEquals("- Hola\n- [imagen]\n- [PDF]\n- yyyyy\u2026", r)
     }
 
-    @Test fun resumenDeEvidenciaDeChatMaximoDiezMensajes() {
+    @Test fun resumenDeEvidenciaDeChatMaximoDiezMensajesYResto() {
         val mensajes = (1..15).map { mapOf("texto" to "m$it", "tipo" to "texto") }
         val lineas = Moderacion.resumenEvidencia(mapOf("mensajes" to mensajes)).lines()
-        assertEquals(10, lineas.size)
-        assertEquals("- m10", lineas.last())
+        assertEquals(11, lineas.size)
+        assertEquals("- m10", lineas[9])
+        assertEquals("\u2026 y 5 m\u00e1s", lineas.last())
+    }
+
+    @Test fun resumenDeEvidenciaDeChatSinMensajes() {
+        assertEquals("Sin mensajes copiados", Moderacion.resumenEvidencia(mapOf("mensajes" to emptyList<Any>())))
     }
 
     @Test fun resumenDeEvidenciaDeResenaPerfilYNota() {
