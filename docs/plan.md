@@ -69,7 +69,7 @@ Criterio común: la app 2.3 publicada sigue funcionando con las reglas nuevas.
 | T-C3 | IM | `.github/workflows/ci.yml` | B-09: acciones fijadas por SHA | — |
 | T-C4 | IM | `UserInterface/AjustesScreen.kt`, `ViewModel/AjustesViewModel.kt`, `i18n.py` | Con el bloque A desplegado: el aviso «borrar la cuenta no detiene los cobros» pasa a decir que se cancela la renovación, el error `UNAVAILABLE` con `motivo: "play"` muestra «no se ha podido cancelar tu suscripción, inténtalo más tarde», y si la respuesta trae `cancelarEnPlay: true` se avisa de cancelarla en Google Play (enlace de gestión) | T-A4, T-C2 |
 
-### Bloque D — Denunciar y bloquear usuarios (`feat/denuncias-bloqueos`)
+### Bloque D — Denunciar y bloquear usuarios (`feat/denuncias-bloqueos`, PR #57 ✅)
 B-11 confirmado: hoy solo el administrador puede bloquear (`AdminScreen.kt:282`); no hay denuncia ni bloqueo entre usuarios.
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
