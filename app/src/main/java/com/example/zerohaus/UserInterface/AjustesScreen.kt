@@ -327,6 +327,24 @@ fun AjustesScreen(
                     }
                 }
 
+                // ── Usuarios bloqueados ──
+                AjustesCard(c.modUsuariosBloqueados) {
+                    if (estado.bloqueados.isEmpty()) {
+                        Text(c.modSinBloqueados, color = gris, fontSize = 13.sp)
+                    }
+                    estado.bloqueados.forEachIndexed { i, b ->
+                        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(0.3f))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Block, null, tint = gris, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(b.nombre ?: c.modUsuario, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { viewModel.desbloquear(b.uid) }) {
+                                Text(c.modDesbloquear, color = verde)
+                            }
+                        }
+                    }
+                }
+
                 // ── Privacidad y legal ──
                 AjustesCard(c.ajustesPrivacidadLegal) {
                     AccionRow(Icons.Filled.PrivacyTip, c.ajustesPoliticaPrivacidad, c.ajustesPoliticaPrivacidadSub, verde) {

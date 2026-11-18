@@ -21,7 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Modelos.Denuncia
+import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Modelos.Usuario
+import java.text.SimpleDateFormat
 import com.example.zerohaus.Util.AdminConfig
 import com.example.zerohaus.ViewModel.AdminViewModel
 import java.util.*
@@ -42,9 +45,12 @@ fun AdminScreen(
     viewModel: AdminViewModel,
     onCerrarSesion: () -> Unit
 ) {
-    LaunchedEffect(Unit) { viewModel.cargar() }
+    LaunchedEffect(Unit) { viewModel.cargar(); viewModel.escucharDenuncias() }
 
     val context = LocalContext.current
+    var pestana by remember { mutableIntStateOf(0) }
+    var denunciaBloquear by remember { mutableStateOf<Denuncia?>(null) }
+    val pendientes = viewModel.denuncias.count { it.estado == Denuncia.ESTADO_PENDIENTE }
     var mostrarCrear by remember { mutableStateOf(false) }
     var usuarioEditar by remember { mutableStateOf<Usuario?>(null) }
     var usuarioConfirmarEliminar by remember { mutableStateOf<Usuario?>(null) }
@@ -77,7 +83,7 @@ fun AdminScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            if (pestana == 0) ExtendedFloatingActionButton(
                 onClick = { mostrarCrear = true },
                 containerColor = VERDE,
                 contentColor = Color.White,
@@ -95,6 +101,23 @@ fun AdminScreen(
         }
     ) { pv ->
         Column(Modifier.fillMaxSize().padding(pv)) {
+
+            TabRow(selectedTabIndex = pestana, containerColor = MaterialTheme.colorScheme.surface) {
+                Tab(selected = pestana == 0, onClick = { pestana = 0 }, text = { Text("Usuarios") })
+                Tab(
+                    selected = pestana == 1,
+                    onClick = { pestana = 1 },
+                    text = { Text(if (pendientes > 0) "Denuncias ($pendientes)" else "Denuncias") }
+                )
+            }
+
+            if (pestana == 1) {
+                ListaDenuncias(
+                    viewModel = viewModel,
+                    onBloquearCuenta = { denunciaBloquear = it }
+                )
+                return@Column
+            }
 
             OutlinedTextField(
                 value = viewModel.filtro.value,
@@ -138,6 +161,23 @@ fun AdminScreen(
                 }
             }
         }
+    }
+
+    // Confirmación de bloquear la cuenta de un denunciado
+    denunciaBloquear?.let { d ->
+        AlertDialog(
+            onDismissRequest = { denunciaBloquear = null },
+            icon = { Icon(Icons.Default.Lock, null, tint = NARANJA) },
+            title = { Text("Bloquear cuenta") },
+            text = { Text("¿Bloquear la cuenta de ${viewModel.nombreDe(d.objetivo)}? No podrá iniciar sesión hasta que la desbloquees.") },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.bloquearCuenta(d.objetivo); denunciaBloquear = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = ROJO)
+                ) { Text("Bloquear", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { denunciaBloquear = null }) { Text("Cancelar") } }
+        )
     }
 
     // Diálogo Crear
@@ -194,6 +234,105 @@ fun AdminScreen(
         )
     }
 
+}
+
+@Composable
+private fun ListaDenuncias(viewModel: AdminViewModel, onBloquearCuenta: (Denuncia) -> Unit) {
+    if (viewModel.cargandoDenuncias.value) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = VERDE) }
+        return
+    }
+    if (viewModel.denuncias.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No hay denuncias", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-ES")) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(viewModel.denuncias, key = { it.id }) { d ->
+            DenunciaCard(
+                denuncia = d,
+                autor = viewModel.nombreDe(d.autor),
+                objetivo = viewModel.nombreDe(d.objetivo),
+                fecha = if (d.fecha > 0) sdf.format(Date(d.fecha)) else "—",
+                onRevisada = { viewModel.marcarDenuncia(d, Denuncia.ESTADO_REVISADA) },
+                onDescartar = { viewModel.marcarDenuncia(d, Denuncia.ESTADO_DESCARTADA) },
+                onBloquearCuenta = { onBloquearCuenta(d) }
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun DenunciaCard(
+    denuncia: Denuncia,
+    autor: String,
+    objetivo: String,
+    fecha: String,
+    onRevisada: () -> Unit,
+    onDescartar: () -> Unit,
+    onBloquearCuenta: () -> Unit
+) {
+    val gris = MaterialTheme.colorScheme.onSurfaceVariant
+    val colorEstado = when (denuncia.estado) {
+        Denuncia.ESTADO_REVISADA -> VERDE
+        Denuncia.ESTADO_DESCARTADA -> gris
+        else -> NARANJA
+    }
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                EtiquetaMini(denuncia.motivo.ifBlank { "?" }, ROJO)
+                EtiquetaMini(denuncia.contexto.ifBlank { "?" }, AZUL)
+                EtiquetaMini(denuncia.estado, colorEstado)
+                Spacer(Modifier.weight(1f))
+                Text(fecha, fontSize = 11.sp, color = gris)
+            }
+            Text("Autor: $autor", fontSize = 13.sp)
+            Text("Denunciado: $objetivo", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            if (denuncia.comentario.isNotBlank()) {
+                Text("«${denuncia.comentario}»", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+            }
+            val evidencia = Moderacion.resumenEvidencia(denuncia.evidencia)
+            if (evidencia.isNotEmpty()) {
+                Text(
+                    evidencia,
+                    fontSize = 11.sp,
+                    color = gris,
+                    maxLines = 8,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(gris.copy(alpha = 0.08f))
+                        .padding(8.dp)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (denuncia.estado == Denuncia.ESTADO_PENDIENTE) {
+                    TextButton(onClick = onRevisada, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text("Marcar revisada", color = VERDE, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = onDescartar, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text("Descartar", color = gris, fontSize = 12.sp)
+                    }
+                }
+                TextButton(onClick = onBloquearCuenta, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text("Bloquear cuenta", color = ROJO, fontSize = 12.sp)
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -5,7 +5,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.Chat
+import com.example.zerohaus.Modelos.ContextoDenuncia
 import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Modelos.MotivoDenuncia
+import com.example.zerohaus.Modelos.ResultadoDenuncia
+import com.example.zerohaus.Repositorios.RepositorioModeracion
 import com.example.zerohaus.Repositorios.RepositorioChat
 import com.example.zerohaus.Util.Imagenes
 import com.example.zerohaus.Util.NotificacionesLocales
@@ -57,13 +61,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var chatEstado by mutableStateOf(ChatEstado())
         private set
 
+    /** Uids que he bloqueado (en tiempo real). */
+    var misBloqueados by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Yo he bloqueado al otro participante de la conversación abierta. */
+    val otroBloqueado: Boolean get() = chatEstado.otroUid.isNotEmpty() && chatEstado.otroUid in misBloqueados
+
     private val repo = RepositorioChat()
+    private val repoModeracion = RepositorioModeracion()
     private val db = FirebaseFirestore.getInstance()
 
     val miUid get() = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
     private var listenerChats: ListenerRegistration? = null
     private var listenerMensajes: ListenerRegistration? = null
+    private var listenerBloqueos: ListenerRegistration? = null
     private var chatAbierto: String? = null
     private var limiteMensajes = PAGINA_MENSAJES
     private var iniciandoChat = false
@@ -72,6 +85,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (auth.currentUser == null) {
             listenerChats?.remove(); listenerChats = null
             listenerMensajes?.remove(); listenerMensajes = null
+            listenerBloqueos?.remove(); listenerBloqueos = null
+            misBloqueados = emptySet()
             // cargando = false: evita spinner huérfano durante el logout.
             listaEstado = ChatListEstado(cargando = false)
             chatEstado = ChatEstado()
@@ -84,7 +99,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (FirebaseAuth.getInstance().currentUser != null) cargarChats()
     }
 
+    private fun escucharBloqueos() {
+        if (listenerBloqueos != null || FirebaseAuth.getInstance().currentUser == null) return
+        listenerBloqueos = repoModeracion.escucharMisBloqueos { misBloqueados = it }
+    }
+
+    /** Denuncia al otro participante del chat abierto. */
+    fun denunciar(motivo: MotivoDenuncia, comentario: String, onResultado: (ResultadoDenuncia) -> Unit) {
+        val chatId = chatAbierto
+        val otro = chatEstado.otroUid
+        if (chatId == null || otro.isEmpty()) { onResultado(ResultadoDenuncia.ERROR); return }
+        repoModeracion.denunciar(otro, ContextoDenuncia.CHAT, chatId, motivo, comentario, onResultado)
+    }
+
+    /** Bloquea o desbloquea al otro participante; [onResultado] recibe (ahora bloqueado, ok). */
+    fun alternarBloqueo(onResultado: (Boolean, Boolean) -> Unit) {
+        val otro = chatEstado.otroUid
+        if (otro.isEmpty()) { onResultado(false, false); return }
+        if (otroBloqueado) repoModeracion.desbloquear(otro) { ok -> onResultado(false, ok) }
+        else repoModeracion.bloquear(otro) { ok -> onResultado(true, ok) }
+    }
+
     fun cargarChats() {
+        escucharBloqueos()
         if (listenerChats != null) return  // ya escuchando, no duplicar
         listaEstado = listaEstado.copy(cargando = true)
 
@@ -105,6 +142,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun abrirChat(chatId: String) {
+        escucharBloqueos()
         listenerMensajes?.remove()
         chatEstado = ChatEstado()
         chatAbierto = chatId
@@ -189,16 +227,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
         chatEstado = chatEstado.copy(enviando = true, texto = "")
 
-        repo.enviarMensaje(chatId, texto) { ok ->
+        var denegado = false
+        repo.enviarMensaje(chatId, texto, alDenegar = { denegado = true }) { ok ->
             chatEstado = if (ok) chatEstado.copy(enviando = false, error = null)
             else chatEstado.copy(
                 enviando = false,
-                error = getCadenas(AppEstado.idioma).chatErrorEnviar,
+                error = textoErrorEnvio(denegado, getCadenas(AppEstado.idioma).chatErrorEnviar),
                 // Se le devuelve lo que había escrito para que no lo pierda
                 texto = chatEstado.texto.ifEmpty { texto }
             )
         }
     }
+
+    /** Si las reglas rechazan el envío (hay un bloqueo entre los dos) se dice por qué. */
+    private fun textoErrorEnvio(denegado: Boolean, generico: String) =
+        if (denegado) getCadenas(AppEstado.idioma).modNoPuedesEnviar else generico
 
     fun limpiarError() {
         chatEstado = chatEstado.copy(error = null)
@@ -231,16 +274,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 chatEstado = chatEstado.copy(subiendoMedia = false, error = errorImagen)
                 return@launch
             }
-            repo.enviarImagen(chatId, jpeg, caption) { ok ->
-                chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) errorImagen else null)
+            var denegado = false
+            repo.enviarImagen(chatId, jpeg, caption, alDenegar = { denegado = true }) { ok ->
+                chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) textoErrorEnvio(denegado, errorImagen) else null)
             }
         }
     }
 
     fun enviarArchivo(chatId: String, uri: android.net.Uri, nombre: String, bytes: Long) {
         chatEstado = chatEstado.copy(subiendoMedia = true)
-        repo.enviarArchivo(chatId, uri, nombre, bytes) { ok ->
-            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) getCadenas(AppEstado.idioma).chatErrorArchivo else null)
+        var denegado = false
+        repo.enviarArchivo(chatId, uri, nombre, bytes, alDenegar = { denegado = true }) { ok ->
+            chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) textoErrorEnvio(denegado, getCadenas(AppEstado.idioma).chatErrorArchivo) else null)
         }
     }
 
@@ -280,6 +325,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppEstado.chatAbiertoId = null
         listenerChats?.remove()
         listenerMensajes?.remove()
+        listenerBloqueos?.remove()
     }
 
     companion object {

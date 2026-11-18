@@ -290,6 +290,8 @@ class ConfiguracionTest(unittest.TestCase):
         self.assertEqual(funciones["on_message_created"].maxInstances, 50)   # ráfagas de chat
         self.assertLess(funciones["generar_sugerencias_ia"].maxInstances, normal)
         self.assertLess(funciones["leer_factura"].maxInstances, normal)
+        # Las denuncias son raras y cada una puede mandar un correo
+        self.assertLess(funciones["on_denuncia_creada"].maxInstances, normal)
 
     def test_los_esquemas_de_gemini_son_json_valido(self):
         for esquema in (main._ESQUEMA_IA, main._ESQUEMA_FACTURA):
@@ -458,12 +460,18 @@ _OPERADORES = {
 
 
 class _ConsultaMem:
-    """Colección (o subcolección) con filtros where(filter=FieldFilter(...)) y limit."""
-    def __init__(self, db, nombre, filtros=(), limite=None):
+    """Colección (o subcolección) con filtros where(filter=FieldFilter(...)),
+    order_by y limit."""
+    def __init__(self, db, nombre, filtros=(), limite=None, orden=None):
         self._db, self._nombre, self._filtros, self._limite = db, nombre, list(filtros), limite
+        self._orden = orden   # (campo, dirección) o None
+    def _con(self, **cambios):
+        actual = dict(filtros=self._filtros, limite=self._limite, orden=self._orden)
+        return _ConsultaMem(self._db, self._nombre, **{**actual, **cambios})
     def document(self, doc_id): return _RefMem(self._db, f"{self._nombre}/{doc_id}")
-    def where(self, filter): return _ConsultaMem(self._db, self._nombre, self._filtros + [filter], self._limite)
-    def limit(self, n): return _ConsultaMem(self._db, self._nombre, self._filtros, n)
+    def where(self, filter): return self._con(filtros=self._filtros + [filter])
+    def limit(self, n): return self._con(limite=n)
+    def order_by(self, campo, direction="ASCENDING"): return self._con(orden=(campo, direction))
     def stream(self):
         prefijo = f"{self._nombre}/"
         encontrados = [
@@ -472,6 +480,11 @@ class _ConsultaMem:
             and all(f.field_path in datos and _OPERADORES[f.op_string](datos[f.field_path], f.value)
                     for f in self._filtros)
         ]
+        if self._orden:
+            campo, direccion = self._orden
+            # Como Firestore: los documentos sin el campo no salen al ordenar por él
+            encontrados = sorted((s for s in encontrados if campo in s.to_dict()),
+                                 key=lambda s: s.to_dict()[campo], reverse=direccion == "DESCENDING")
         return iter(encontrados if self._limite is None else encontrados[:self._limite])
 
 
@@ -1143,6 +1156,19 @@ class PurgaTest(_ConPurga):
         self.assertIn("perfiles/legado/", self.prefijos_storage)
         self.assertIn("perfiles/p1/", self.prefijos_storage)
 
+    def test_borra_sus_bloqueos_y_denuncias_en_los_dos_sentidos(self):
+        self.db.docs.update({
+            "bloqueos/p1_x": {"autor": "p1", "bloqueado": "x", "fecha": 1},
+            "bloqueos/x_p1": {"autor": "x", "bloqueado": "p1", "fecha": 1},
+            "bloqueos/x_y": {"autor": "x", "bloqueado": "y", "fecha": 1},
+            "denuncias/p1_x": {"autor": "p1", "objetivo": "x", "motivo": "spam"},
+            "denuncias/x_p1": {"autor": "x", "objetivo": "p1", "motivo": "acoso"},
+            "denuncias/x_y": {"autor": "x", "objetivo": "y", "motivo": "otro"},
+        })
+        stats = main._purgar_usuario(self.db, "p1")
+        self.assertEqual(sorted(self.db.docs), ["bloqueos/x_y", "denuncias/x_y"])
+        self.assertEqual((stats["bloqueos"], stats["denuncias"]), (2, 2))
+
 
 def _respuesta_http(codigo, datos=None):
     return SimpleNamespace(status_code=codigo, text="", json=lambda: dict(datos or {}))
@@ -1409,6 +1435,195 @@ class NombreEnResenasTest(_ConServiciosFalsos):
         del self.db.docs["usuarios/c1"]
         self.cambio(None, self.RESENA)
         self.assertEqual(self.db.docs["resenas/r1"]["nombreUsuario"], "ZeroHaus Soporte")
+
+
+def evento_creado(datos, **params):
+    """Evento de un trigger on_document_created con el documento tal como se creó."""
+    return SimpleNamespace(id="ev1", params=params,
+                           data=SimpleNamespace(exists=True, to_dict=lambda: dict(datos)))
+
+
+class DenunciaTest(_ConServiciosFalsos):
+    """on_denuncia_creada guarda una evidencia acotada y avisa una vez al administrador."""
+
+    def setUp(self):
+        super().setUp()
+        self.db.docs.update({
+            "chats/c1": {"participantes": ["cliente", "pro"]},
+            "chats/ajeno": {"participantes": ["otro", "pro"]},
+        })
+
+    def denunciar(self, autor="cliente", contexto="chat", referencia="c1", **extra):
+        """Crea /denuncias/{autor}_pro como la app y devuelve el evento del trigger."""
+        datos = {"autor": autor, "objetivo": "pro", "contexto": contexto, "referencia": referencia,
+                 "motivo": "acoso", "comentario": "Me insulta", "fecha": 1, **extra}
+        self.db.docs[f"denuncias/{autor}_pro"] = dict(datos)
+        return evento_creado(datos, denunciaId=f"{autor}_pro")
+
+    def entregar(self, evento):
+        with mock.patch("builtins.print"):
+            inspect.unwrap(main.on_denuncia_creada)(evento)
+        return self.db.docs.get(f"denuncias/{evento.params['denunciaId']}")
+
+    def mensaje(self, msg_id, emisor, fecha, **extra):
+        self.db.docs[f"chats/c1/mensajes/{msg_id}"] = {
+            "id": msg_id, "chatId": "c1", "emisorUid": emisor, "emisorNombre": emisor, "texto": f"t{fecha}",
+            "tipo": "texto", "fecha": fecha, "leido": False, "mediaUrl": "", "mediaNombre": "", **extra,
+        }
+
+    def test_chat_copia_los_ultimos_20_mensajes_del_denunciado(self):
+        for i in range(25):
+            self.mensaje(f"p{i}", "pro", 100 + i)
+        for i in range(5):
+            self.mensaje(f"c{i}", "cliente", 1000 + i)   # los del autor no son evidencia
+        self.mensaje("largo", "pro", 500, texto="x" * 800)
+        self.mensaje("foto", "pro", 400, tipo="imagen", texto="", mediaUrl="https://firebasestorage.googleapis.com/f")
+        denuncia = self.entregar(self.denunciar())
+        mensajes = denuncia["evidencia"]["mensajes"]
+        self.assertEqual(len(mensajes), 20)
+        self.assertEqual([m["fecha"] for m in mensajes], [500, 400] + list(range(124, 106, -1)))
+        self.assertEqual(mensajes[0]["texto"], "x" * 500)   # truncado
+        self.assertEqual(mensajes[1], {"texto": "", "tipo": "imagen", "fecha": 400,
+                                       "mediaUrl": "https://firebasestorage.googleapis.com/f"})
+        for m in mensajes:
+            self.assertEqual(set(m), {"texto", "tipo", "fecha", "mediaUrl"})
+        self.assertEqual(denuncia["estado"], "pendiente")
+        # Lo que escribió la app no se toca
+        self.assertEqual((denuncia["motivo"], denuncia["comentario"]), ("acoso", "Me insulta"))
+
+    def test_chat_que_no_comparten_autor_y_denunciado_no_copia_mensajes(self):
+        self.mensaje("p1", "pro", 1)
+        for referencia in ("ajeno", "no_existe", "c1/mensajes/p1"):
+            with self.subTest(referencia=referencia):
+                evidencia = self.entregar(self.denunciar(referencia=referencia))["evidencia"]
+                self.assertNotIn("mensajes", evidencia)
+                self.assertTrue(evidencia["nota"])
+
+    def test_resena_copia_puntuacion_comentario_y_fecha_si_es_del_denunciado(self):
+        self.db.docs.update({
+            "resenas/pro_t1": {"uid": "pro", "tecnicoId": "t1", "puntuacion": 1, "comentario": "x" * 1500,
+                               "fecha": 7, "nombreUsuario": "Pro", "chatId": "c1"},
+            "resenas/otro_t1": {"uid": "otro", "tecnicoId": "t1", "puntuacion": 5, "comentario": "Bien", "fecha": 8},
+        })
+        evidencia = self.entregar(self.denunciar(contexto="resena", referencia="pro_t1"))["evidencia"]
+        self.assertEqual(evidencia, {"puntuacion": 1, "comentario": "x" * 1000, "fecha": 7})
+        ajena = self.entregar(self.denunciar(autor="c2", contexto="resena", referencia="otro_t1"))["evidencia"]
+        self.assertEqual(set(ajena), {"nota"})
+
+    def test_perfil_copia_nombre_y_descripcion_si_es_del_denunciado(self):
+        self.db.docs.update({
+            # Perfil antiguo: el id del documento no es el uid
+            "tecnicos/legado": {"uid": "pro", "nombre": "Reformas Pro", "descripcion": "Precios sin IVA",
+                                "telefono": "600000000", "emailContacto": "pro@x.es"},
+            "tecnicos/otro": {"uid": "otro", "nombre": "Otro", "descripcion": "Nada"},
+        })
+        evidencia = self.entregar(self.denunciar(contexto="perfil", referencia="legado"))["evidencia"]
+        self.assertEqual(evidencia, {"nombre": "Reformas Pro", "descripcion": "Precios sin IVA"})
+        ajeno = self.entregar(self.denunciar(autor="c2", contexto="perfil", referencia="otro"))["evidencia"]
+        self.assertEqual(set(ajeno), {"nota"})
+        inexistente = self.entregar(self.denunciar(autor="c3", contexto="perfil", referencia="nadie"))["evidencia"]
+        self.assertEqual(set(inexistente), {"nota"})
+
+    def test_un_evento_repetido_no_cambia_la_evidencia_ni_vuelve_a_avisar(self):
+        self.mensaje("p1", "pro", 1)
+        evento = self.denunciar()
+        primera = self.entregar(evento)
+        self.mensaje("p2", "pro", 2)   # el denunciado sigue escribiendo
+        self.assertEqual(self.entregar(evento), primera)
+        self.assertEqual(self.correos, [main.SMTP_USUARIO.value])
+
+    def test_si_no_se_puede_copiar_la_evidencia_se_anota_y_se_avisa_igual(self):
+        with mock.patch.object(main, "_evidencia_chat", side_effect=RuntimeError("Falta el índice")):
+            denuncia = self.entregar(self.denunciar())
+        self.assertEqual(set(denuncia["evidencia"]), {"nota"})
+        self.assertEqual(denuncia["estado"], "pendiente")
+        self.assertEqual(self.correos, [main.SMTP_USUARIO.value])
+
+    def test_si_ya_tiene_evidencia_no_hace_nada(self):
+        evento = self.denunciar()
+        self.db.docs["denuncias/cliente_pro"].update({"evidencia": {"nota": "ya"}, "estado": "revisada"})
+        antes = dict(self.db.docs["denuncias/cliente_pro"])
+        self.assertEqual(self.entregar(evento), antes)
+        self.assertEqual(self.correos, [])
+
+    def test_si_la_denuncia_ya_no_existe_no_la_recrea_ni_avisa(self):
+        evento = self.denunciar()
+        del self.db.docs["denuncias/cliente_pro"]
+        self.assertIsNone(self.entregar(evento))
+        self.assertEqual(self.correos, [])
+
+    def test_el_aviso_va_al_buzon_de_zerohaus_sin_el_comentario(self):
+        enviados = []
+        with mock.patch.object(main, "_enviar_email", lambda *a, **k: enviados.append(a)):
+            self.entregar(self.denunciar())
+        self.assertEqual(len(enviados), 1)
+        destino, asunto, texto = enviados[0][:3]
+        self.assertEqual(destino, main.SMTP_USUARIO.value)
+        for dato in ("acoso", "chat", "cliente_pro", "cliente", "pro", "c1"):
+            self.assertIn(dato, asunto + texto)
+        self.assertNotIn("Me insulta", asunto + texto)
+        self.assertEqual(self.db.docs[f"limites_correo/{self.hoy()}"], {"enviados": 1, "avisos": 1})
+
+    def test_como_mucho_20_avisos_de_denuncias_al_dia(self):
+        for i in range(main.AVISOS_DENUNCIA_MAX_DIA + 1):
+            denuncia = self.entregar(self.denunciar(autor=f"u{i}"))
+            self.assertEqual(denuncia["estado"], "pendiente")   # la evidencia se guarda igual
+        self.assertEqual(len(self.correos), 20)
+        self.assertEqual(main.AVISOS_DENUNCIA_MAX_DIA, 20)
+
+    def test_sin_cupo_comun_de_correo_no_sale_el_aviso(self):
+        self.db.docs[f"limites_correo/{self.hoy()}"] = {"enviados": 150, "avisos": 150}
+        denuncia = self.entregar(self.denunciar())
+        self.assertEqual(self.correos, [])
+        self.assertIn("evidencia", denuncia)
+
+
+class MensajeConBloqueoTest(_ConServiciosFalsos):
+    """on_message_created no avisa a quien tiene un bloqueo con el emisor (los
+    mensajes del administrador se saltan las reglas)."""
+
+    def setUp(self):
+        super().setUp()
+        self.push = []
+        parche = mock.patch.object(main, "_enviar_push", lambda destino, *a, **k: self.push.append(destino))
+        parche.start()
+        self.addCleanup(parche.stop)
+        self.db.docs.update({
+            "chats/c1": {"participantes": ["cliente", "pro"], "escribieron": []},
+            "ajustes/pro": {"tokenFCM": "t-pro"},
+            "usuarios/cliente": {"nombre": "Cliente"},
+        })
+
+    def escribir(self):
+        datos = {"emisorUid": "cliente", "texto": "hola", "tipo": "texto", "fecha": 1}
+        self.db.docs["chats/c1/mensajes/m1"] = dict(datos)
+        evento = SimpleNamespace(id="ev1", params={"chatId": "c1", "msgId": "m1"},
+                                 data=SimpleNamespace(to_dict=lambda: dict(datos)))
+        inspect.unwrap(main.on_message_created)(evento)
+
+    def notificaciones(self):
+        return [d for ruta, d in self.db.docs.items() if ruta.startswith("notificaciones/")]
+
+    def test_sin_bloqueo_avisa_al_otro_participante(self):
+        self.escribir()
+        self.assertEqual([n["uid"] for n in self.notificaciones()], ["pro"])
+        self.assertEqual(self.push, [{"fid": None, "token": "t-pro"}])
+
+    def test_con_un_bloqueo_en_cualquier_sentido_no_avisa(self):
+        for autor, bloqueado in (("cliente", "pro"), ("pro", "cliente")):
+            with self.subTest(autor=autor):
+                self.push.clear()
+                self.db.docs = {k: v for k, v in self.db.docs.items()
+                                if not k.startswith(("notificaciones/", "bloqueos/"))}
+                self.db.docs[f"bloqueos/{autor}_{bloqueado}"] = {"autor": autor, "bloqueado": bloqueado, "fecha": 1}
+                self.escribir()
+                self.assertEqual(self.notificaciones(), [])
+                self.assertEqual(self.push, [])
+
+    def test_un_bloqueo_con_otra_persona_no_afecta(self):
+        self.db.docs["bloqueos/pro_otro"] = {"autor": "pro", "bloqueado": "otro", "fecha": 1}
+        self.escribir()
+        self.assertEqual(len(self.notificaciones()), 1)
 
 
 if __name__ == "__main__":

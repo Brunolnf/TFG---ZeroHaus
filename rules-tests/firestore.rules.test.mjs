@@ -7,7 +7,9 @@ import {
   assertSucceeds,
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import {
+  collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where,
+} from "firebase/firestore";
 
 let env;
 
@@ -713,5 +715,245 @@ describe("/usuarios: email de la cuenta y topes", () => {
     await assertSucceeds(setDoc(doc(db, "usuarios/nuevo"), { nombre: "Nuevo Nombre", fotoPerfil: URL_FOTO }, { merge: true }));
     await assertFails(updateDoc(doc(db, "usuarios/nuevo"), { relleno: "x".repeat(10000) }));
     await assertFails(updateDoc(doc(db, "usuarios/nuevo"), { fotoPerfil: "x".repeat(5000) }));
+  });
+});
+
+// Bloque D (T-D1): bloquear y denunciar usuarios
+const comoAdmin = () =>
+  env.authenticatedContext("admin", { email: "admin@x.es", email_verified: true, admin: true }).firestore();
+
+describe("bloqueos entre usuarios", () => {
+  // Lo que escribe la app al bloquear (/bloqueos/{autor}_{bloqueado})
+  const bloqueo = (extra = {}) => ({ autor: "cliente", bloqueado: "pro", fecha: Date.now(), ...extra });
+  const sembrar = (id, datos) =>
+    env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), `bloqueos/${id}`), datos));
+
+  it("un usuario bloquea a otro como hace la app", async () => {
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "bloqueos/cliente_pro"), bloqueo()));
+  });
+
+  it("no se bloquea en nombre de otro ni con un id que no sea autor_bloqueado", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "bloqueos/otro_pro"), bloqueo({ autor: "otro" })));
+    await assertFails(setDoc(doc(db, "bloqueos/pro_cliente"), bloqueo()));
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_otro"), bloqueo()));
+    await assertFails(setDoc(doc(db, "bloqueos/x"), bloqueo()));
+  });
+
+  it("no se bloquea uno a sí mismo", async () => {
+    await assertFails(setDoc(doc(verificado("cliente"), "bloqueos/cliente_cliente"), bloqueo({ bloqueado: "cliente" })));
+  });
+
+  it("sin cuenta verificada no se bloquea", async () => {
+    await assertFails(setDoc(doc(sinVerificar("cliente"), "bloqueos/cliente_pro"), bloqueo()));
+  });
+
+  it("solo los campos del modelo, con tipo y tamaño", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_pro"), bloqueo({ motivo: "x" })));
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_pro"), bloqueo({ fecha: Date.now() + 2 * DIA })));
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_pro"), bloqueo({ fecha: "hoy" })));
+    const { fecha, ...sinFecha } = bloqueo();
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_pro"), sinFecha));
+    const largo = "x".repeat(129);
+    await assertFails(setDoc(doc(db, `bloqueos/cliente_${largo}`), bloqueo({ bloqueado: largo })));
+    await assertFails(setDoc(doc(db, "bloqueos/cliente_"), bloqueo({ bloqueado: "" })));
+  });
+
+  it("el autor lee sus bloqueos (uno a uno y con la consulta de la app)", async () => {
+    await sembrar("cliente_pro", bloqueo());
+    const db = verificado("cliente");
+    await assertSucceeds(getDoc(doc(db, "bloqueos/cliente_pro")));
+    await assertSucceeds(getDocs(query(collection(db, "bloqueos"), where("autor", "==", "cliente"))));
+    // Saber si ya ha bloqueado a alguien: leer su propio id aunque no exista
+    await assertSucceeds(getDoc(doc(db, "bloqueos/cliente_otro")));
+  });
+
+  it("el bloqueado no sabe que le han bloqueado y nadie más lo lee", async () => {
+    await sembrar("cliente_pro", bloqueo());
+    await assertFails(getDoc(doc(verificado("pro"), "bloqueos/cliente_pro")));
+    await assertFails(getDocs(query(collection(verificado("pro"), "bloqueos"), where("bloqueado", "==", "pro"))));
+    await assertFails(getDoc(doc(verificado("otro"), "bloqueos/cliente_pro")));
+    await assertFails(getDocs(query(collection(verificado("otro"), "bloqueos"), where("autor", "==", "cliente"))));
+    // Ni siquiera si existe o no un bloqueo ajeno
+    await assertFails(getDoc(doc(verificado("pro"), "bloqueos/otro_pro")));
+  });
+
+  it("el autor desbloquea; el bloqueado no puede quitárselo ni nadie cambiarlo", async () => {
+    await sembrar("cliente_pro", bloqueo());
+    await assertFails(deleteDoc(doc(verificado("pro"), "bloqueos/cliente_pro")));
+    await assertFails(updateDoc(doc(verificado("cliente"), "bloqueos/cliente_pro"), { fecha: 1 }));
+    await assertSucceeds(deleteDoc(doc(verificado("cliente"), "bloqueos/cliente_pro")));
+  });
+
+  it("el administrador lee, cambia y borra bloqueos", async () => {
+    await sembrar("cliente_pro", bloqueo());
+    const admin = comoAdmin();
+    await assertSucceeds(getDoc(doc(admin, "bloqueos/cliente_pro")));
+    await assertSucceeds(updateDoc(doc(admin, "bloqueos/cliente_pro"), { fecha: 1 }));
+    await assertSucceeds(deleteDoc(doc(admin, "bloqueos/cliente_pro")));
+  });
+});
+
+describe("un bloqueo corta el chat en los dos sentidos", () => {
+  const mensajeDe = (emisor, extra = {}) => ({
+    id: "mb", chatId: "con_mensajes", emisorUid: emisor, emisorNombre: emisor, texto: "hola",
+    fecha: Date.now(), leido: false, tipo: "texto", mediaUrl: "", mediaNombre: "", mediaBytes: 0, ...extra,
+  });
+  const chatNuevo = (id) => ({
+    id, participantes: ["cliente", "pro"], nombresParticipantes: { cliente: "Cliente", pro: "Pro" },
+    ultimoMensaje: "", fechaUltimoMensaje: 0, noLeidosPor: { cliente: 0, pro: 0 }, escribieron: [],
+  });
+  const bloquear = (autor, bloqueado) =>
+    env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), `bloqueos/${autor}_${bloqueado}`), { autor, bloqueado, fecha: 1 }));
+
+  it("sin bloqueo los dos escriben y abren chats", async () => {
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/mb"), mensajeDe("cliente")));
+    await assertSucceeds(setDoc(doc(verificado("pro"), "chats/con_mensajes/mensajes/mc"), mensajeDe("pro", { id: "mc" })));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/nuevoA"), chatNuevo("nuevoA")));
+  });
+
+  for (const [autor, bloqueado] of [["cliente", "pro"], ["pro", "cliente"]]) {
+    it(`con ${autor} bloqueando a ${bloqueado} ninguno escribe al otro`, async () => {
+      await bloquear(autor, bloqueado);
+      await assertFails(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/mb"), mensajeDe("cliente")));
+      await assertFails(setDoc(doc(verificado("pro"), "chats/con_mensajes/mensajes/mc"), mensajeDe("pro", { id: "mc" })));
+    });
+
+    it(`con ${autor} bloqueando a ${bloqueado} ninguno abre un chat nuevo`, async () => {
+      await bloquear(autor, bloqueado);
+      await assertFails(setDoc(doc(verificado("cliente"), "chats/nuevoA"), chatNuevo("nuevoA")));
+      await assertFails(setDoc(doc(verificado("pro"), "chats/nuevoB"), chatNuevo("nuevoB")));
+    });
+
+    it(`con ${autor} bloqueando a ${bloqueado} no se cuela texto por el último mensaje del chat`, async () => {
+      await bloquear(autor, bloqueado);
+      for (const quien of ["cliente", "pro"]) {
+        const otro = quien === "cliente" ? "pro" : "cliente";
+        await assertFails(updateDoc(doc(verificado(quien), "chats/con_mensajes"),
+          { ultimoMensaje: "sigo aquí", fechaUltimoMensaje: Date.now() }));
+        await assertFails(updateDoc(doc(verificado(quien), "chats/con_mensajes"), { [`noLeidosPor.${otro}`]: 7 }));
+        // Marcar como leído lo propio sigue funcionando (la app lo hace al abrir el chat)
+        await assertSucceeds(updateDoc(doc(verificado(quien), "chats/con_mensajes"), { [`noLeidosPor.${quien}`]: 0 }));
+      }
+    });
+  }
+
+  it("un bloqueo entre otros dos no afecta a este chat", async () => {
+    await bloquear("cliente", "otro");
+    await bloquear("otro", "pro");
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/mb"), mensajeDe("cliente")));
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/nuevoA"), chatNuevo("nuevoA")));
+    await assertSucceeds(updateDoc(doc(verificado("cliente"), "chats/con_mensajes"),
+      { ultimoMensaje: "hola", fechaUltimoMensaje: Date.now(), "noLeidosPor.pro": 1 }));
+  });
+
+  it("las reseñas no se bloquean: el profesional no puede silenciar una legítima", async () => {
+    await bloquear("pro", "cliente");
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "resenas/cliente_pro"), resena({ chatId: "con_mensajes" })));
+  });
+
+  it("el administrador sigue pudiendo escribir en el chat", async () => {
+    await bloquear("cliente", "pro");
+    await assertSucceeds(setDoc(doc(comoAdmin(), "chats/con_mensajes/mensajes/md"), mensajeDe("admin", { id: "md" })));
+  });
+});
+
+describe("denuncias", () => {
+  // Lo que escribe la app al denunciar (/denuncias/{autor}_{objetivo})
+  const denuncia = (extra = {}) => ({
+    autor: "cliente", objetivo: "pro", contexto: "chat", referencia: "con_mensajes",
+    motivo: "acoso", comentario: "Me insulta", fecha: Date.now(), ...extra,
+  });
+  const sembrar = (id, datos) =>
+    env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), `denuncias/${id}`), datos));
+
+  it("se denuncia como hace la app, con o sin comentario", async () => {
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "denuncias/cliente_pro"), denuncia()));
+    const { comentario, ...sinComentario } = denuncia({ autor: "pro", objetivo: "cliente", contexto: "resena" });
+    await assertSucceeds(setDoc(doc(verificado("pro"), "denuncias/pro_cliente"), sinComentario));
+  });
+
+  it("los tres contextos y todos los motivos de la lista valen", async () => {
+    let i = 0;
+    for (const contexto of ["chat", "perfil", "resena"]) {
+      for (const motivo of ["spam", "acoso", "fraude", "inapropiado", "suplantacion", "otro"]) {
+        await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "denuncias/cliente_pro")));
+        await assertSucceeds(setDoc(doc(verificado("cliente"), "denuncias/cliente_pro"),
+          denuncia({ contexto, motivo, referencia: `ref${i++}` })), `${contexto}/${motivo}`);
+      }
+    }
+  });
+
+  it("solo una por autor y objetivo: no se puede volver a enviar ni editar", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(setDoc(doc(db, "denuncias/cliente_pro"), denuncia()));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ motivo: "spam" })));
+    await assertFails(updateDoc(doc(db, "denuncias/cliente_pro"), { comentario: "otra cosa" }));
+    await assertFails(deleteDoc(doc(db, "denuncias/cliente_pro")));
+  });
+
+  it("no se denuncia uno a sí mismo ni a quien no existe", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "denuncias/cliente_cliente"), denuncia({ objetivo: "cliente" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_fantasma"), denuncia({ objetivo: "fantasma" })));
+  });
+
+  it("no se denuncia en nombre de otro ni con otro id", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "denuncias/otro_pro"), denuncia({ autor: "otro" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_otro"), denuncia()));
+    await assertFails(setDoc(doc(db, "denuncias/pro_cliente"), denuncia()));
+    await assertFails(setDoc(doc(sinVerificar("cliente"), "denuncias/cliente_pro"), denuncia()));
+  });
+
+  it("motivo y contexto solo de la lista", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ motivo: "me cae mal" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ contexto: "foro" })));
+    const { motivo, ...sinMotivo } = denuncia();
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), sinMotivo));
+  });
+
+  it("el estado y la evidencia solo los pone el servidor o el administrador", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ estado: "revisada" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ estado: "pendiente" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ evidencia: { mensajes: [] } })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ relleno: "x" })));
+  });
+
+  it("referencia, comentario y fecha con tipo y tope", async () => {
+    const db = verificado("cliente");
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ referencia: "" })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ referencia: "x".repeat(301) })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ referencia: 7 })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ comentario: "x".repeat(1001) })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ comentario: 7 })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ fecha: Date.now() + 2 * DIA })));
+    await assertFails(setDoc(doc(db, "denuncias/cliente_pro"), denuncia({ fecha: "hoy" })));
+    await assertSucceeds(setDoc(doc(db, "denuncias/cliente_pro"),
+      denuncia({ referencia: "x".repeat(300), comentario: "x".repeat(1000) })));
+  });
+
+  it("el autor sabe si ya denunció; el denunciado y los demás no la leen", async () => {
+    await sembrar("cliente_pro", { ...denuncia(), evidencia: { mensajes: [] }, estado: "pendiente" });
+    const db = verificado("cliente");
+    await assertSucceeds(getDoc(doc(db, "denuncias/cliente_pro")));
+    await assertSucceeds(getDoc(doc(db, "denuncias/cliente_otro")));   // aún no la ha hecho
+    await assertSucceeds(getDocs(query(collection(db, "denuncias"), where("autor", "==", "cliente"))));
+    await assertFails(getDoc(doc(verificado("pro"), "denuncias/cliente_pro")));
+    await assertFails(getDocs(query(collection(verificado("pro"), "denuncias"), where("objetivo", "==", "pro"))));
+    await assertFails(getDoc(doc(verificado("otro"), "denuncias/cliente_pro")));
+    await assertFails(getDocs(query(collection(verificado("otro"), "denuncias"), where("autor", "==", "cliente"))));
+  });
+
+  it("el administrador las lee, las marca como revisadas y las borra", async () => {
+    await sembrar("cliente_pro", { ...denuncia(), estado: "pendiente" });
+    const admin = comoAdmin();
+    await assertSucceeds(getDocs(collection(admin, "denuncias")));
+    await assertSucceeds(updateDoc(doc(admin, "denuncias/cliente_pro"), { estado: "revisada" }));
+    await assertSucceeds(deleteDoc(doc(admin, "denuncias/cliente_pro")));
   });
 });

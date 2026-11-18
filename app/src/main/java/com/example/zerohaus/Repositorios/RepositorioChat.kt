@@ -3,6 +3,7 @@ package com.example.zerohaus.Repositorios
 import android.net.Uri
 import com.example.zerohaus.Modelos.Chat
 import com.example.zerohaus.Modelos.MensajeChat
+import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
@@ -197,6 +198,7 @@ class RepositorioChat {
     fun enviarMensaje(
         chatId: String,
         texto: String,
+        alDenegar: () -> Unit = {},
         callback: (Boolean) -> Unit
     ) {
         val miUid = uid()
@@ -220,12 +222,15 @@ class RepositorioChat {
                     actualizarChatYNotificar(chatId, texto, miUid)
                     callback(true)
                 }
-                .addOnFailureListener { callback(false) }
+                .addOnFailureListener { e ->
+                    if (Moderacion.esPermisoDenegado(e)) alDenegar()
+                    callback(false)
+                }
         }
     }
 
     /** Envía una foto ya comprimida en JPEG ([com.example.zerohaus.Util.Imagenes]). */
-    fun enviarImagen(chatId: String, jpeg: ByteArray, caption: String = "", callback: (Boolean) -> Unit) {
+    fun enviarImagen(chatId: String, jpeg: ByteArray, caption: String = "", alDenegar: () -> Unit = {}, callback: (Boolean) -> Unit) {
         val miUid = uid()
         val ref = db.collection("chats").document(chatId).collection("mensajes").document()
         val storageRef = storage.reference.child("chats/$chatId/${ref.id}.jpg")
@@ -254,7 +259,10 @@ class RepositorioChat {
                             actualizarChatYNotificar(chatId, resumen, miUid)
                             callback(true)
                         }
-                        .addOnFailureListener { callback(false) }
+                        .addOnFailureListener { e ->
+                            if (Moderacion.esPermisoDenegado(e)) alDenegar()
+                            callback(false)
+                        }
                 }
             }
             .addOnFailureListener { callback(false) }
@@ -265,6 +273,7 @@ class RepositorioChat {
         uri: Uri,
         nombre: String,
         bytes: Long,
+        alDenegar: () -> Unit = {},
         callback: (Boolean) -> Unit
     ) {
         val miUid = uid()
@@ -299,7 +308,10 @@ class RepositorioChat {
                             actualizarChatYNotificar(chatId, "📎 $nombrePdf", miUid)
                             callback(true)
                         }
-                        .addOnFailureListener { callback(false) }
+                        .addOnFailureListener { e ->
+                            if (Moderacion.esPermisoDenegado(e)) alDenegar()
+                            callback(false)
+                        }
                 }
             }
             .addOnFailureListener { callback(false) }

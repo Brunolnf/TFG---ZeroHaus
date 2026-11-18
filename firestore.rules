@@ -397,7 +397,26 @@ service cloud.firestore {
           && d.get('fechaUltimoMensaje', 0) == 0
           && d.get('ultimoMensaje', '') == ''
           && d.get('escribieron', []) is list
-          && d.get('escribieron', []).size() == 0;
+          && d.get('escribieron', []).size() == 0
+          // Al final: solo con los participantes ya validados
+          && !hayBloqueo(d.participantes);
+    }
+    // Bloqueo en cualquier sentido entre los dos participantes de un chat
+    // (/bloqueos/{autor}_{bloqueado}). Se miran los dos ids posibles en vez de
+    // calcular «el otro», así da igual quién escriba. Son dos lecturas más
+    // (más la del chat en los mensajes): lejos del tope de 10 por petición.
+    function hayBloqueo(p) {
+      return p.size() >= 2
+          && (exists(/databases/$(database)/documents/bloqueos/$(p[0] + '_' + p[1]))
+              || exists(/databases/$(database)/documents/bloqueos/$(p[1] + '_' + p[0])));
+    }
+    // Con un bloqueo, en el chat solo se marca como leído lo propio: el último
+    // mensaje lo ve el otro en su lista de chats y sus no leídos son su aviso,
+    // así que por ahí se le seguiría escribiendo.
+    function soloMarcaLeidoPropio() {
+      let d = request.resource.data;
+      return d.diff(resource.data).affectedKeys().hasOnly(['noLeidosPor'])
+          && d.get('noLeidosPor', {}).diff(resource.data.get('noLeidosPor', {})).affectedKeys().hasOnly([uid()]);
     }
     // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
     // los no leídos. Antes un participante podía cambiar cualquier campo,
@@ -444,22 +463,96 @@ service cloud.firestore {
       allow create: if (logueado() && tamanoDocMaximo() && chatNuevoValido(chatId)) || esAdmin();
       allow update: if (logueado() && uid() in resource.data.participantes
                     && tamanoDocMaximo()
-                    && cambioDeChatValido())
+                    && cambioDeChatValido()
+                    && (soloMarcaLeidoPropio() || !hayBloqueo(resource.data.participantes)))
                     || esAdmin();
 
       match /mensajes/{mensajeId} {
         allow read: if (logueado() &&
           uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes)
           || esAdmin();
+        // Con un bloqueo en cualquier sentido nadie escribe (el administrador sí)
         allow create: if (logueado()
           && uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes
-          && mensajeValido(chatId))
+          && mensajeValido(chatId)
+          && !hayBloqueo(get(/databases/$(database)/documents/chats/$(chatId)).data.participantes))
           || esAdmin();
         // Sin edición: permitía cambiar emisorUid y atribuir el mensaje al otro
         // participante. El emisor puede borrarlo.
         allow update: if esAdmin();
         allow delete: if (logueado() && resource.data.emisorUid == uid()) || esAdmin();
       }
+    }
+
+    // Id «{uid}_…»: el documento sería de quien lee. Deja consultar si ya
+    // existe uno propio (la app lee su denuncia antes de crearla) sin desvelar
+    // los de otros: un id ajeno se deniega exista o no.
+    function idEmpiezaPorMiUid(id) {
+      return id.size() > uid().size() + 1 && id[0:uid().size() + 1] == uid() + '_';
+    }
+    function propioPorId(id) {
+      return logueado() && idEmpiezaPorMiUid(id) && (resource == null || resource.data.autor == uid());
+    }
+
+    // Bloqueos entre usuarios: cortan el chat en los dos sentidos (hayBloqueo).
+    // Las reseñas no: un profesional no debe silenciar una reseña legítima
+    // bloqueando a su autor (para eso está denunciar).
+    match /bloqueos/{bloqueoId} {
+      // Solo el autor (la app consulta where autor == uid) y el administrador:
+      // el bloqueado no sabe que le han bloqueado.
+      allow get: if propioPorId(bloqueoId) || esAdmin();
+      allow list: if (logueado() && resource.data.autor == uid()) || esAdmin();
+      allow create: if logueado()
+                    && tamanoDocMaximo()
+                    && request.resource.data.keys().hasOnly(['autor', 'bloqueado', 'fecha'])
+                    && request.resource.data.keys().hasAll(['autor', 'bloqueado', 'fecha'])
+                    && request.resource.data.autor == uid()
+                    && request.resource.data.bloqueado is string
+                    && request.resource.data.bloqueado.size() > 0
+                    && request.resource.data.bloqueado.size() <= 128
+                    && request.resource.data.bloqueado != uid()
+                    && bloqueoId == uid() + '_' + request.resource.data.bloqueado
+                    && fechaNoFutura(request.resource.data.fecha);
+      allow update: if esAdmin();
+      // Desbloquear: el autor; el bloqueado no puede quitárselo
+      allow delete: if propioPorId(bloqueoId) || esAdmin();
+    }
+
+    function camposDenuncia() {
+      return ['autor', 'objetivo', 'contexto', 'referencia', 'motivo', 'comentario', 'fecha'];
+    }
+    // Una por autor y objetivo gracias al id: como el autor no tiene update,
+    // un segundo set sobre el mismo id se deniega. `estado` y `evidencia` solo
+    // los pone el servidor (on_denuncia_creada) o el administrador.
+    function denunciaNuevaValida(denunciaId) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(camposDenuncia())
+          && d.keys().hasAll(['autor', 'objetivo', 'contexto', 'referencia', 'motivo', 'fecha'])
+          && d.autor == uid()
+          && d.objetivo is string
+          && d.objetivo.size() > 0
+          && d.objetivo.size() <= 128
+          && d.objetivo != uid()
+          && denunciaId == uid() + '_' + d.objetivo
+          && d.contexto in ['chat', 'perfil', 'resena']
+          // chatId, id del doc de /tecnicos o id de la reseña
+          && d.referencia is string
+          && d.referencia.size() > 0
+          && d.referencia.size() <= 300
+          && d.motivo in ['spam', 'acoso', 'fraude', 'inapropiado', 'suplantacion', 'otro']
+          && (!('comentario' in d.keys()) || (d.comentario is string && d.comentario.size() <= 1000))
+          && fechaNoFutura(d.fecha)
+          // Al final: solo con un objetivo ya validado se lee su perfil
+          && exists(/databases/$(database)/documents/usuarios/$(d.objetivo));
+    }
+
+    match /denuncias/{denunciaId} {
+      // El autor (para saber si ya denunció) y el administrador; el denunciado no
+      allow get: if propioPorId(denunciaId) || esAdmin();
+      allow list: if (logueado() && resource.data.autor == uid()) || esAdmin();
+      allow create: if logueado() && tamanoDocMaximo() && denunciaNuevaValida(denunciaId);
+      // El administrador añade `estado` ('revisada' | 'descartada') al gestionarla
+      allow update, delete: if esAdmin();
     }
 
     // Ajustes propios (idioma, tema, token de notificaciones) también antes de

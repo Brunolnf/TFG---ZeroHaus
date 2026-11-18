@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import com.example.zerohaus.Modelos.AjustesUsuario
+import com.example.zerohaus.Modelos.Moderacion
+import com.example.zerohaus.Modelos.UsuarioBloqueado
+import com.example.zerohaus.Repositorios.RepositorioModeracion
 import com.example.zerohaus.Modelos.esVerificado
 import com.example.zerohaus.Repositorios.RepositorioTecnicos
 import com.example.zerohaus.Repositorios.RepositorioAjustes
@@ -27,7 +30,9 @@ data class AjustesEstado(
     /** Cuenta ya borrada pero con la suscripción por cancelar a mano en Play; sobrevive a la recreación. */
     val avisoCancelarEnPlay: Boolean = false,
     val mensajeToast: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Usuarios que he bloqueado (con nombre si se ha podido resolver). */
+    val bloqueados: List<UsuarioBloqueado> = emptyList()
 )
 
 /**
@@ -38,10 +43,38 @@ class AjustesViewModel : ViewModel() {
         private set
     private val repo = RepositorioAjustes()
     private val repoAuth = RepositorioAutenticacion()
+    private val repoModeracion = RepositorioModeracion()
+    private val nombresBloqueados = mutableMapOf<String, String>()
+    private val listenerBloqueos = repoModeracion.escucharMisBloqueos { uids -> actualizarBloqueados(uids) }
 
     init {
         cargarAjustes()
         cargarPlan()
+    }
+
+    private fun actualizarBloqueados(uids: Set<String>) {
+        estado = estado.copy(bloqueados = Moderacion.combinarBloqueados(uids, nombresBloqueados))
+        val faltan = uids.filter { it !in nombresBloqueados }.toSet()
+        if (faltan.isEmpty()) return
+        repoModeracion.resolverNombres(faltan) { nombres ->
+            nombresBloqueados.putAll(nombres)
+            // Los uids actuales, no los de la consulta: el usuario pudo desbloquear mientras tanto
+            val actuales = estado.bloqueados.map { it.uid }.toSet()
+            estado = estado.copy(bloqueados = Moderacion.combinarBloqueados(actuales, nombresBloqueados))
+        }
+    }
+
+    fun desbloquear(uid: String) {
+        repoModeracion.desbloquear(uid) { ok ->
+            val c = getCadenas(AppEstado.idioma)
+            estado = if (ok) estado.copy(mensajeToast = c.modDesbloqueado, error = null)
+                     else estado.copy(error = c.modErrorBloqueo, mensajeToast = null)
+        }
+    }
+
+    override fun onCleared() {
+        listenerBloqueos.remove()
+        super.onCleared()
     }
 
     private fun cargarPlan() {
