@@ -31,6 +31,14 @@
         { "fieldPath": "emisorUid", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "pagos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "liberarEn", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
