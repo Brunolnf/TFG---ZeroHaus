@@ -19,7 +19,13 @@ Después, las funciones (main.py las importa para que Firebase las encuentre):
                  pagos_reintentar, pagos_cancelar, pagos_terminar,
                  pagos_confirmar, pagos_disputar y pagos_resolver (admin).
   HTTP           stripe_webhook: eventos de Stripe con la firma verificada.
-  Programada     pagos_liberar_vencidos: cada hora, libera los plazos vencidos.
+  Programada     pagos_liberar_vencidos: cada hora, libera los plazos vencidos
+                 y avisa de los pagos retenidos sin avance.
+
+Lo que necesita al administrador (reembolso fallido, transferencia revertida,
+cobro sin pago, contracargo, liberación que falla, pago retenido sin avance) se
+le avisa por correo una sola vez (/avisos_admin_pagos) y, si el pago queda
+atascado, se marca con requiereAdmin.
 
 Secretos (Secret Manager), solo de modo test:
   firebase functions:secrets:set STRIPE_SECRET_KEY              (sk_test_…)
@@ -30,10 +36,10 @@ Todo el dinero va en céntimos (int) y en euros: con float, 5000 céntimos al
 1,13 % dan 56,4999… en vez de 56,5 y se pierde el céntimo del redondeo.
 """
 import copy
-import hashlib
 import json
 import math
 import re
+import secrets
 import threading
 import time
 from dataclasses import dataclass
@@ -101,6 +107,8 @@ CODIGOS_ERROR = frozenset({
     "no_es_profesional", "chat_no_valido", "bloqueo", "cuenta_no_activa", "limite_solicitudes",
     "sin_cuenta", "pago_no_encontrado", "cobro_no_valido", "cobro_en_curso", "operacion_en_curso",
     "decision_no_valida", "version_no_valida", "stripe_no_configurado",
+    # Revisión del bloque E
+    "reembolso_fallido", "transferencia_revertida", "cuenta_en_borrado", "admin_es_parte", "plazo_vencido",
 })
 
 
@@ -490,10 +498,16 @@ def nuevo_pago(*, pago_id: str, cliente: str, profesional: str, chat_id: str, de
 REGION = "europe-west1"            # la de main.py (lo comprueba un test)
 MAX_INSTANCIAS_PAGOS = 3           # pocas: cada llamada puede mover dinero
 MAX_INSTANCIAS_WEBHOOK = 5
+# Varias llamadas a Stripe de hasta STRIPE_TIMEOUT_S cada una: con los 60 s por
+# defecto, una función podía cortarse entre mover el dinero y guardarlo
+TIMEOUT_FUNCIONES_S = 120
 
 STRIPE_SECRET_KEY = SecretParam("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = SecretParam("STRIPE_WEBHOOK_SECRET")
 STRIPE_WEBHOOK_SECRET_CONNECT = SecretParam("STRIPE_WEBHOOK_SECRET_CONNECT")
+# Los del correo los declara main.py (un SecretParam no se puede declarar dos
+# veces): aquí se nombran para las funciones que avisan al administrador
+_SECRETOS_CORREO = ["SMTP_USUARIO", "SMTP_CLAVE"]
 
 # Versión de la API fijada (la de stripe==16.1.0). Sin fijarla, las llamadas
 # irían con la de la cuenta, que cambia si alguien la actualiza en el panel, y
@@ -504,6 +518,10 @@ stripe.api_version = STRIPE_API_VERSION
 # Todo lo que crea algo en Stripe lleva clave de idempotencia: repetir la
 # petición tras un corte de red no lo duplica
 stripe.max_network_retries = 2
+# 20 s por petición como mucho (el SDK espera 80): con los reintentos, una
+# petición que no responde no se come la función entera
+STRIPE_TIMEOUT_S = 20
+stripe.default_http_client = stripe.RequestsClient(timeout=STRIPE_TIMEOUT_S)
 
 # Solo modo test (decisión del plan): una clave que no sea de test se rechaza
 # antes de llamar a Stripe. Si se despliega por error con una clave live, no se
@@ -517,19 +535,44 @@ URL_RETORNO_STRIPE = "https://zerohaus-2a865.web.app/stripe/retorno"
 
 TIPOS_PROFESIONAL = ("Técnico", "Empresa")      # /usuarios.tipoUsuario
 PAGOS_SOLICITUDES_MAX_DIA = 10                  # por profesional: frena el spam de solicitudes
+# Cupos diarios por usuario en /limites_pagos/{uid}: frenan a quien repite una
+# llamada en bucle (cada una crea algo en Stripe o le pregunta)
+CUPOS_DIA = {
+    "solicitudes": PAGOS_SOLICITUDES_MAX_DIA,   # pagos_solicitar
+    "cobros": 30,                               # pagos_aceptar y pagos_reintentar
+    "estadoCuenta": 60,                         # stripe_estado_cuenta
+    "enlaceCuenta": 20,                         # stripe_crear_enlace_cuenta
+}
 # Con el dinero en camino o retenido: con uno de estos, la cuenta no se borra
 ESTADOS_CON_DINERO = frozenset({"pendiente_pago", "retenido", "terminado", "en_disputa"})
+# El cobro ya está contabilizado (se aplicó cobro_ok): otro aviso de cobro hecho no es dinero nuevo
+_ESTADOS_COBRADOS = frozenset({"retenido", "terminado", "en_disputa", "liberado", "reembolsado", "contracargo"})
 # Estados del PaymentIntent en los que el cliente todavía puede pagarlo
 _COBRO_PAGABLE = frozenset({"requires_payment_method", "requires_confirmation", "requires_action"})
+# Reembolsos que mueven, o pueden estar moviendo, el dinero
+_REEMBOLSO_VIVO = frozenset({"pending", "requires_action", "succeeded"})
 
 LIBERAR_LOTE = 20                 # pagos por consulta de la tarea programada
 LIBERAR_MAX_EJECUCION = 100       # y como mucho por ejecución (cada hora)
+# Espera de la liberación programada de un pago tras cada fallo: 1 h, 2 h, 4 h,
+# 8 h. Al quinto fallo pasa al administrador y no se vuelve a intentar sola
+LIBERAR_ESPERA_MS = 60 * 60 * 1000
+LIBERAR_FALLOS_MAX = 5
+# No son fallos de la liberación: otra llamada a la vez o un cambio de estado
+_NO_ES_FALLO_DE_LIBERACION = frozenset({"operacion_en_curso", "transicion_no_permitida", "plazo_no_vencido"})
+# Un pago retenido tanto tiempo sin terminarse ni disputarse necesita a alguien:
+# la tabla no le da salida sola (sin trabajo terminado no se libera el dinero)
+RETENIDO_MAX_MS = 45 * 24 * 60 * 60 * 1000
+RETENIDOS_LOTE = 50
+RETENIDOS_MAX_REVISION = 500
 # Una transferencia o un reembolso a medias se da por abandonado pasado este
 # tiempo: una llamada a Stripe tarda segundos y la función se corta a los 9 min
 OPERACION_CADUCA_MS = 15 * 60 * 1000
 
 _VERSION_STRIPE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}(\.[a-z]+)?")
-_SEUDONIMO = re.compile(r"[0-9a-f]{64}")
+# Seudónimo de una cuenta borrada (seudonimizar_pagos)
+_SEUDONIMO = re.compile(r"borrado_[0-9a-f]{32}")
+_INTENTO = re.compile(r"[0-9]{1,4}")
 # Un Long de Kotlin llega así por el SDK de Firebase Functions (protobuf en JSON)
 _TIPO_INT64 = "type.googleapis.com/google.protobuf.Int64Value"
 _INT64 = re.compile(r"-?[0-9]{1,19}")
@@ -562,7 +605,8 @@ _AYUDAS: dict = {}
 
 
 def configurar(**ayudas) -> None:
-    """exigir_email_verificado, verificar_admin, preferencias, crear_notificacion y enviar_push."""
+    """exigir_email_verificado, verificar_admin, preferencias, crear_notificacion,
+    enviar_push y avisar_admin (correo al buzón de ZeroHaus)."""
     _AYUDAS.update(ayudas)
 
 
@@ -570,6 +614,34 @@ def _ayuda(nombre: str):
     if nombre not in _AYUDAS:
         raise RuntimeError(f"pagos.configurar() no ha recibido «{nombre}»")
     return _AYUDAS[nombre]
+
+
+def _avisar_admin(db, clave: str, asunto: str, texto: str) -> bool:
+    """Aviso al administrador, una sola vez por `clave`: queda en
+    /avisos_admin_pagos/{clave} (solo servidor) y sale un correo al buzón de
+    ZeroHaus. True si es nuevo. Nunca hace fallar la operación: lo que se
+    avisa ya ha pasado."""
+    print(f"[PAGOS] AVISO AL ADMINISTRADOR: {asunto}. {texto}")
+    try:
+        ref = db.collection("avisos_admin_pagos").document(clave)
+
+        @firestore.transactional
+        def _apuntar(txn):
+            if ref.get(transaction=txn).exists:
+                return False
+            txn.set(ref, {"asunto": asunto, "texto": texto, "fecha": _ahora_ms()})
+            return True
+
+        if not _apuntar(db.transaction()):
+            return False
+    except Exception as e:
+        print(f"[PAGOS] No se pudo apuntar el aviso {clave}: {e}")
+        return False
+    try:
+        _ayuda("avisar_admin")(db, asunto, texto)
+    except Exception as e:
+        print(f"[PAGOS] No se pudo enviar el correo del aviso {clave}: {e}")
+    return True
 
 
 # ── Stripe ──
@@ -591,7 +663,7 @@ def _a_dict(objeto) -> dict:
 class _StripeAPI:
     """Lo único que se llama de Stripe, con dicts de entrada y salida. Las claves
     de idempotencia las pone quien llama: son parte de la lógica (una por
-    movimiento de dinero, no por intento). Los tests lo cambian por uno simulado."""
+    movimiento de dinero e intento). Los tests lo cambian por uno simulado."""
 
     def crear_cuenta(self, uid: str, clave: str) -> dict:
         return _a_dict(stripe.Account.create(
@@ -613,6 +685,14 @@ class _StripeAPI:
     def crear_cliente(self, uid: str, clave: str) -> dict:
         return _a_dict(stripe.Customer.create(metadata={"uid": uid}, idempotency_key=clave))
 
+    def borrar_cliente(self, customer_id: str) -> None:
+        """Borra el Customer y sus métodos de pago guardados. Repetirlo no falla."""
+        try:
+            stripe.Customer.delete(customer_id)
+        except stripe.InvalidRequestError as e:
+            if getattr(e, "code", None) != "resource_missing":
+                raise
+
     def crear_clave_efimera(self, customer_id: str, version: str) -> str:
         return _a_dict(stripe.EphemeralKey.create(customer=customer_id, stripe_version=version))["secret"]
 
@@ -629,32 +709,25 @@ class _StripeAPI:
     def cancelar_cobro(self, cobro_id: str, clave: str) -> dict:
         return _a_dict(stripe.PaymentIntent.cancel(cobro_id, idempotency_key=clave))
 
-    def buscar_transferencia(self, pago_id: str) -> Optional[dict]:
-        for t in stripe.Transfer.list(transfer_group=pago_id, limit=10).data:
-            t = _a_dict(t)
-            if not t.get("reversed"):
-                return t
-        return None
+    def buscar_transferencias(self, pago_id: str) -> list:
+        """Todas, también las revertidas: deciden el intento siguiente."""
+        return [_a_dict(t) for t in stripe.Transfer.list(transfer_group=pago_id, limit=100).data]
 
-    def crear_transferencia(self, pago: dict, account_id: str, cargo_id: str, clave: str) -> dict:
+    def crear_transferencia(self, pago: dict, account_id: str, cargo_id: str, clave: str, intento: int) -> dict:
         return _a_dict(stripe.Transfer.create(
             amount=pago["netoCent"], currency=MONEDA, destination=account_id,
             # Con el cargo de este pago: Stripe no la cubre con saldo de otros cobros
             source_transaction=cargo_id, transfer_group=pago["id"],
-            metadata={"pagoId": pago["id"]}, idempotency_key=clave,
+            metadata={"pagoId": pago["id"], "intento": str(intento)}, idempotency_key=clave,
         ))
 
-    def buscar_reembolso(self, cobro_id: str) -> Optional[dict]:
-        for r in stripe.Refund.list(payment_intent=cobro_id, limit=10).data:
-            r = _a_dict(r)
-            if r.get("status") in ("pending", "requires_action", "succeeded"):
-                return r
-        return None
+    def buscar_reembolsos(self, cobro_id: str) -> list:
+        """Todos, también los fallidos: deciden el intento siguiente."""
+        return [_a_dict(r) for r in stripe.Refund.list(payment_intent=cobro_id, limit=100).data]
 
-    def crear_reembolso(self, pago: dict, clave: str) -> dict:
+    def crear_reembolso(self, cobro_id: str, importe: int, clave: str, metadata: dict) -> dict:
         return _a_dict(stripe.Refund.create(
-            payment_intent=pago["stripePaymentIntentId"], amount=pago["importeCent"],
-            metadata={"pagoId": pago["id"]}, idempotency_key=clave,
+            payment_intent=cobro_id, amount=importe, metadata=metadata, idempotency_key=clave,
         ))
 
 
@@ -692,6 +765,20 @@ def datos_cuenta_stripe(cuenta: dict) -> dict:
     }
 
 
+def _intento(objeto: dict) -> int:
+    """Intento con el que se creó una transferencia o un reembolso (metadata.intento)."""
+    valor = str((objeto.get("metadata") or {}).get("intento") or "1")
+    return int(valor) if _INTENTO.fullmatch(valor) else 1
+
+
+def _transferencia_viva(t: dict) -> bool:
+    return t.get("reversed") is not True and not int(t.get("amount_reversed") or 0)
+
+
+def _revertida_en_parte(t: dict) -> bool:
+    return t.get("reversed") is not True and int(t.get("amount_reversed") or 0) > 0
+
+
 # ── Lecturas y comprobaciones ──
 
 def _datos(db, coleccion: str, doc_id: str) -> dict:
@@ -716,6 +803,15 @@ def _leer_pago(db, pago_id) -> dict:
 def _exigir_profesional(db, uid: str) -> None:
     if _datos(db, "usuarios", uid).get("tipoUsuario") not in TIPOS_PROFESIONAL:
         raise ErrorPago("no_es_profesional")
+
+
+def _comprobar_no_borrando(db, *uids, txn=None) -> None:
+    """Ninguna de las cuentas se está borrando (/usuarios/{uid}.borrando, que
+    el borrado pone antes de mirar si quedan pagos en curso)."""
+    for uid in uids:
+        snap = db.collection("usuarios").document(uid).get(transaction=txn)
+        if snap.exists and (snap.to_dict() or {}).get("borrando") is True:
+            raise ErrorPago("cuenta_en_borrado")
 
 
 def _hay_bloqueo(db, a: str, b: str) -> bool:
@@ -770,15 +866,50 @@ def _cargo_cobrado(api, pago: dict) -> str:
     return cargo
 
 
+def _consumir_cupo(db, uid: str, campo: str) -> None:
+    """Gasta una llamada del cupo diario de `campo` en /limites_pagos/{uid}."""
+    ref = db.collection("limites_pagos").document(uid)
+    hoy = _hoy_utc()
+
+    @firestore.transactional
+    def _consumir(txn):
+        snap = ref.get(transaction=txn)
+        contadores = _contadores_de_hoy((snap.to_dict() or {}) if snap.exists else {}, hoy)
+        if contadores.get(campo, 0) >= CUPOS_DIA[campo]:
+            raise ErrorPago("limite_solicitudes", campo)
+        contadores[campo] = contadores.get(campo, 0) + 1
+        txn.set(ref, {"uid": uid, "dia": hoy, **contadores})
+
+    _consumir(db.transaction())
+
+
+def _contadores_de_hoy(datos: dict, hoy: str) -> dict:
+    """Contadores de /limites_pagos del día; los de otro día ya no cuentan."""
+    if datos.get("dia") != hoy:
+        return {}
+    return {campo: int(datos.get(campo) or 0) for campo in CUPOS_DIA if campo in datos}
+
+
 # ── Cambios de estado ──
 # Cada cambio va en una transacción que relee el pago y escribe solo lo que
 # devuelve aplicar_transicion. Las llamadas a Stripe, fuera de la transacción.
 
+def _sin_aviso_admin(pago: dict) -> dict:
+    """Un pago que cambia de estado ya no está atascado: deja de requerir al administrador."""
+    pago.pop("requiereAdmin", None)
+    return pago
+
+
 def _transicion(db, pago_id: str, evento: str, actor: str, uid_actor, *, motivo=None,
-                cambios: Optional[dict] = None, operacion: Optional[tuple] = None) -> dict:
-    """Aplica `evento` y avisa a la otra parte. Con `operacion` (nombre,
-    renovado visto) comprueba además que no haya empezado otra operación con
-    dinero desde que se miró, y borra la caducada."""
+                cambios: Optional[dict] = None, operacion: Optional[tuple] = None,
+                sin_borrado: tuple = (), precondicion: Optional[Callable] = None) -> dict:
+    """Aplica `evento` y avisa a la otra parte. Dentro de la transacción, y
+    además de la tabla, comprueba:
+      operacion     (nombre, reserva vista): que no haya empezado otra operación
+                    con dinero desde que se miró (y borra la caducada);
+      sin_borrado   cuentas que no pueden estar borrándose;
+      precondicion  (pago, ahora): otra condición del flujo.
+    """
     ref = db.collection("pagos").document(pago_id)
     op_ref = db.collection("operaciones_pagos").document(pago_id)
     ahora = _ahora_ms()
@@ -787,12 +918,16 @@ def _transicion(db, pago_id: str, evento: str, actor: str, uid_actor, *, motivo=
     def _aplicar(txn):
         snap = ref.get(transaction=txn)
         op_snap = op_ref.get(transaction=txn) if operacion else None
+        _comprobar_no_borrando(db, *sin_borrado, txn=txn)
         if not snap.exists:
             raise ErrorPago("pago_no_encontrado")
+        pago = snap.to_dict()
         op = op_snap.to_dict() if op_snap is not None and op_snap.exists else None
         if operacion and _operacion_cambiada(op, *operacion):
             raise ErrorPago("operacion_en_curso")
-        nuevo = aplicar_transicion(snap.to_dict(), evento, actor, uid_actor, ahora, motivo=motivo)
+        if precondicion:
+            precondicion(pago, ahora)
+        nuevo = _sin_aviso_admin(aplicar_transicion(pago, evento, actor, uid_actor, ahora, motivo=motivo))
         nuevo.update(cambios or {})
         txn.set(ref, nuevo)
         if op is not None:
@@ -804,46 +939,51 @@ def _transicion(db, pago_id: str, evento: str, actor: str, uid_actor, *, motivo=
     return nuevo
 
 
+def _dinero_movido(api, pago: dict, operacion: str) -> bool:
+    """Si en Stripe hay una transferencia (no revertida del todo) o un reembolso
+    hecho o en curso de este pago: entonces el dinero se ha movido, o puede estar moviéndose."""
+    if operacion == "transferencia":
+        return any(t.get("reversed") is not True for t in api.buscar_transferencias(pago["id"]))
+    cobro_id = pago.get("stripePaymentIntentId") or ""
+    return bool(cobro_id) and any(r.get("status") in _REEMBOLSO_VIVO for r in api.buscar_reembolsos(cobro_id))
+
+
 def _comprobar_operacion(db, pago: dict, operacion: str, api=None):
     """Antes de transferir, reembolsar o disputar: que no haya otra operación
-    con dinero en marcha sobre el pago (/operaciones_pagos/{id}). Devuelve el
-    `renovado` de la que había, o None, para que la transacción compruebe que
-    no ha cambiado.
+    con dinero en marcha sobre el pago (/operaciones_pagos/{id}). Devuelve lo
+    que se ha visto de ella, (renovado, reserva) o None, para que la
+    transacción compruebe que no ha cambiado.
 
-    Sin esto, un cliente que disputa mientras la tarea programada transfiere
-    dejaría el pago en disputa con el dinero ya en manos del profesional. Una
-    operación distinta y reciente lo impide; una caducada solo se sustituye si
-    en Stripe no llegó a moverse el dinero.
+    Sin esto, un cliente que disputa mientras se transfiere dejaría el pago en
+    disputa con el dinero ya en manos del profesional. Una operación distinta y
+    reciente lo impide; una caducada (o soltada tras un fallo) solo se sustituye
+    si en Stripe no se ha movido el dinero.
     """
     op = _datos(db, "operaciones_pagos", pago["id"])
-    if not op or op.get("operacion") == operacion:
-        return op.get("renovado") if op else None
-    if _ahora_ms() - int(op.get("renovado") or 0) < OPERACION_CADUCA_MS:
-        raise ErrorPago("operacion_en_curso", str(op.get("operacion")))
-    api = api or _stripe()
-    if op.get("operacion") == "transferencia":
-        movido = api.buscar_transferencia(pago["id"])
-    else:
-        movido = api.buscar_reembolso(pago.get("stripePaymentIntentId") or "")
-    if movido:
-        raise ErrorPago("operacion_en_curso", f"{op.get('operacion')} ya hecha en Stripe")
-    return op.get("renovado")
+    if op and op.get("operacion") != operacion:
+        if _ahora_ms() - int(op.get("renovado") or 0) < OPERACION_CADUCA_MS:
+            raise ErrorPago("operacion_en_curso", str(op.get("operacion")))
+        if _dinero_movido(api or _stripe(), pago, op.get("operacion")):
+            raise ErrorPago("operacion_en_curso", f"{op.get('operacion')} hecha o en curso en Stripe")
+    return (op.get("renovado"), op.get("reserva")) if op else None
 
 
 def _operacion_cambiada(op: Optional[dict], operacion: str, visto) -> bool:
     """True si, desde _comprobar_operacion, ha empezado o se ha renovado otra operación."""
     if not op or op.get("operacion") == operacion:
         return False
-    return op.get("renovado") != visto
+    return (op.get("renovado"), op.get("reserva")) != visto
 
 
-def _reservar_operacion(db, pago_id: str, evento: str, actor: str, uid_actor, operacion: str, visto) -> None:
+def _reservar_operacion(db, pago_id: str, evento: str, actor: str, uid_actor, operacion: str, visto) -> str:
     """Apunta que va a moverse dinero, en la misma transacción que comprueba que
     la transición sigue siendo válida. `renovado` cambia siempre: una disputa
-    que vio la reserva anterior caducada ya no puede seguir."""
+    que vio la reserva anterior caducada ya no puede seguir. Devuelve el
+    identificador de esta reserva (para soltarla solo si sigue siendo la suya)."""
     ref = db.collection("pagos").document(pago_id)
     op_ref = db.collection("operaciones_pagos").document(pago_id)
     ahora = _ahora_ms()
+    reserva = secrets.token_hex(8)
 
     @firestore.transactional
     def _reservar(txn):
@@ -857,11 +997,101 @@ def _reservar_operacion(db, pago_id: str, evento: str, actor: str, uid_actor, op
             raise ErrorPago("operacion_en_curso")
         misma = op is not None and op.get("operacion") == operacion
         txn.set(op_ref, {
-            "pagoId": pago_id, "operacion": operacion, "evento": evento,
+            "pagoId": pago_id, "operacion": operacion, "evento": evento, "reserva": reserva,
             "creado": op.get("creado", ahora) if misma else ahora, "renovado": ahora,
+            # Sigue con la misma operación: la clave de un movimiento fallido no se repite
+            "intento": int(op.get("intento") or 1) if misma else 1,
         })
 
     _reservar(db.transaction())
+    return reserva
+
+
+def _soltar_reserva(db, api, pago: dict, operacion: str, reserva: str) -> None:
+    """Tras un fallo: si en Stripe no se ha movido el dinero, la reserva se da
+    por caducada ya (renovado 0), para no bloquear 15 minutos una disputa o la
+    operación contraria. Si no se puede saber (Stripe no responde), se queda
+    hasta que caduque. El documento sigue, con su intento."""
+    try:
+        if _dinero_movido(api, pago, operacion):
+            return
+        op_ref = db.collection("operaciones_pagos").document(pago["id"])
+
+        @firestore.transactional
+        def _soltar(txn):
+            op = op_ref.get(transaction=txn)
+            if op.exists and (op.to_dict() or {}).get("reserva") == reserva:
+                txn.update(op_ref, {"renovado": 0})
+
+        _soltar(db.transaction())
+    except Exception as e:
+        print(f"[PAGOS] La reserva del pago {pago['id']} se queda hasta que caduque: {e}")
+
+
+def _fallo_al_mover(db, pago_id: str, objeto: dict, intento: int, codigo: str, asunto: str):
+    """Un reembolso fallido o una transferencia revertida: la operación es un
+    error. Se apunta el intento siguiente (otra clave de idempotencia: con la
+    misma, Stripe devolvería lo mismo) y se avisa al administrador."""
+    db.collection("operaciones_pagos").document(pago_id).set({"intento": intento + 1}, merge=True)
+    _avisar_admin(db, f"{pago_id}_{codigo}_{objeto.get('id')}", asunto,
+                  f"Pago {pago_id}: {objeto.get('id')} ({objeto.get('status') or 'revertida'}). "
+                  f"Se puede reintentar; el siguiente intento es el {intento + 1}.")
+    raise ErrorPago(codigo, str(objeto.get("id")))
+
+
+def _siguiente_intento(db, pago_id: str, fallidos: list, codigo: str, asunto: str) -> int:
+    """Intento con el que crear el movimiento. Si lo último que hay en Stripe es
+    un fallo que todavía no se había visto, esta llamada falla (y avisa); la
+    siguiente lo vuelve a crear con el intento apuntado."""
+    intento = int(_datos(db, "operaciones_pagos", pago_id).get("intento") or 1)
+    ultimo = max(fallidos, key=_intento, default=None)
+    if ultimo is not None and intento <= _intento(ultimo):
+        _fallo_al_mover(db, pago_id, ultimo, _intento(ultimo), codigo, asunto)
+    return intento
+
+
+def _transferir(db, api, pago: dict, account_id: str) -> str:
+    """Id de la transferencia del pago: la que ya hay o una nueva. Una revertida
+    no cuenta como hecha: el profesional no tiene el dinero."""
+    hechas = api.buscar_transferencias(pago["id"])
+    viva = next((t for t in hechas if _transferencia_viva(t)), None)
+    if viva:
+        return viva["id"]
+    en_parte = next((t for t in hechas if _revertida_en_parte(t)), None)
+    if en_parte:
+        # Repetirla pagaría de más: lo decide el administrador
+        _avisar_admin(db, f"{pago['id']}_transferencia_revertida_{en_parte['id']}", "Transferencia revertida en parte",
+                      f"Pago {pago['id']}: la transferencia {en_parte['id']} está revertida en parte. "
+                      "No se repite sola: revisarla en Stripe.")
+        raise ErrorPago("transferencia_revertida", en_parte["id"])
+    intento = _siguiente_intento(db, pago["id"], hechas, "transferencia_revertida", "Transferencia revertida")
+    creada = api.crear_transferencia(pago, account_id, _cargo_cobrado(api, pago),
+                                     f"{pago['id']}:transferencia:{intento}", intento)
+    # Con una clave repetida, Stripe devuelve lo que creó entonces: también se mira
+    if not _transferencia_viva(creada):
+        _fallo_al_mover(db, pago["id"], creada, intento, "transferencia_revertida", "Transferencia revertida")
+    return creada["id"]
+
+
+def _reembolsar(db, api, pago: dict) -> str:
+    """Id del reembolso completo del pago: el que ya hay o uno nuevo. Uno
+    pendiente está en curso, no hecho; uno fallido o cancelado no cuenta."""
+    cobro_id = pago["stripePaymentIntentId"]
+    hechos = api.buscar_reembolsos(cobro_id)
+    hecho = next((r for r in hechos if r.get("status") == "succeeded"), None)
+    if hecho:
+        return hecho["id"]
+    if any(r.get("status") in _REEMBOLSO_VIVO for r in hechos):
+        raise ErrorPago("operacion_en_curso", "reembolso pendiente en Stripe")
+    intento = _siguiente_intento(db, pago["id"], hechos, "reembolso_fallido", "Reembolso fallido")
+    _cargo_cobrado(api, pago)
+    creado = api.crear_reembolso(cobro_id, pago["importeCent"], f"{pago['id']}:reembolso:{intento}",
+                                 {"pagoId": pago["id"], "intento": str(intento)})
+    if creado.get("status") == "succeeded":
+        return creado["id"]
+    if creado.get("status") in _REEMBOLSO_VIVO:
+        raise ErrorPago("operacion_en_curso", "reembolso pendiente en Stripe")
+    _fallo_al_mover(db, pago["id"], creado, intento, "reembolso_fallido", "Reembolso fallido")
 
 
 def _cerrar_operacion(db, pago_id: str, evento: str, actor: str, uid_actor, campo: str, id_stripe: str) -> dict:
@@ -879,7 +1109,7 @@ def _cerrar_operacion(db, pago_id: str, evento: str, actor: str, uid_actor, camp
     def _cerrar(txn):
         pago = ref.get(transaction=txn).to_dict()
         try:
-            nuevo = aplicar_transicion(pago, evento, actor, uid_actor, ahora)
+            nuevo = _sin_aviso_admin(aplicar_transicion(pago, evento, actor, uid_actor, ahora))
         except ErrorPago as e:
             if pago.get(campo) == id_stripe:
                 return pago, "ya_cerrado"
@@ -908,9 +1138,11 @@ def _mover_dinero(db, pago_id: str, evento: str, actor: str, uid_actor, operacio
     sin poder duplicar el dinero aunque se repita o falle a medias:
       1. comprueba la transición y reserva la operación en una transacción;
       2. en Stripe, busca si ya se hizo y, si no, la hace con una clave de
-         idempotencia fija por pago (confirmar y vencer el plazo dan la misma);
+         idempotencia por pago e intento (confirmar y vencer el plazo dan la
+         misma); lo revertido o fallido no cuenta como hecho;
       3. aplica la transición y guarda el id de Stripe en otra transacción.
-    Repetirlo tras un fallo encuentra la reserva y el movimiento ya hechos.
+    Repetirlo tras un fallo encuentra la reserva y el movimiento ya hechos. Si
+    falla sin mover el dinero, la reserva se suelta enseguida.
     """
     pago = _leer_pago(db, pago_id)
     aplicar_transicion(pago, evento, actor, uid_actor, _ahora_ms())     # antes de tocar Stripe
@@ -923,24 +1155,23 @@ def _mover_dinero(db, pago_id: str, evento: str, actor: str, uid_actor, operacio
             raise ErrorPago("cuenta_no_activa", "el profesional no tiene cuenta de Stripe")
     api = _stripe()
     visto = _comprobar_operacion(db, pago, operacion, api)
-    _reservar_operacion(db, pago_id, evento, actor, uid_actor, operacion, visto)
-    if operacion == "transferencia":
-        hecha = api.buscar_transferencia(pago_id)
-        if hecha is None:
-            hecha = api.crear_transferencia(pago, account_id, _cargo_cobrado(api, pago),
-                                            f"{pago_id}:transferencia:1")
-        return _cerrar_operacion(db, pago_id, evento, actor, uid_actor, "stripeTransferId", hecha["id"])
-    hecho = api.buscar_reembolso(pago["stripePaymentIntentId"])
-    if hecho is None:
-        _cargo_cobrado(api, pago)
-        hecho = api.crear_reembolso(pago, f"{pago_id}:reembolso:1")
-    return _cerrar_operacion(db, pago_id, evento, actor, uid_actor, "stripeRefundId", hecho["id"])
+    reserva = _reservar_operacion(db, pago_id, evento, actor, uid_actor, operacion, visto)
+    try:
+        if operacion == "transferencia":
+            campo, id_stripe = "stripeTransferId", _transferir(db, api, pago, account_id)
+        else:
+            campo, id_stripe = "stripeRefundId", _reembolsar(db, api, pago)
+    except Exception:
+        _soltar_reserva(db, api, pago, operacion, reserva)
+        raise
+    return _cerrar_operacion(db, pago_id, evento, actor, uid_actor, campo, id_stripe)
 
 
 # ── T-E3: alta del profesional en Connect ──
 
 def _crear_enlace_cuenta(db, uid: str, datos: dict) -> dict:
     _exigir_profesional(db, uid)
+    _consumir_cupo(db, uid, "enlaceCuenta")
     account_id = _datos(db, "cuentas_stripe", uid).get("accountId")
     api = _stripe()
     if not account_id:
@@ -971,6 +1202,7 @@ def _guardar_cuenta_nueva(db, uid: str, account_id: str) -> str:
 
 
 def _estado_cuenta(db, uid: str, datos: dict) -> dict:
+    _consumir_cupo(db, uid, "estadoCuenta")
     account_id = _datos(db, "cuentas_stripe", uid).get("accountId")
     if not account_id:
         raise ErrorPago("sin_cuenta")
@@ -1006,11 +1238,13 @@ def _solicitar(db, uid: str, datos: dict) -> dict:
     @firestore.transactional
     def _crear(txn):
         snap = limite_ref.get(transaction=txn)
-        d = (snap.to_dict() or {}) if snap.exists else {}
-        usadas = int(d.get("solicitudes") or 0) if d.get("dia") == hoy else 0
-        if usadas >= PAGOS_SOLICITUDES_MAX_DIA:
+        # Si una de las dos cuentas se está borrando, el pago se quedaría sin parte
+        _comprobar_no_borrando(db, uid, cliente, txn=txn)
+        contadores = _contadores_de_hoy((snap.to_dict() or {}) if snap.exists else {}, hoy)
+        if contadores.get("solicitudes", 0) >= CUPOS_DIA["solicitudes"]:
             raise ErrorPago("limite_solicitudes")
-        txn.set(limite_ref, {"uid": uid, "dia": hoy, "solicitudes": usadas + 1})
+        contadores["solicitudes"] = contadores.get("solicitudes", 0) + 1
+        txn.set(limite_ref, {"uid": uid, "dia": hoy, **contadores})
         txn.set(ref, pago)
 
     _crear(db.transaction())
@@ -1044,16 +1278,18 @@ def _cobro_para(api, pago: dict, customer_id: str) -> tuple:
     return api.crear_cobro(pago, customer_id, f"{pago['id']}:cobro:{intento}"), True
 
 
-def _guardar_cobro(db, api, pago_id: str, evento: str, uid: str, cobro_id: str, recien_creado: bool) -> None:
+def _guardar_cobro(db, api, pago: dict, evento: str, uid: str, cobro_id: str, recien_creado: bool) -> None:
+    pago_id = pago["id"]
     try:
-        _transicion(db, pago_id, evento, CLIENTE, uid, cambios={"stripePaymentIntentId": cobro_id})
+        _transicion(db, pago_id, evento, CLIENTE, uid, cambios={"stripePaymentIntentId": cobro_id},
+                    sin_borrado=(pago["cliente"], pago["profesional"]))
     except ErrorPago:
         actual = _leer_pago(db, pago_id)
         if actual.get("estado") == "pendiente_pago" and actual.get("stripePaymentIntentId") == cobro_id:
             return          # otra llamada a la vez lo guardó con el mismo cobro
         if recien_creado:
-            # El pago cambió mientras tanto (p. ej. se canceló): el cobro no se
-            # llega a entregar a la app, pero se anula para que no quede vivo
+            # El pago cambió mientras tanto (se canceló, o una cuenta se está
+            # borrando): el cobro no llega a la app, pero se anula para que no quede vivo
             try:
                 api.cancelar_cobro(cobro_id, f"{pago_id}:cancelar:{cobro_id}")
             except stripe.StripeError as e:
@@ -1070,19 +1306,22 @@ def _preparar_cobro(db, uid: str, datos: dict, evento: str) -> dict:
         raise ErrorPago("version_no_valida")
     if uid != pago.get("cliente"):
         raise ErrorPago("uid_no_autorizado", "solo el cliente del pago")
+    _consumir_cupo(db, uid, "cobros")
     api = _stripe()
     if pago.get("estado") == "pendiente_pago" and pago.get("stripePaymentIntentId"):
-        # La respuesta anterior no llegó a la app: el mismo cobro, sin crear otro
+        # La app cerró la pantalla de pago sin pagar, o la respuesta no llegó:
+        # el mismo cobro, con una clave efímera nueva, sin crear otro
         cobro = api.leer_cobro(pago["stripePaymentIntentId"])
         customer_id = _customer(db, api, uid)
     else:
         aplicar_transicion(pago, evento, CLIENTE, uid, _ahora_ms())     # antes de crear nada en Stripe
+        _comprobar_no_borrando(db, pago["cliente"], pago["profesional"])
         if _hay_bloqueo(db, pago["cliente"], pago["profesional"]):
             raise ErrorPago("bloqueo")
         _cuenta_profesional_activa(db, pago["profesional"])
         customer_id = _customer(db, api, uid)
         cobro, recien_creado = _cobro_para(api, pago, customer_id)
-        _guardar_cobro(db, api, pago["id"], evento, uid, cobro["id"], recien_creado)
+        _guardar_cobro(db, api, pago, evento, uid, cobro["id"], recien_creado)
     if cobro.get("status") == "canceled":
         raise ErrorPago("cobro_no_valido", "cobro cancelado")
     return {
@@ -1129,12 +1368,23 @@ def _confirmar(db, uid: str, datos: dict) -> dict:
     return {"estado": _mover_dinero(db, pago_id, "confirmar", CLIENTE, uid, "transferencia")["estado"]}
 
 
+def _plazo_abierto(pago: dict, ahora: int) -> None:
+    """Con el plazo de liberación vencido ya no se disputa: el dinero es del
+    profesional y la tarea programada lo libera en su próxima pasada."""
+    liberar_en = pago.get("liberarEn")
+    if pago.get("estado") == "terminado" and _es_entero(liberar_en) and liberar_en <= ahora:
+        raise ErrorPago("plazo_vencido")
+
+
 def _disputar(db, uid: str, datos: dict) -> dict:
     pago = _leer_pago(db, datos.get("pagoId"))
     motivo = datos.get("motivo")
-    aplicar_transicion(pago, "disputar", CLIENTE, uid, _ahora_ms(), motivo=motivo)
+    ahora = _ahora_ms()
+    aplicar_transicion(pago, "disputar", CLIENTE, uid, ahora, motivo=motivo)
+    _plazo_abierto(pago, ahora)
     visto = _comprobar_operacion(db, pago, "disputa")
-    nuevo = _transicion(db, pago["id"], "disputar", CLIENTE, uid, motivo=motivo, operacion=("disputa", visto))
+    nuevo = _transicion(db, pago["id"], "disputar", CLIENTE, uid, motivo=motivo,
+                        operacion=("disputa", visto), precondicion=_plazo_abierto)
     return {"estado": nuevo["estado"]}
 
 
@@ -1143,6 +1393,10 @@ def _resolver(db, uid: str, datos: dict) -> dict:
     if decision not in ("liberar", "reembolsar"):
         raise ErrorPago("decision_no_valida")
     pago_id = _comprobar_id(datos.get("pagoId"), "pagoId")
+    pago = _leer_pago(db, pago_id)
+    if uid in (pago.get("cliente"), pago.get("profesional")):
+        # Nadie decide sobre su propio dinero, aunque sea administrador
+        raise ErrorPago("admin_es_parte")
     if decision == "liberar":
         nuevo = _mover_dinero(db, pago_id, "resolver_liberar", ADMIN, uid, "transferencia")
     else:
@@ -1151,21 +1405,35 @@ def _resolver(db, uid: str, datos: dict) -> dict:
     return {"estado": nuevo["estado"]}
 
 
+# ── Tarea programada ──
+
 def liberar_vencidos(db) -> dict:
     """Pagos en `terminado` con el plazo vencido, por lotes y con tope por
-    ejecución. Un fallo en uno no para los demás: vuelve a probarse en la
-    siguiente ejecución, y la transferencia no se duplica (_mover_dinero)."""
+    ejecución, y después la revisión de los retenidos sin avance.
+
+    Cada pago lleva su espera (`liberacion`: fallos y proximoIntento): uno que
+    falla se reintenta cada vez más tarde, sin gastar el tope de los demás, y al
+    quinto fallo pasa al administrador (requiereAdmin) y no se vuelve a probar
+    solo. La transferencia nunca se duplica (_mover_dinero)."""
+    ahora = _ahora_ms()
     consulta = (db.collection("pagos")
                 .where(filter=FieldFilter("estado", "==", "terminado"))
-                .where(filter=FieldFilter("liberarEn", "<=", _ahora_ms()))
+                .where(filter=FieldFilter("liberarEn", "<=", ahora))
                 .order_by("liberarEn")
                 .limit(LIBERAR_LOTE))
-    resultado = {"liberados": 0, "fallidos": 0}
-    ultimo, vistos = None, 0
-    while vistos < LIBERAR_MAX_EJECUCION:
+    resultado = {"liberados": 0, "fallidos": 0, "aplazados": 0, "avisados": 0}
+    ultimo, intentados = None, 0
+    while intentados < LIBERAR_MAX_EJECUCION:
         lote = list((consulta if ultimo is None else consulta.start_after(ultimo)).stream())
-        for snap in lote[:LIBERAR_MAX_EJECUCION - vistos]:
-            vistos += 1
+        for snap in lote:
+            if intentados >= LIBERAR_MAX_EJECUCION:
+                break
+            datos = snap.to_dict() or {}
+            espera = int((datos.get("liberacion") or {}).get("proximoIntento") or 0)
+            if datos.get("requiereAdmin") is True or espera > ahora:
+                resultado["aplazados"] += 1
+                continue
+            intentados += 1
             try:
                 _mover_dinero(db, snap.id, "vencer_plazo", SISTEMA, None, "transferencia")
                 resultado["liberados"] += 1
@@ -1174,10 +1442,90 @@ def liberar_vencidos(db) -> dict:
                 print(f"[PAGOS] No se pudo liberar {snap.id}: {e}")
                 if isinstance(e, ErrorPago) and e.codigo == "stripe_no_configurado":
                     return resultado        # sin clave válida fallarían todos
+                if not (isinstance(e, ErrorPago) and e.codigo in _NO_ES_FALLO_DE_LIBERACION):
+                    _apuntar_fallo_liberacion(db, snap.id, e)
         if len(lote) < LIBERAR_LOTE:
             break
         ultimo = lote[-1]
+    resultado["avisados"] = _revisar_retenidos(db)
     return resultado
+
+
+def _apuntar_fallo_liberacion(db, pago_id: str, error: Exception) -> None:
+    ref = db.collection("pagos").document(pago_id)
+    ahora = _ahora_ms()
+    codigo = (error.codigo if isinstance(error, ErrorPago) else type(error).__name__)[:100]
+
+    @firestore.transactional
+    def _apuntar(txn):
+        snap = ref.get(transaction=txn)
+        pago = (snap.to_dict() or {}) if snap.exists else {}
+        if pago.get("estado") != "terminado":
+            return False
+        fallos = int((pago.get("liberacion") or {}).get("fallos") or 0) + 1
+        cambios = {"liberacion": {"fallos": fallos, "ultimoError": codigo,
+                                  "proximoIntento": ahora + LIBERAR_ESPERA_MS * 2 ** (fallos - 1)}}
+        al_admin = fallos >= LIBERAR_FALLOS_MAX and pago.get("requiereAdmin") is not True
+        if fallos >= LIBERAR_FALLOS_MAX:
+            cambios["requiereAdmin"] = True
+        txn.update(ref, cambios)
+        return al_admin
+
+    try:
+        if _apuntar(db.transaction()):
+            _avisar_admin(db, f"{pago_id}_liberacion_fallida", "Liberación fallida",
+                          f"El pago {pago_id} no se ha podido liberar {LIBERAR_FALLOS_MAX} veces seguidas "
+                          f"(último error: {codigo}). La tarea programada ya no lo reintenta.")
+    except Exception as e:
+        print(f"[PAGOS] No se pudo apuntar el fallo de liberación de {pago_id}: {e}")
+
+
+def _revisar_retenidos(db) -> int:
+    """Pagos retenidos más de RETENIDO_MAX_MS sin terminarse ni disputarse: se
+    marcan requiereAdmin y se avisa al administrador una sola vez. Al marcarlos
+    cambia `actualizado`, así que no vuelven a la consulta en otros 45 días."""
+    ahora = _ahora_ms()
+    limite = ahora - RETENIDO_MAX_MS
+    consulta = (db.collection("pagos")
+                .where(filter=FieldFilter("estado", "==", "retenido"))
+                .where(filter=FieldFilter("actualizado", "<=", limite))
+                .order_by("actualizado")
+                .limit(RETENIDOS_LOTE))
+    avisados, ultimo, vistos = 0, None, 0
+    while vistos < RETENIDOS_MAX_REVISION:
+        lote = list((consulta if ultimo is None else consulta.start_after(ultimo)).stream())
+        for snap in lote:
+            vistos += 1
+            if (snap.to_dict() or {}).get("requiereAdmin") is True:
+                continue
+            try:
+                if _marcar_retenido(db, snap.reference, limite, ahora):
+                    avisados += 1
+                    _avisar_admin(db, f"{snap.id}_retenido_sin_avance", "Pago retenido sin avance",
+                                  f"El pago {snap.id} lleva más de {RETENIDO_MAX_MS // (24 * 60 * 60 * 1000)} "
+                                  "días retenido sin terminarse ni disputarse.")
+            except Exception as e:
+                print(f"[PAGOS] No se pudo revisar el pago retenido {snap.id}: {e}")
+        if len(lote) < RETENIDOS_LOTE:
+            break
+        ultimo = lote[-1]
+    return avisados
+
+
+def _marcar_retenido(db, ref, limite: int, ahora: int) -> bool:
+    @firestore.transactional
+    def _marcar(txn):
+        snap = ref.get(transaction=txn)
+        pago = (snap.to_dict() or {}) if snap.exists else {}
+        if pago.get("estado") != "retenido" or pago.get("requiereAdmin") is True:
+            return False
+        entradas = [int(h.get("fecha") or 0) for h in pago.get("historial") or [] if h.get("estado") == "retenido"]
+        if not entradas or max(entradas) > limite:
+            return False
+        txn.update(ref, {"requiereAdmin": True, "actualizado": ahora})
+        return True
+
+    return _marcar(db.transaction())
 
 
 # ── Webhook de Stripe ──
@@ -1203,52 +1551,64 @@ def _verificar_evento(payload: bytes, firma) -> tuple:
     return None, None
 
 
+# Cada manejador devuelve (resultado, escrituras, aviso a las partes, aviso al
+# administrador): las escrituras van en la transacción del evento y los avisos, después
+
 def _evento_cuenta(db, txn, cuenta: dict, evento: dict) -> tuple:
     """account.updated → estado de /cuentas_stripe/{uid}."""
     uid = (cuenta.get("metadata") or {}).get("uid")
     if not isinstance(uid, str) or not _ID.fullmatch(uid) or evento.get("account") not in (None, cuenta.get("id")):
         print(f"[PAGOS] account.updated de {cuenta.get('id')} sin uid válido: descartado")
-        return "descartado", [], None
+        return "descartado", [], None, None
     ref = db.collection("cuentas_stripe").document(uid)
     snap = ref.get(transaction=txn)
     actual = (snap.to_dict() or {}) if snap.exists else {}
     if actual.get("accountId") != cuenta.get("id"):
         print(f"[PAGOS] account.updated de {cuenta.get('id')} no es la cuenta de {uid}: descartado")
-        return "descartado", [], None
+        return "descartado", [], None, None
     creado = int(evento.get("created") or 0)
     # Stripe no garantiza el orden de entrega: uno antiguo no pisa uno nuevo
     if creado < int(actual.get("estadoStripeEn") or 0):
-        return "antiguo", [], None
+        return "antiguo", [], None, None
     datos = {**datos_cuenta_stripe(cuenta), "estadoStripeEn": creado, "actualizado": _ahora_ms()}
-    return "aplicado", [(ref, datos, True)], None
+    return "aplicado", [(ref, datos, True)], None, None
 
 
 def _fallo_antiguo(pago: dict, evento: dict) -> bool:
     """Un fallo de cobro de antes de la última vez que el pago entró en
-    pendiente_pago (llega tarde, después de reintentar): no lo devuelve a fallido."""
-    creado_ms = int(evento.get("created") or 0) * 1000
-    entradas = [h.get("fecha") or 0 for h in pago.get("historial") or [] if h.get("estado") == "pendiente_pago"]
-    return bool(entradas) and creado_ms < max(entradas)
+    pendiente_pago (llega tarde, después de reintentar): no lo devuelve a
+    fallido. Stripe da `created` en segundos: se compara en segundos, y uno del
+    mismo segundo que el reintento cuenta como posterior (ante la duda, el pago
+    queda en fallido y el cliente puede reintentar)."""
+    creado_s = int(evento.get("created") or 0)
+    entradas_s = [int(h.get("fecha") or 0) // 1000 for h in pago.get("historial") or []
+                  if h.get("estado") == "pendiente_pago"]
+    return bool(entradas_s) and creado_s < max(entradas_s)
 
 
 def _evento_cobro(db, txn, cobro: dict, evento: dict) -> tuple:
     """payment_intent.succeeded → cobro_ok; payment_intent.payment_failed → cobro_fallido.
-    Solo si el PaymentIntent es el del pago y cuadran importe y moneda."""
+    Solo si el PaymentIntent es el del pago y cuadran importe y moneda. Un cobro
+    hecho que el pago no puede contar (p. ej. ya cancelado) sale como
+    «huerfano» y procesar_evento lo reembolsa."""
     exito = evento.get("type") == "payment_intent.succeeded"
     pago_id = (cobro.get("metadata") or {}).get("pagoId")
     if not isinstance(pago_id, str) or not _ID.fullmatch(pago_id):
         print(f"[PAGOS] {evento.get('type')} de {cobro.get('id')} sin pagoId: descartado")
-        return "descartado", [], None
+        return "descartado", [], None, None
     ref = db.collection("pagos").document(pago_id)
     snap = ref.get(transaction=txn)
     if not snap.exists:
         print(f"[PAGOS] {evento.get('type')} para el pago {pago_id}, que no existe: descartado")
-        return "descartado", [], None
+        return "descartado", [], None, None
     pago = snap.to_dict()
     motivo = _cobro_no_cuadra(pago, cobro, cobrado=exito)
     if motivo:
         print(f"[PAGOS] {evento.get('type')} del pago {pago_id} no cuadra ({motivo}): no se cambia nada")
-        return "descartado", [], None
+        return "descartado", [], None, None
+    if exito and pago.get("estado") in _ESTADOS_COBRADOS:
+        print(f"[PAGOS] Cobro del pago {pago_id} ya contabilizado ({pago.get('estado')}): no se aplica")
+        return "no_aplicable", [], None, None
     ahora = _ahora_ms()
     try:
         if exito:
@@ -1259,28 +1619,34 @@ def _evento_cobro(db, txn, cobro: dict, evento: dict) -> tuple:
             nuevo = aplicar_transicion(pago, "cobro_ok", SISTEMA, None, ahora)
         else:
             if _fallo_antiguo(pago, evento):
-                return "antiguo", [], None
+                return "antiguo", [], None, None
             nuevo = aplicar_transicion(pago, "cobro_fallido", SISTEMA, None, ahora)
     except ErrorPago as e:
-        aviso = " ERROR: hay dinero cobrado, revisarlo" if exito else ""
-        print(f"[PAGOS] {evento.get('type')} del pago {pago_id} en {pago.get('estado')} ({e.codigo}): no se aplica.{aviso}")
-        return "no_aplicable", [], None
+        if exito:
+            print(f"[PAGOS] Cobro hecho para el pago {pago_id} en {pago.get('estado')} ({e.codigo}): se reembolsa")
+            return "huerfano", [], None, None
+        print(f"[PAGOS] {evento.get('type')} del pago {pago_id} en {pago.get('estado')} ({e.codigo}): no se aplica")
+        return "no_aplicable", [], None, None
     evento_pago = "cobro_ok" if exito else "cobro_fallido"
-    return "aplicado", [(ref, nuevo, False)], (nuevo, evento_pago, SISTEMA)
+    return "aplicado", [(ref, _sin_aviso_admin(nuevo), False)], (nuevo, evento_pago, SISTEMA), None
+
+
+def _pago_de_cobro(db, cobro_id):
+    """Referencia del único pago con ese PaymentIntent, o None."""
+    if not isinstance(cobro_id, str) or not cobro_id:
+        return None
+    encontrados = list(db.collection("pagos")
+                       .where(filter=FieldFilter("stripePaymentIntentId", "==", cobro_id)).limit(2).stream())
+    return encontrados[0].reference if len(encontrados) == 1 else None
 
 
 def _evento_contracargo(db, txn, disputa: dict, evento: dict) -> tuple:
-    """charge.dispute.created → contracargo."""
-    cobro_id = disputa.get("payment_intent")
-    if not isinstance(cobro_id, str) or not cobro_id:
-        print(f"[PAGOS] Contracargo {disputa.get('id')} sin PaymentIntent: descartado")
-        return "descartado", [], None
-    encontrados = list(db.collection("pagos")
-                       .where(filter=FieldFilter("stripePaymentIntentId", "==", cobro_id)).limit(2).stream())
-    if len(encontrados) != 1:
-        print(f"[PAGOS] Contracargo {disputa.get('id')}: {len(encontrados)} pagos con {cobro_id}: descartado")
-        return "descartado", [], None
-    ref = encontrados[0].reference
+    """charge.dispute.created → contracargo, y aviso al administrador: hay un
+    plazo para responder al banco en Stripe."""
+    ref = _pago_de_cobro(db, disputa.get("payment_intent"))
+    if ref is None:
+        print(f"[PAGOS] Contracargo {disputa.get('id')} sin un pago con {disputa.get('payment_intent')}: descartado")
+        return "descartado", [], None, None
     op_ref = db.collection("operaciones_pagos").document(ref.id)
     pago = ref.get(transaction=txn).to_dict()
     op = op_ref.get(transaction=txn)
@@ -1288,11 +1654,47 @@ def _evento_contracargo(db, txn, disputa: dict, evento: dict) -> tuple:
         nuevo = aplicar_transicion(pago, "contracargo", SISTEMA, None, _ahora_ms())
     except ErrorPago as e:
         print(f"[PAGOS] Contracargo del pago {ref.id} en {pago.get('estado')} ({e.codigo}): no se aplica")
-        return "no_aplicable", [], None
-    if pago.get("stripeTransferId") or (op.exists and (op.to_dict() or {}).get("operacion") == "transferencia"):
+        return "no_aplicable", [], None, None
+    transferido = bool(pago.get("stripeTransferId")) or (op.exists and (op.to_dict() or {}).get("operacion") == "transferencia")
+    if transferido:
         print(f"[PAGOS] Contracargo del pago {ref.id} con el dinero ya transferido (o transfiriéndose) "
               f"al profesional: {pago.get('stripeTransferId') or 'en curso'}")
-    return "aplicado", [(ref, nuevo, False)], (nuevo, "contracargo", SISTEMA)
+    aviso = (f"{ref.id}_contracargo_{disputa.get('id')}", "Contracargo abierto",
+             f"El banco ha abierto el contracargo {disputa.get('id')} sobre el pago {ref.id} "
+             f"(estaba en {pago.get('estado')}). Hay que responder en Stripe dentro del plazo."
+             + (" El dinero ya se había transferido al profesional." if transferido else ""))
+    return "aplicado", [(ref, _sin_aviso_admin(nuevo), False)], (nuevo, "contracargo", SISTEMA), aviso
+
+
+# Cierre de un contracargo según Stripe. warning_closed: era una consulta y se
+# cerró sin llegar a contracargo, el dinero se queda (como ganarlo)
+_RESULTADO_CONTRACARGO = {"won": "won", "warning_closed": "won", "lost": "lost"}
+
+
+def _evento_contracargo_cerrado(db, txn, disputa: dict, evento: dict) -> tuple:
+    """charge.dispute.closed → contracargo.resultado (won o lost) en el pago,
+    sin cambiar el estado, y aviso al administrador.
+
+    Si se pierde después de liberar, NO se revierte la transferencia al
+    profesional: quién asume la pérdida es una decisión legal pendiente (plan,
+    §4). Hasta entonces, solo se avisa al administrador."""
+    resultado = _RESULTADO_CONTRACARGO.get(disputa.get("status"))
+    if resultado is None:
+        print(f"[PAGOS] Cierre del contracargo {disputa.get('id')} con estado {disputa.get('status')!r}: descartado")
+        return "descartado", [], None, None
+    ref = _pago_de_cobro(db, disputa.get("payment_intent"))
+    if ref is None:
+        print(f"[PAGOS] Cierre del contracargo {disputa.get('id')} sin pago: descartado")
+        return "descartado", [], None, None
+    pago = ref.get(transaction=txn).to_dict()
+    cambios = {"contracargo": {"resultado": resultado, "fecha": _ahora_ms()}}
+    texto = (f"El contracargo {disputa.get('id')} del pago {ref.id} se ha cerrado: "
+             f"{'ganado' if resultado == 'won' else 'perdido'}.")
+    if pago.get("stripeTransferId") and resultado == "lost":
+        texto += (" El dinero ya se había transferido al profesional y no se revierte "
+                  "(decisión legal pendiente): revisarlo.")
+    aviso = (f"{ref.id}_contracargo_cerrado_{disputa.get('id')}", "Contracargo cerrado", texto)
+    return "aplicado", [(ref, cambios, True)], None, aviso
 
 
 _MANEJADORES = {
@@ -1300,6 +1702,7 @@ _MANEJADORES = {
     "payment_intent.succeeded": _evento_cobro,
     "payment_intent.payment_failed": _evento_cobro,
     "charge.dispute.created": _evento_contracargo,
+    "charge.dispute.closed": _evento_contracargo_cerrado,
 }
 
 
@@ -1322,24 +1725,58 @@ def procesar_evento(db, evento: dict, origen: str) -> str:
         return "ignorado"
     objeto = (evento.get("data") or {}).get("object") or {}
     evento_ref = db.collection("eventos_stripe").document(evento_id)
-    aviso = {}
+    avisos = {}
 
     @firestore.transactional
     def _procesar(txn):
         if evento_ref.get(transaction=txn).exists:
             return "duplicado"
-        resultado, escrituras, avisar = manejador(db, txn, objeto, evento)
+        resultado, escrituras, a_las_partes, al_admin = manejador(db, txn, objeto, evento)
         for ref, datos, merge in escrituras:
             txn.set(ref, datos, merge=merge)
         if escrituras:
             txn.set(evento_ref, {"tipo": tipo, "procesado": _ahora_ms()})
-        aviso["pago"] = avisar
+        avisos.update(partes=a_las_partes, admin=al_admin)
         return resultado
 
     resultado = _procesar(db.transaction())
-    if aviso.get("pago"):
-        _avisar(db, *aviso["pago"])
+    if resultado == "huerfano":
+        # Fuera de la transacción: si Stripe falla, el evento no queda apuntado
+        # y Stripe lo reintenta (el reembolso lleva clave fija por PaymentIntent)
+        resultado = _reembolsar_huerfano(db, objeto)
+        _apuntar_evento(db, evento_ref, tipo, resultado)
+    if avisos.get("partes"):
+        _avisar(db, *avisos["partes"])
+    if avisos.get("admin"):
+        _avisar_admin(db, *avisos["admin"])
     return resultado
+
+
+def _reembolsar_huerfano(db, cobro: dict) -> str:
+    """Devuelve un cobro hecho que el pago no cuenta: el dinero no se queda en
+    ZeroHaus sin un pago que lo explique. Avisa al administrador."""
+    api = _stripe()
+    cobro_id = cobro["id"]
+    pago_id = (cobro.get("metadata") or {}).get("pagoId")
+    reembolso = next((r for r in api.buscar_reembolsos(cobro_id) if r.get("status") in _REEMBOLSO_VIVO), None)
+    if reembolso is None:
+        reembolso = api.crear_reembolso(cobro_id, cobro["amount_received"], f"{cobro_id}:reembolso_huerfano",
+                                        {"pagoId": pago_id, "motivo": "huerfano"})
+    fallido = reembolso.get("status") not in _REEMBOLSO_VIVO
+    _avisar_admin(db, f"{pago_id}_huerfano_{cobro_id}", "Cobro sin pago reembolsado",
+                  f"El cobro {cobro_id} del pago {pago_id} llegó cuando el pago ya no lo esperaba y se ha "
+                  f"reembolsado: {reembolso.get('id')} ({reembolso.get('status')})."
+                  + (" El reembolso ha fallado: devolverlo a mano." if fallido else ""))
+    return "reembolso_huerfano_fallido" if fallido else "reembolso_huerfano"
+
+
+def _apuntar_evento(db, evento_ref, tipo: str, resultado: str) -> None:
+    @firestore.transactional
+    def _apuntar(txn):
+        if not evento_ref.get(transaction=txn).exists:
+            txn.set(evento_ref, {"tipo": tipo, "procesado": _ahora_ms(), "resultado": resultado})
+
+    _apuntar(db.transaction())
 
 
 def _respuesta(codigo: int, resultado: str) -> https_fn.Response:
@@ -1347,6 +1784,8 @@ def _respuesta(codigo: int, resultado: str) -> https_fn.Response:
 
 
 # ── Borrado de cuenta ──
+# Orden en main._borrar_cuenta: marcar_borrando → pagos_activos (si hay, no se
+# borra nada y se quita la marca) → cerrar_pagos_para_borrar → Play → purga.
 
 def pagos_activos(db, uid: str) -> list:
     """Ids de los pagos de `uid` (como cliente o profesional) con dinero en camino o retenido."""
@@ -1358,28 +1797,92 @@ def pagos_activos(db, uid: str) -> list:
     return activos
 
 
-def seudonimo(uid: str) -> str:
-    """SHA-256 del uid, el mismo cálculo que _cuenta_ofuscada en main.py."""
-    return hashlib.sha256(uid.encode("utf-8")).hexdigest()
+def marcar_borrando(db, uid: str) -> None:
+    """Primer paso del borrado: desde aquí, solicitar, aceptar y reintentar se
+    rechazan (cuenta_en_borrado), comprobado dentro de su transacción. Así no
+    se cuela un cobro entre mirar si hay pagos en curso y borrar."""
+    db.collection("usuarios").document(uid).set({"borrando": True}, merge=True)
+
+
+def desmarcar_borrando(db, uid: str) -> None:
+    """El borrado no sigue: la cuenta vuelve a poder pagar. Si /usuarios no
+    existía, se quita también el documento que creó la marca."""
+    try:
+        ref = db.collection("usuarios").document(uid)
+        snap = ref.get()
+        if not snap.exists:
+            return
+        if set(snap.to_dict() or {}) <= {"borrando"}:
+            ref.delete()
+        else:
+            ref.update({"borrando": firestore.DELETE_FIELD})
+    except Exception as e:
+        print(f"[PAGOS] No se pudo quitar la marca de borrado de {uid}: {e}")
+
+
+def cerrar_pagos_para_borrar(db, uid: str) -> int:
+    """Antes de purgar: cancela los pagos de `uid` que aún no tienen dinero
+    (solicitado o fallido; el cobro de un fallido se anula en Stripe, para que
+    nadie lo pague después) y borra su Customer de Stripe. Los errores salen
+    como HttpsError y el borrado no sigue. Devuelve cuántos ha cancelado."""
+    try:
+        cancelados = 0
+        for campo in ("cliente", "profesional"):
+            for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
+                if (snap.to_dict() or {}).get("estado") in ("solicitado", "fallido"):
+                    _cancelar(db, uid, {"pagoId": snap.id})
+                    cancelados += 1
+        _borrar_cliente_stripe(db, uid)
+        return cancelados
+    except ErrorPago as e:
+        raise _error_https(e) from None
+    except stripe.StripeError as e:
+        print(f"[PAGOS] Stripe falló al preparar el borrado de {uid}: {type(e).__name__}: {e}")
+        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAVAILABLE,
+                                  "El servicio de pagos no responde. Inténtalo más tarde.", {"motivo": "stripe"}) from None
+
+
+def _borrar_cliente_stripe(db, uid: str) -> None:
+    """Borra el Customer de Stripe del usuario (sus tarjetas guardadas), si lo
+    tiene. La cuenta Connect del profesional no se borra: la cierra él desde
+    Stripe y su historial lo guarda Stripe."""
+    customer_id = _datos(db, "cuentas_stripe", uid).get("customerId")
+    if not customer_id:
+        return
+    _stripe().borrar_cliente(customer_id)
+    db.collection("cuentas_stripe").document(uid).update({"customerId": firestore.DELETE_FIELD})
 
 
 def seudonimizar_pagos(db, uid: str) -> int:
     """Al borrar una cuenta, sus /pagos no se borran: son registros contables
-    que hay que conservar. Se cambia su uid por un seudónimo (también en el
-    historial), así que ya no se pueden leer con esa cuenta ni ligar a ella sin
-    el uid. El plazo de conservación (y cuándo borrarlos) lo tiene que
-    confirmar el usuario: plan, §4. Devuelve cuántos ha cambiado."""
-    alias = seudonimo(uid)
+    que hay que conservar. Su uid se cambia por un seudónimo aleatorio
+    (`borrado_` y 16 bytes), el mismo en todos sus pagos: un hash del uid se
+    podría recalcular y volver a ligar los pagos a la persona. Solo se tocan
+    esos campos, en una transacción por pago. El plazo de conservación (y
+    cuándo borrarlos) lo tiene que confirmar el usuario: plan, §4. Devuelve
+    cuántos ha cambiado."""
+    alias = "borrado_" + secrets.token_hex(16)
     total = 0
     for campo in ("cliente", "profesional"):
         for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
-            pago = snap.to_dict() or {}
-            pago[campo] = alias
-            pago["historial"] = [{**h, "uid": alias} if isinstance(h, dict) and h.get("uid") == uid else h
-                                 for h in pago.get("historial") or []]
-            snap.reference.set(pago)
-            total += 1
+            if _seudonimizar(db, snap.reference, campo, uid, alias):
+                total += 1
     return total
+
+
+def _seudonimizar(db, ref, campo: str, uid: str, alias: str) -> bool:
+    @firestore.transactional
+    def _cambiar(txn):
+        snap = ref.get(transaction=txn)
+        pago = (snap.to_dict() or {}) if snap.exists else {}
+        if pago.get(campo) != uid:
+            return False
+        historial = [{**h, "uid": alias} if isinstance(h, dict) and h.get("uid") == uid else h
+                     for h in pago.get("historial") or []]
+        txn.update(ref, {campo: alias, "historial": historial})
+        return True
+
+    return _cambiar(db.transaction())
 
 
 # ── Avisos a las partes ──
@@ -1583,7 +2086,8 @@ _CODIGOS_HTTPS = {
     **dict.fromkeys(("importe_no_entero", "importe_bajo_minimo", "importe_sobre_maximo", "descripcion_no_valida",
                      "motivo_no_valido", "id_no_valido", "partes_no_validas", "decision_no_valida",
                      "version_no_valida"), _F.INVALID_ARGUMENT),
-    **dict.fromkeys(("uid_no_autorizado", "actor_no_permitido", "no_es_profesional"), _F.PERMISSION_DENIED),
+    **dict.fromkeys(("uid_no_autorizado", "actor_no_permitido", "no_es_profesional", "admin_es_parte"),
+                    _F.PERMISSION_DENIED),
     **dict.fromkeys(("pago_no_encontrado", "chat_no_valido", "sin_cuenta"), _F.NOT_FOUND),
     "limite_solicitudes": _F.RESOURCE_EXHAUSTED,
 }   # el resto (pagos_deshabilitados, transicion_no_permitida, bloqueo…): FAILED_PRECONDITION
@@ -1620,10 +2124,12 @@ def _ejecutar(req, accion, *, nueva: bool = False, admin: bool = False) -> dict:
                                   {"motivo": "stripe"}) from None
 
 
-def _opciones(con_stripe: bool = True) -> dict:
-    # La clave de Stripe solo la reciben las funciones que llaman a Stripe
+def _opciones(con_stripe: bool = True, con_correo: bool = False) -> dict:
+    # Cada función recibe solo los secretos que usa: la clave de Stripe, las
+    # que llaman a Stripe; el correo, las que pueden avisar al administrador
+    secretos = ([STRIPE_SECRET_KEY] if con_stripe else []) + (_SECRETOS_CORREO if con_correo else [])
     return dict(region=REGION, enforce_app_check=True, max_instances=MAX_INSTANCIAS_PAGOS,
-                secrets=[STRIPE_SECRET_KEY] if con_stripe else None)
+                timeout_sec=TIMEOUT_FUNCIONES_S, secrets=secretos or None)
 
 
 @https_fn.on_call(**_opciones())
@@ -1671,7 +2177,7 @@ def pagos_terminar(req: https_fn.CallableRequest) -> dict:
     return _ejecutar(req, _terminar)
 
 
-@https_fn.on_call(**_opciones())
+@https_fn.on_call(**_opciones(con_correo=True))
 def pagos_confirmar(req: https_fn.CallableRequest) -> dict:
     """El cliente confirma el trabajo y el dinero se transfiere al profesional. → {estado}"""
     return _ejecutar(req, _confirmar)
@@ -1683,14 +2189,17 @@ def pagos_disputar(req: https_fn.CallableRequest) -> dict:
     return _ejecutar(req, _disputar)
 
 
-@https_fn.on_call(**_opciones())
+@https_fn.on_call(**_opciones(con_correo=True))
 def pagos_resolver(req: https_fn.CallableRequest) -> dict:
     """El administrador resuelve una disputa. Args: pagoId, decision ("liberar" o "reembolsar"). → {estado}"""
     return _ejecutar(req, _resolver, admin=True)
 
 
-@https_fn.on_request(region=REGION, max_instances=MAX_INSTANCIAS_WEBHOOK,
-                     secrets=[STRIPE_WEBHOOK_SECRET, STRIPE_WEBHOOK_SECRET_CONNECT])
+@https_fn.on_request(region=REGION, max_instances=MAX_INSTANCIAS_WEBHOOK, timeout_sec=TIMEOUT_FUNCIONES_S,
+                     # La clave de Stripe, para reembolsar un cobro sin pago;
+                     # el correo, para avisar al administrador
+                     secrets=[STRIPE_WEBHOOK_SECRET, STRIPE_WEBHOOK_SECRET_CONNECT, STRIPE_SECRET_KEY]
+                     + _SECRETOS_CORREO)
 def stripe_webhook(req: https_fn.Request) -> https_fn.Response:
     """Eventos de Stripe (endpoint de la plataforma y de Connect). 400 si la
     firma no vale; 500 si falla al aplicarlo, para que Stripe lo reintente; 200
@@ -1716,8 +2225,9 @@ def stripe_webhook(req: https_fn.Request) -> https_fn.Response:
     region=REGION,
     timeout_sec=540,
     max_instances=1,              # dos a la vez solo se pisarían (sin duplicar dinero)
-    secrets=[STRIPE_SECRET_KEY],
+    secrets=[STRIPE_SECRET_KEY] + _SECRETOS_CORREO,
 )
 def pagos_liberar_vencidos(event: scheduler_fn.ScheduledEvent) -> None:
-    """Libera los pagos terminados cuyo plazo ha vencido sin disputa."""
+    """Libera los pagos terminados cuyo plazo ha vencido sin disputa y avisa
+    de los que llevan demasiado tiempo retenidos."""
     print(f"[PAGOS] Liberación de plazos vencidos: {liberar_vencidos(firestore.client())}")

@@ -288,6 +288,8 @@ def _purgar_usuario(db, uid: str) -> dict:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+    # Borrar la cuenta anula cobros sin pagar y el Customer de Stripe (pagos.py)
+    secrets=["STRIPE_SECRET_KEY"],
 )
 def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     """Borra definitivamente un usuario: Auth, Firestore (cascada) y Storage.
@@ -325,17 +327,26 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
 
     Con un pago en curso (cobrándose, retenido, terminado o en disputa) no se
     borra nada, ni se toca Play: sin la cuenta, el dinero se quedaría sin
-    nadie que lo confirme, lo dispute o lo reciba."""
-    if pagos.pagos_activos(db, uid):
-        raise https_fn.HttpsError(
-            https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
-            "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
-            {"motivo": "pagos"},
-        )
-    if cancelar_en_play:
-        canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
-    else:
-        canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
+    nadie que lo confirme, lo dispute o lo reciba. Antes de mirarlo se marca
+    la cuenta (`borrando`), para que no se abra un cobro nuevo mientras tanto;
+    los pagos sin dinero (solicitado o fallido) se cancelan y el Customer de
+    Stripe se borra. Si algo falla antes de purgar, se quita la marca."""
+    pagos.marcar_borrando(db, uid)
+    try:
+        if pagos.pagos_activos(db, uid):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
+                {"motivo": "pagos"},
+            )
+        pagos.cerrar_pagos_para_borrar(db, uid)
+        if cancelar_en_play:
+            canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
+        else:
+            canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
+    except Exception:
+        pagos.desmarcar_borrando(db, uid)
+        raise
     stats = _purgar_usuario(db, uid)
     return {
         "ok": True, "uid": uid, "stats": stats,
@@ -426,6 +437,7 @@ def _sincronizar_bloqueados(db) -> int:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+    secrets=["STRIPE_SECRET_KEY"],      # como eliminar_usuario_completo
 )
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
@@ -2754,12 +2766,24 @@ def actualizar_precio_luz_diario(event: scheduler_fn.ScheduledEvent) -> None:
 # importan para que Firebase las encuentre en main.
 import pagos  # noqa: E402
 
+def _avisar_admin_pagos(db, asunto: str, texto: str) -> None:
+    """Correo al buzón de ZeroHaus (el propio remitente), como el de las
+    denuncias: lo que el administrador tiene que mirar en los pagos. Gasta del
+    cupo común de avisos; sin cupo, solo queda en el registro (y el aviso, en
+    /avisos_admin_pagos)."""
+    if not _reservar_cupo_correo(db, aviso=True):
+        print(f"[PAGOS] Tope diario de correos alcanzado: sin correo del aviso «{asunto}»")
+        return
+    _enviar_email(SMTP_USUARIO.value, f"Pagos: {asunto}", texto, "Aviso automático de ZeroHaus.", "Español")
+
+
 pagos.configurar(
     exigir_email_verificado=_exigir_email_verificado,
     verificar_admin=_verificar_admin,
     preferencias=_preferencias,
     crear_notificacion=_crear_notificacion_in_app,
     enviar_push=_enviar_push,
+    avisar_admin=_avisar_admin_pagos,
 )
 from pagos import (  # noqa: E402,F401
     pagos_aceptar, pagos_cancelar, pagos_confirmar, pagos_disputar, pagos_liberar_vencidos,

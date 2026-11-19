@@ -1091,6 +1091,10 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
       await setDoc(doc(db, "cuentas_stripe/pro"), cuenta());
       await setDoc(doc(db, "eventos_stripe/evt_1"), { tipo: "payment_intent.succeeded", procesado: 1 });
       await setDoc(doc(db, "limites_pagos/cliente"), { solicitudes: 3, dia: 20261118 });
+      await setDoc(doc(db, "operaciones_pagos/p1"), {
+        pagoId: "p1", operacion: "transferencia", evento: "confirmar", reserva: "r1", creado: 1, renovado: 1, intento: 1,
+      });
+      await setDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1"), { asunto: "x", texto: "y", fecha: 1 });
     });
   });
 
@@ -1130,6 +1134,24 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
       await assertFails(deleteDoc(doc(db, "limites_pagos/cliente")), `${quien}: borrar límite`);
       await assertFails(setDoc(doc(db, "limites_pagos/cliente/dias/20261118"), { n: 0 }),
         `${quien}: subcolección del límite`);
+    }
+  });
+
+  // Reserva de cada transferencia o reembolso (la que impide disputar mientras
+  // se mueve el dinero) y avisos al administrador: si la app pudiera borrar una
+  // reserva, se colaría una disputa con la transferencia ya en marcha
+  it("las reservas de operaciones con dinero y los avisos al administrador solo los usa el servidor", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["pro", verificado("pro")], ["admin", comoAdmin()]]) {
+      await assertFails(getDoc(doc(db, "operaciones_pagos/p1")), `${quien}: leer reserva`);
+      await assertFails(getDocs(collection(db, "operaciones_pagos")), `${quien}: listar reservas`);
+      await assertFails(setDoc(doc(db, "operaciones_pagos/p2"), { operacion: "reembolso", renovado: 0 }),
+        `${quien}: crear reserva`);
+      await assertFails(updateDoc(doc(db, "operaciones_pagos/p1"), { renovado: 0 }), `${quien}: soltar reserva`);
+      await assertFails(deleteDoc(doc(db, "operaciones_pagos/p1")), `${quien}: borrar reserva`);
+      await assertFails(getDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1")), `${quien}: leer aviso`);
+      await assertFails(getDocs(collection(db, "avisos_admin_pagos")), `${quien}: listar avisos`);
+      await assertFails(deleteDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1")), `${quien}: borrar aviso`);
+      await assertFails(setDoc(doc(db, "avisos_admin_pagos/otro"), { asunto: "x" }), `${quien}: crear aviso`);
     }
   });
 });

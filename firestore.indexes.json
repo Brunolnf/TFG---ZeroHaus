@@ -39,6 +39,14 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "liberarEn", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "pagos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "actualizado", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
