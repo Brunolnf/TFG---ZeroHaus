@@ -161,6 +161,9 @@ fun TarjetaPago(
             }
             EstadoChip(c.textoEstado(pago.estado), colorEstadoPago(pago.estado))
 
+            if (detalle && PresentacionPagos.avisoContracargo(pago, papel)) {
+                Text(c.pagoContracargoAviso, color = Color(0xFFDC2626), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
             if (detalle) {
                 PresentacionPagos.desglose(pago, papel).forEach { l ->
                     Row(Modifier.fillMaxWidth()) {

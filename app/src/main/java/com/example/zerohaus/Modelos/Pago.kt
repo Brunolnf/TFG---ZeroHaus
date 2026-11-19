@@ -119,6 +119,24 @@ data class EntradaHistorialPago(
 
 data class DisputaPago(val motivo: String, val fecha: Long)
 
+/** Reintentos de la liberación automática que han fallado; [proximoIntento] en ms, si lo hay. */
+data class LiberacionPago(val fallos: Int, val proximoIntento: Long?)
+
+/** Cómo acabó la reclamación del banco. */
+enum class ResultadoContracargo(val id: String) {
+    GANADO("won"),
+    PERDIDO("lost"),
+    DESCONOCIDO("");
+
+    companion object {
+        fun desde(id: String?): ResultadoContracargo =
+            entries.firstOrNull { it != DESCONOCIDO && it.id == id } ?: DESCONOCIDO
+    }
+}
+
+/** Reclamación (contracargo) abierta por el banco sobre el pago. */
+data class ContracargoPago(val resultado: ResultadoContracargo, val fecha: Long)
+
 /**
  * Documento de `/pagos/{pagoId}` tal como lo escribe el servidor. Los importes
  * van en céntimos y la app no hace ninguna cuenta con ellos: solo los muestra
@@ -145,7 +163,11 @@ data class Pago(
     val stripeRefundId: String? = null,
     val terminadoEn: Long? = null,
     val liberarEn: Long? = null,
-    val disputa: DisputaPago? = null
+    val disputa: DisputaPago? = null,
+    /** El servidor pide que un administrador mire este pago (liberación fallida, contracargo…). */
+    val requiereAdmin: Boolean = false,
+    val liberacion: LiberacionPago? = null,
+    val contracargo: ContracargoPago? = null
 ) {
     companion object {
         /**
@@ -195,6 +217,13 @@ data class Pago(
                 liberarEn = fecha(datos["liberarEn"]),
                 disputa = (datos["disputa"] as? Map<*, *>)?.let { d ->
                     DisputaPago(motivo = (d["motivo"] as? String).orEmpty(), fecha = fecha(d["fecha"]) ?: 0L)
+                },
+                requiereAdmin = datos["requiereAdmin"] == true,
+                liberacion = (datos["liberacion"] as? Map<*, *>)?.let { l ->
+                    LiberacionPago(fallos = entero(l["fallos"])?.toInt() ?: 0, proximoIntento = fecha(l["proximoIntento"]))
+                },
+                contracargo = (datos["contracargo"] as? Map<*, *>)?.let { c ->
+                    ContracargoPago(ResultadoContracargo.desde(c["resultado"] as? String), fecha(c["fecha"]) ?: 0L)
                 }
             )
         }
@@ -304,6 +333,16 @@ enum class ErrorPago {
     CHAT_NO_VALIDO,
     /** El cobro (PaymentIntent) ya no sirve; hay que volver a abrir el pago. */
     COBRO_NO_VALIDO,
+    /** Ya pasó el plazo para abrir una disputa. */
+    PLAZO_VENCIDO,
+    /** Una de las partes está borrando su cuenta. */
+    CUENTA_EN_BORRADO,
+    /** El reembolso falló en Stripe (se reintenta). Lo ve el administrador. */
+    REEMBOLSO_FALLIDO,
+    /** Stripe revirtió la transferencia al profesional. Lo ve el administrador. */
+    TRANSFERENCIA_REVERTIDA,
+    /** Un administrador no puede ser parte de un pago. */
+    ADMIN_ES_PARTE,
     /** Otra operación sobre el mismo pago no ha terminado: inténtalo en un momento. */
     OPERACION_EN_CURSO,
     /** Stripe no responde: inténtalo más tarde. */
@@ -353,6 +392,11 @@ object ErroresPago {
         "bloqueo" to ErrorPago.BLOQUEO,
         "chat_no_valido" to ErrorPago.CHAT_NO_VALIDO,
         "cobro_no_valido" to ErrorPago.COBRO_NO_VALIDO,
+        "plazo_vencido" to ErrorPago.PLAZO_VENCIDO,
+        "cuenta_en_borrado" to ErrorPago.CUENTA_EN_BORRADO,
+        "reembolso_fallido" to ErrorPago.REEMBOLSO_FALLIDO,
+        "transferencia_revertida" to ErrorPago.TRANSFERENCIA_REVERTIDA,
+        "admin_es_parte" to ErrorPago.ADMIN_ES_PARTE,
         "cuenta_no_activa" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
         "sin_cuenta" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
         "pago_no_encontrado" to ErrorPago.PAGO_NO_ENCONTRADO,

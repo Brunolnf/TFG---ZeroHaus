@@ -182,6 +182,12 @@ object PresentacionPagos {
     fun esFinalDeFlujo(flujo: FlujoPago): Boolean =
         flujo is FlujoPago.Cancelado || flujo is FlujoPago.Fallido || flujo is FlujoPago.Resuelto || flujo is FlujoPago.Confirmando
 
+    /** El detalle enseña la reclamación del banco a las partes (no a quien no es parte). */
+    fun avisoContracargo(pago: Pago, papel: PapelPago?): Boolean = papel != null && pago.contracargo != null
+
+    /** Pagos que el servidor marca para que el administrador los mire (solo informativo). */
+    fun requierenAtencion(pagos: Collection<Pago>): List<Pago> = Pago.ordenar(pagos.filter { it.requiereAdmin })
+
     /** Pagos que el administrador tiene que resolver. */
     fun disputas(pagos: Collection<Pago>): List<Pago> = Pago.ordenar(pagos.filter { it.estado == EstadoPago.EN_DISPUTA })
 }

@@ -817,6 +817,12 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Estamos confirmando el pago con el banco. Te avisaremos cuando esté listo.",
     "pagoFlujoCanceladoPago" to "El pago se ha cancelado.",
     "cobrosComprobando" to "Comprobando tu cuenta de cobros…",
+    "pagoErrPlazoVencido" to "El plazo para abrir una disputa ha terminado.",
+    "pagoErrCuentaEnBorrado" to "Esta cuenta se está borrando.",
+    "pagoErrReembolsoFallido" to "El reembolso ha fallado en Stripe; se reintentará.",
+    "pagoErrTransferenciaRevertida" to "La transferencia ha sido revertida.",
+    "pagoErrAdminEsParte" to "Un administrador no puede ser parte de un pago.",
+    "pagoContracargoAviso" to "El banco ha abierto una reclamación sobre este pago.",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1595,6 +1601,12 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "We are confirming the payment with the bank. We will let you know when it is ready.",
     "pagoFlujoCanceladoPago" to "The payment has been cancelled.",
     "cobrosComprobando" to "Checking your payout account…",
+    "pagoErrPlazoVencido" to "The deadline to open a dispute has passed.",
+    "pagoErrCuentaEnBorrado" to "This account is being deleted.",
+    "pagoErrReembolsoFallido" to "The refund failed in Stripe; it will be retried.",
+    "pagoErrTransferenciaRevertida" to "The transfer has been reversed.",
+    "pagoErrAdminEsParte" to "An administrator cannot be a party to a payment.",
+    "pagoContracargoAviso" to "The bank has opened a claim on this payment.",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2373,6 +2385,12 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Estem confirmant el pagament amb el banc. T'avisarem quan estigui llest.",
     "pagoFlujoCanceladoPago" to "El pagament s'ha cancel·lat.",
     "cobrosComprobando" to "Comprovant el teu compte de cobraments…",
+    "pagoErrPlazoVencido" to "El termini per obrir una disputa ha acabat.",
+    "pagoErrCuentaEnBorrado" to "Aquest compte s'està esborrant.",
+    "pagoErrReembolsoFallido" to "El reemborsament ha fallat a Stripe; es tornarà a intentar.",
+    "pagoErrTransferenciaRevertida" to "La transferència ha estat revertida.",
+    "pagoErrAdminEsParte" to "Un administrador no pot ser part d'un pagament.",
+    "pagoContracargoAviso" to "El banc ha obert una reclamació sobre aquest pagament.",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3151,6 +3169,12 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Ordainketa bankuarekin berresten ari gara. Prest dagoenean abisatuko dizugu.",
     "pagoFlujoCanceladoPago" to "Ordainketa bertan behera geratu da.",
     "cobrosComprobando" to "Zure kobrantza-kontua egiaztatzen…",
+    "pagoErrPlazoVencido" to "Auzia irekitzeko epea amaitu da.",
+    "pagoErrCuentaEnBorrado" to "Kontu hau ezabatzen ari da.",
+    "pagoErrReembolsoFallido" to "Itzulketak huts egin du Stripen; berriro saiatuko da.",
+    "pagoErrTransferenciaRevertida" to "Transferentzia atzera egin da.",
+    "pagoErrAdminEsParte" to "Administratzaile bat ezin da ordainketa baten alderdi izan.",
+    "pagoContracargoAviso" to "Bankuak erreklamazio bat ireki du ordainketa honen gainean.",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3929,6 +3953,12 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Estamos a confirmar o pagamento co banco. Avisarémoste cando estea listo.",
     "pagoFlujoCanceladoPago" to "O pagamento cancelouse.",
     "cobrosComprobando" to "Comprobando a túa conta de cobros…",
+    "pagoErrPlazoVencido" to "O prazo para abrir unha disputa rematou.",
+    "pagoErrCuentaEnBorrado" to "Esta conta estase borrando.",
+    "pagoErrReembolsoFallido" to "O reembolso fallou en Stripe; reintentarase.",
+    "pagoErrTransferenciaRevertida" to "A transferencia foi revertida.",
+    "pagoErrAdminEsParte" to "Un administrador non pode ser parte dun pagamento.",
+    "pagoContracargoAviso" to "O banco abriu unha reclamación sobre este pagamento.",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4707,6 +4737,12 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Estamos confirmando o pagamento com o banco. Avisaremos quando estiver pronto.",
     "pagoFlujoCanceladoPago" to "O pagamento foi cancelado.",
     "cobrosComprobando" to "Verificando sua conta de recebimentos…",
+    "pagoErrPlazoVencido" to "O prazo para abrir uma disputa terminou.",
+    "pagoErrCuentaEnBorrado" to "Esta conta está sendo excluída.",
+    "pagoErrReembolsoFallido" to "O reembolso falhou no Stripe; será tentado novamente.",
+    "pagoErrTransferenciaRevertida" to "A transferência foi revertida.",
+    "pagoErrAdminEsParte" to "Um administrador não pode ser parte de um pagamento.",
+    "pagoContracargoAviso" to "O banco abriu uma reclamação sobre este pagamento.",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5485,6 +5521,12 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Nous confirmons le paiement auprès de la banque. Nous vous préviendrons dès qu'il sera prêt.",
     "pagoFlujoCanceladoPago" to "Le paiement a été annulé.",
     "cobrosComprobando" to "Vérification de votre compte d'encaissement…",
+    "pagoErrPlazoVencido" to "Le délai pour ouvrir un litige est écoulé.",
+    "pagoErrCuentaEnBorrado" to "Ce compte est en cours de suppression.",
+    "pagoErrReembolsoFallido" to "Le remboursement a échoué chez Stripe ; il sera retenté.",
+    "pagoErrTransferenciaRevertida" to "Le virement a été annulé.",
+    "pagoErrAdminEsParte" to "Un administrateur ne peut pas être partie à un paiement.",
+    "pagoContracargoAviso" to "La banque a ouvert une réclamation sur ce paiement.",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6263,6 +6305,12 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Wir bestätigen die Zahlung mit der Bank. Wir melden uns, sobald sie fertig ist.",
     "pagoFlujoCanceladoPago" to "Die Zahlung wurde storniert.",
     "cobrosComprobando" to "Dein Auszahlungskonto wird geprüft…",
+    "pagoErrPlazoVencido" to "Die Frist, einen Streitfall zu eröffnen, ist abgelaufen.",
+    "pagoErrCuentaEnBorrado" to "Dieses Konto wird gerade gelöscht.",
+    "pagoErrReembolsoFallido" to "Die Erstattung ist bei Stripe fehlgeschlagen; sie wird erneut versucht.",
+    "pagoErrTransferenciaRevertida" to "Die Überweisung wurde rückgängig gemacht.",
+    "pagoErrAdminEsParte" to "Ein Administrator kann nicht Partei einer Zahlung sein.",
+    "pagoContracargoAviso" to "Die Bank hat eine Reklamation zu dieser Zahlung eröffnet.",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7041,6 +7089,12 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Stiamo confermando il pagamento con la banca. Ti avviseremo quando sarà pronto.",
     "pagoFlujoCanceladoPago" to "Il pagamento è stato annullato.",
     "cobrosComprobando" to "Verifica del tuo account di incasso…",
+    "pagoErrPlazoVencido" to "Il termine per aprire una contestazione è scaduto.",
+    "pagoErrCuentaEnBorrado" to "Questo account è in fase di eliminazione.",
+    "pagoErrReembolsoFallido" to "Il rimborso non è riuscito su Stripe; verrà ritentato.",
+    "pagoErrTransferenciaRevertida" to "Il trasferimento è stato annullato.",
+    "pagoErrAdminEsParte" to "Un amministratore non può essere parte di un pagamento.",
+    "pagoContracargoAviso" to "La banca ha aperto un reclamo su questo pagamento.",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7819,6 +7873,12 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "نقوم بتأكيد الدفع مع البنك. سنُعلمك عندما يكتمل.",
     "pagoFlujoCanceladoPago" to "تم إلغاء الدفعة.",
     "cobrosComprobando" to "جارٍ التحقق من حساب التحصيل الخاص بك…",
+    "pagoErrPlazoVencido" to "انتهت مهلة فتح النزاع.",
+    "pagoErrCuentaEnBorrado" to "يتم حذف هذا الحساب حالياً.",
+    "pagoErrReembolsoFallido" to "فشل الاسترداد في Stripe؛ ستتم إعادة المحاولة.",
+    "pagoErrTransferenciaRevertida" to "تم عكس التحويل.",
+    "pagoErrAdminEsParte" to "لا يمكن للمشرف أن يكون طرفاً في دفعة.",
+    "pagoContracargoAviso" to "فتح البنك مطالبة بشأن هذه الدفعة.",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8597,6 +8657,12 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "我们正在与银行确认付款，完成后会通知你。",
     "pagoFlujoCanceladoPago" to "付款已被取消。",
     "cobrosComprobando" to "正在检查你的收款账户…",
+    "pagoErrPlazoVencido" to "发起争议的期限已结束。",
+    "pagoErrCuentaEnBorrado" to "此账户正在删除中。",
+    "pagoErrReembolsoFallido" to "Stripe 退款失败，将会重试。",
+    "pagoErrTransferenciaRevertida" to "转账已被撤销。",
+    "pagoErrAdminEsParte" to "管理员不能作为付款的当事方。",
+    "pagoContracargoAviso" to "银行已就此付款发起争议。",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9375,6 +9441,12 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Confirmăm plata cu banca. Te vom anunța când este gata.",
     "pagoFlujoCanceladoPago" to "Plata a fost anulată.",
     "cobrosComprobando" to "Se verifică contul tău de încasări…",
+    "pagoErrPlazoVencido" to "Termenul pentru a deschide o dispută a expirat.",
+    "pagoErrCuentaEnBorrado" to "Acest cont este în curs de ștergere.",
+    "pagoErrReembolsoFallido" to "Rambursarea a eșuat în Stripe; va fi reîncercată.",
+    "pagoErrTransferenciaRevertida" to "Transferul a fost anulat.",
+    "pagoErrAdminEsParte" to "Un administrator nu poate fi parte într-o plată.",
+    "pagoContracargoAviso" to "Banca a deschis o reclamație cu privire la această plată.",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -10153,6 +10225,12 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "We bevestigen de betaling bij de bank. We laten het je weten zodra het klaar is.",
     "pagoFlujoCanceladoPago" to "De betaling is geannuleerd.",
     "cobrosComprobando" to "Je uitbetalingsaccount wordt gecontroleerd…",
+    "pagoErrPlazoVencido" to "De termijn om een geschil te openen is verstreken.",
+    "pagoErrCuentaEnBorrado" to "Dit account wordt verwijderd.",
+    "pagoErrReembolsoFallido" to "De terugbetaling is mislukt bij Stripe; er wordt opnieuw geprobeerd.",
+    "pagoErrTransferenciaRevertida" to "De overboeking is teruggedraaid.",
+    "pagoErrAdminEsParte" to "Een beheerder kan geen partij zijn bij een betaling.",
+    "pagoContracargoAviso" to "De bank heeft een claim ingediend over deze betaling.",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -10931,4 +11009,10 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoConfirmando" to "Potwierdzamy płatność w banku. Powiadomimy Cię, gdy będzie gotowe.",
     "pagoFlujoCanceladoPago" to "Płatność została anulowana.",
     "cobrosComprobando" to "Sprawdzanie konta do wypłat…",
+    "pagoErrPlazoVencido" to "Termin na otwarcie sporu minął.",
+    "pagoErrCuentaEnBorrado" to "To konto jest usuwane.",
+    "pagoErrReembolsoFallido" to "Zwrot nie powiódł się w Stripe; zostanie ponowiony.",
+    "pagoErrTransferenciaRevertida" to "Przelew został cofnięty.",
+    "pagoErrAdminEsParte" to "Administrator nie może być stroną płatności.",
+    "pagoContracargoAviso" to "Bank otworzył reklamację dotyczącą tej płatności.",
 ), respaldo = espanol) }

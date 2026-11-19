@@ -863,6 +863,12 @@ class AppCadenas internal constructor(
     val pagoFlujoConfirmando: String get() = t("pagoFlujoConfirmando")
     val pagoFlujoCanceladoPago: String get() = t("pagoFlujoCanceladoPago")
     val cobrosComprobando: String get() = t("cobrosComprobando")
+    val pagoErrPlazoVencido: String get() = t("pagoErrPlazoVencido")
+    val pagoErrCuentaEnBorrado: String get() = t("pagoErrCuentaEnBorrado")
+    val pagoErrReembolsoFallido: String get() = t("pagoErrReembolsoFallido")
+    val pagoErrTransferenciaRevertida: String get() = t("pagoErrTransferenciaRevertida")
+    val pagoErrAdminEsParte: String get() = t("pagoErrAdminEsParte")
+    val pagoContracargoAviso: String get() = t("pagoContracargoAviso")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }

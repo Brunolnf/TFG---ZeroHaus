@@ -38,6 +38,11 @@ fun AppCadenas.textoError(e: ErrorPago): String = when (e) {
     ErrorPago.BLOQUEO -> pagoErrBloqueo
     ErrorPago.CHAT_NO_VALIDO -> pagoErrChatNoValido
     ErrorPago.COBRO_NO_VALIDO -> pagoErrCobroNoValido
+    ErrorPago.PLAZO_VENCIDO -> pagoErrPlazoVencido
+    ErrorPago.CUENTA_EN_BORRADO -> pagoErrCuentaEnBorrado
+    ErrorPago.REEMBOLSO_FALLIDO -> pagoErrReembolsoFallido
+    ErrorPago.TRANSFERENCIA_REVERTIDA -> pagoErrTransferenciaRevertida
+    ErrorPago.ADMIN_ES_PARTE -> pagoErrAdminEsParte
     ErrorPago.OPERACION_EN_CURSO -> pagoErrOperacionEnCurso
     ErrorPago.STRIPE_NO_RESPONDE -> pagoErrStripeNoResponde
     ErrorPago.EMAIL_SIN_VERIFICAR -> pagoErrEmailSinVerificar

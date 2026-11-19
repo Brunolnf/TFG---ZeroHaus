@@ -37,6 +37,10 @@ class AdminViewModel : ViewModel() {
     private var jobDisputas: Job? = null
     val disputas = mutableStateListOf<Pago>()
     val cargandoDisputas = mutableStateOf(false)
+    private var jobAtencion: Job? = null
+    val atencion = mutableStateListOf<Pago>()
+    val cargandoAtencion = mutableStateOf(false)
+
     /** Pago cuya resolución está en curso (desactiva sus botones). */
     val resolviendo = mutableStateOf<String?>(null)
 
@@ -94,6 +98,22 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    /** Escucha los pagos con `requiereAdmin` (informativo: sin acciones). */
+    fun escucharAtencion() {
+        if (jobAtencion?.isActive == true) return
+        cargandoAtencion.value = true
+        jobAtencion = viewModelScope.launch {
+            repoPagos.pagosQueRequierenAdmin().collect { r ->
+                cargandoAtencion.value = false
+                when (r) {
+                    is ResultadoPago.Ok -> { atencion.clear(); atencion.addAll(PresentacionPagos.requierenAtencion(r.valor)) }
+                    is ResultadoPago.Error ->
+                        if (FirebaseAuth.getInstance().currentUser != null) error.value = getCadenas("Español").textoError(r.error)
+                }
+            }
+        }
+    }
+
     /** Libera el dinero al profesional o lo reembolsa al cliente. El servidor comprueba que soy administrador. */
     fun resolverDisputa(pago: Pago, decision: DecisionDisputa) {
         if (resolviendo.value != null) return
@@ -133,6 +153,7 @@ class AdminViewModel : ViewModel() {
     override fun onCleared() {
         listenerDenuncias?.remove()
         jobDisputas?.cancel()
+        jobAtencion?.cancel()
         super.onCleared()
     }
 

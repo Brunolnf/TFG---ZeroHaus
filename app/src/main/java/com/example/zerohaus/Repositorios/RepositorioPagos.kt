@@ -82,6 +82,24 @@ class RepositorioPagos {
     /** Pagos en los que soy el profesional, el más reciente primero. */
     fun misPagosComoProfesional(): Flow<ResultadoPago<List<Pago>>> = consulta("profesional", chatId = null)
 
+    /** Pagos que el servidor marca con `requiereAdmin` (solo el administrador puede listarlos). Sin `orderBy`. */
+    fun pagosQueRequierenAdmin(): Flow<ResultadoPago<List<Pago>>> = listaDeAdmin(db.collection(PAGOS).whereEqualTo("requiereAdmin", true))
+
+    private fun listaDeAdmin(q: Query): Flow<ResultadoPago<List<Pago>>> {
+        if (miUid().isBlank()) return flowOf(ResultadoPago.Error(ErrorPago.SIN_SESION))
+        return callbackFlow {
+            val reg = q.addSnapshotListener { snap, error ->
+                if (error != null || snap == null) {
+                    trySend(ResultadoPago.Error(errorDeLectura(error)))
+                    close()
+                    return@addSnapshotListener
+                }
+                trySend(ResultadoPago.Ok(Pago.ordenar(snap.documents.mapNotNull { Pago.desdeMapa(it.id, it.data) })))
+            }
+            awaitClose { reg.remove() }
+        }
+    }
+
     /**
      * Pagos de un chat, sea yo cliente o profesional: las reglas solo admiten
      * consultas filtradas por mi propia parte, así que son dos y se juntan.

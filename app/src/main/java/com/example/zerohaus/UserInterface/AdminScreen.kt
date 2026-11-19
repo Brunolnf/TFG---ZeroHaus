@@ -25,6 +25,7 @@ import com.example.zerohaus.Modelos.DecisionDisputa
 import com.example.zerohaus.Modelos.Denuncia
 import com.example.zerohaus.Modelos.FormatoPago
 import com.example.zerohaus.Modelos.Pago
+import com.example.zerohaus.Util.textoEstado
 import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Modelos.Usuario
 import java.text.SimpleDateFormat
@@ -48,7 +49,7 @@ fun AdminScreen(
     viewModel: AdminViewModel,
     onCerrarSesion: () -> Unit
 ) {
-    LaunchedEffect(Unit) { viewModel.cargar(); viewModel.escucharDenuncias(); viewModel.escucharDisputas() }
+    LaunchedEffect(Unit) { viewModel.cargar(); viewModel.escucharDenuncias(); viewModel.escucharDisputas(); viewModel.escucharAtencion() }
 
     val context = LocalContext.current
     var pestana by remember { mutableIntStateOf(0) }
@@ -118,10 +119,19 @@ fun AdminScreen(
                     onClick = { pestana = 2 },
                     text = { Text(if (viewModel.disputas.isNotEmpty()) "Disputas (${viewModel.disputas.size})" else "Disputas") }
                 )
+                Tab(
+                    selected = pestana == 3,
+                    onClick = { pestana = 3 },
+                    text = { Text(if (viewModel.atencion.isNotEmpty()) "Requieren atención (${viewModel.atencion.size})" else "Requieren atención") }
+                )
             }
 
             if (pestana == 2) {
                 ListaDisputas(viewModel = viewModel, onResolver = { p, d -> disputaResolver = p to d })
+                return@Column
+            }
+            if (pestana == 3) {
+                ListaAtencion(viewModel)
                 return@Column
             }
 
@@ -356,6 +366,62 @@ private fun ListaDisputas(viewModel: AdminViewModel, onResolver: (Pago, Decision
                         OutlinedButton(
                             onClick = { onResolver(p, DecisionDisputa.REEMBOLSAR) }, enabled = !ocupado
                         ) { Text("Reembolsar al cliente", fontSize = 12.sp, color = ROJO) }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** Pagos que el servidor marca con `requiereAdmin`: solo informativo. */
+@Composable
+private fun ListaAtencion(viewModel: AdminViewModel) {
+    if (viewModel.cargandoAtencion.value) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = VERDE) }
+        return
+    }
+    if (viewModel.atencion.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No hay pagos que requieran atención", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    val es = remember { com.example.zerohaus.Util.getCadenas("Español") }
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-ES")) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(viewModel.atencion, key = { it.id }) { p ->
+            val gris = MaterialTheme.colorScheme.onSurfaceVariant
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EtiquetaMini(es.textoEstado(p.estado), NARANJA)
+                        Spacer(Modifier.weight(1f))
+                        Text(FormatoPago.importe(p.importeCent, p.moneda), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Text("Cliente: ${viewModel.nombreDe(p.cliente)}", fontSize = 13.sp)
+                    Text("Profesional: ${viewModel.nombreDe(p.profesional)}", fontSize = 13.sp)
+                    if (p.descripcion.isNotBlank()) Text("Trabajo: ${p.descripcion}", fontSize = 13.sp, color = gris)
+                    p.liberacion?.let { l ->
+                        val prox = l.proximoIntento?.takeIf { it > 0 }?.let { " (próximo intento: ${sdf.format(Date(it))})" }.orEmpty()
+                        Text("Fallos al liberar: ${l.fallos}$prox", fontSize = 13.sp)
+                    }
+                    p.contracargo?.let { c ->
+                        val res = when (c.resultado) {
+                            com.example.zerohaus.Modelos.ResultadoContracargo.GANADO -> "ganado"
+                            com.example.zerohaus.Modelos.ResultadoContracargo.PERDIDO -> "perdido"
+                            com.example.zerohaus.Modelos.ResultadoContracargo.DESCONOCIDO -> "abierto"
+                        }
+                        val f = if (c.fecha > 0) " (${sdf.format(Date(c.fecha))})" else ""
+                        Text("Contracargo: $res$f", fontSize = 13.sp, color = ROJO)
                     }
                 }
             }
