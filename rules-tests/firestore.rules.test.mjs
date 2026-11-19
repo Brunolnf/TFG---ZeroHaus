@@ -1095,6 +1095,7 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
         pagoId: "p1", operacion: "transferencia", evento: "confirmar", reserva: "r1", creado: 1, renovado: 1, intento: 1,
       });
       await setDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1"), { asunto: "x", texto: "y", fecha: 1 });
+      await setDoc(doc(db, "limpieza_stripe/l1"), { cobros: ["pi_1"], customerId: "cus_1", fallos: 0, proximoIntento: 0 });
     });
   });
 
@@ -1152,6 +1153,13 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
       await assertFails(getDocs(collection(db, "avisos_admin_pagos")), `${quien}: listar avisos`);
       await assertFails(deleteDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1")), `${quien}: borrar aviso`);
       await assertFails(setDoc(doc(db, "avisos_admin_pagos/otro"), { asunto: "x" }), `${quien}: crear aviso`);
+      // Cola de limpieza de Stripe que deja el borrado de una cuenta: si la app
+      // pudiera crearla, haría anular cobros o borrar Customers ajenos
+      await assertFails(getDoc(doc(db, "limpieza_stripe/l1")), `${quien}: leer limpieza`);
+      await assertFails(getDocs(collection(db, "limpieza_stripe")), `${quien}: listar limpiezas`);
+      await assertFails(setDoc(doc(db, "limpieza_stripe/l2"), { cobros: ["pi_ajeno"], customerId: "cus_ajeno" }),
+        `${quien}: crear limpieza`);
+      await assertFails(deleteDoc(doc(db, "limpieza_stripe/l1")), `${quien}: borrar limpieza`);
     }
   });
 });

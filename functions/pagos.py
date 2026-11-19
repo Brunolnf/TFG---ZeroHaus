@@ -19,8 +19,11 @@ Después, las funciones (main.py las importa para que Firebase las encuentre):
                  pagos_reintentar, pagos_cancelar, pagos_terminar,
                  pagos_confirmar, pagos_disputar y pagos_resolver (admin).
   HTTP           stripe_webhook: eventos de Stripe con la firma verificada.
-  Programada     pagos_liberar_vencidos: cada hora, libera los plazos vencidos
-                 y avisa de los pagos retenidos sin avance.
+  Programada     pagos_liberar_vencidos: cada hora, libera los plazos vencidos,
+                 avisa de los pagos retenidos sin avance y reintenta la cola
+                 /limpieza_stripe.
+  Firestore      pagos_limpiar_stripe: al encolarse una limpieza (borrado de
+                 una cuenta), anula sus cobros y borra su Customer en Stripe.
 
 Lo que necesita al administrador (reembolso fallido, transferencia revertida,
 cobro sin pago, contracargo, liberación que falla, pago retenido sin avance) se
@@ -49,7 +52,7 @@ from typing import Callable, Optional
 
 import stripe
 from firebase_admin import firestore
-from firebase_functions import https_fn, scheduler_fn
+from firebase_functions import firestore_fn, https_fn, scheduler_fn
 from firebase_functions.params import SecretParam
 from google.auth import default as default_creds
 from google.auth.transport.requests import AuthorizedSession
@@ -543,8 +546,21 @@ CUPOS_DIA = {
     "estadoCuenta": 60,                         # stripe_estado_cuenta
     "enlaceCuenta": 20,                         # stripe_crear_enlace_cuenta
 }
-# Con el dinero en camino o retenido: con uno de estos, la cuenta no se borra
-ESTADOS_CON_DINERO = frozenset({"pendiente_pago", "retenido", "terminado", "en_disputa"})
+# Con el dinero ya cobrado: con uno de estos, la cuenta no se borra (sin ella,
+# nadie lo confirmaría, lo disputaría o lo recibiría)
+ESTADOS_CON_DINERO = frozenset({"retenido", "terminado", "en_disputa"})
+# Sin dinero cobrado: al borrar la cuenta se cancelan (en Firestore; lo de
+# Stripe se encola en /limpieza_stripe)
+ESTADOS_CANCELABLES_AL_BORRAR = ("solicitado", "pendiente_pago", "fallido")
+# La marca de borrado (/usuarios.borrandoDesde) caduca: un borrado que se corta
+# sin quitarla no deja la cuenta sin poder pagar. Las funciones de borrado se
+# cortan a los 120 s
+BORRADO_CADUCA_MS = 15 * 60 * 1000
+# Cola /limpieza_stripe: reintentos cada 1 h, 2 h, 4 h, 8 h; al quinto fallo
+# pasa al administrador
+LIMPIEZA_ESPERA_MS = 60 * 60 * 1000
+LIMPIEZA_FALLOS_MAX = 5
+LIMPIEZAS_LOTE = 50
 # El cobro ya está contabilizado (se aplicó cobro_ok): otro aviso de cobro hecho no es dinero nuevo
 _ESTADOS_COBRADOS = frozenset({"retenido", "terminado", "en_disputa", "liberado", "reembolsado", "contracargo"})
 # Estados del PaymentIntent en los que el cliente todavía puede pagarlo
@@ -806,11 +822,14 @@ def _exigir_profesional(db, uid: str) -> None:
 
 
 def _comprobar_no_borrando(db, *uids, txn=None) -> None:
-    """Ninguna de las cuentas se está borrando (/usuarios/{uid}.borrando, que
-    el borrado pone antes de mirar si quedan pagos en curso)."""
+    """Ninguna de las cuentas se está borrando (/usuarios/{uid}.borrandoDesde,
+    que el borrado pone antes de mirar si quedan pagos en curso). Pasados
+    BORRADO_CADUCA_MS la marca ya no cuenta."""
+    ahora = _ahora_ms()
     for uid in uids:
         snap = db.collection("usuarios").document(uid).get(transaction=txn)
-        if snap.exists and (snap.to_dict() or {}).get("borrando") is True:
+        desde = (snap.to_dict() or {}).get("borrandoDesde") if snap.exists else None
+        if _es_entero(desde) and ahora - desde < BORRADO_CADUCA_MS:
             raise ErrorPago("cuenta_en_borrado")
 
 
@@ -1073,22 +1092,42 @@ def _transferir(db, api, pago: dict, account_id: str) -> str:
     return creada["id"]
 
 
+def _reembolso_completo(pago: dict, r: dict) -> bool:
+    return r.get("status") == "succeeded" and r.get("amount") == pago["importeCent"]
+
+
+def _reembolso_parcial(db, pago: dict, r: dict):
+    """Un reembolso hecho por otro importe (p. ej. una parte devuelta desde el
+    panel): no cuenta como completo, y otro completo devolvería de más. No se
+    repite solo: lo decide el administrador."""
+    _avisar_admin(db, f"{pago['id']}_reembolso_parcial_{r.get('id')}", "Reembolso por otro importe",
+                  f"Pago {pago['id']}: el reembolso {r.get('id')} es de {r.get('amount')} céntimos y el pago de "
+                  f"{pago['importeCent']}. No se reembolsa más solo: revisarlo en Stripe.")
+    raise ErrorPago("reembolso_fallido", f"{r.get('id')} por otro importe")
+
+
 def _reembolsar(db, api, pago: dict) -> str:
-    """Id del reembolso completo del pago: el que ya hay o uno nuevo. Uno
-    pendiente está en curso, no hecho; uno fallido o cancelado no cuenta."""
+    """Id del reembolso completo del pago: el que ya hay o uno nuevo. Solo
+    cuenta uno hecho por el importe del pago; uno pendiente está en curso, no
+    hecho; uno fallido o cancelado no cuenta."""
     cobro_id = pago["stripePaymentIntentId"]
     hechos = api.buscar_reembolsos(cobro_id)
-    hecho = next((r for r in hechos if r.get("status") == "succeeded"), None)
+    hecho = next((r for r in hechos if _reembolso_completo(pago, r)), None)
     if hecho:
         return hecho["id"]
-    if any(r.get("status") in _REEMBOLSO_VIVO for r in hechos):
+    if any(r.get("status") in ("pending", "requires_action") for r in hechos):
         raise ErrorPago("operacion_en_curso", "reembolso pendiente en Stripe")
+    parcial = next((r for r in hechos if r.get("status") == "succeeded"), None)
+    if parcial:
+        _reembolso_parcial(db, pago, parcial)
     intento = _siguiente_intento(db, pago["id"], hechos, "reembolso_fallido", "Reembolso fallido")
     _cargo_cobrado(api, pago)
     creado = api.crear_reembolso(cobro_id, pago["importeCent"], f"{pago['id']}:reembolso:{intento}",
                                  {"pagoId": pago["id"], "intento": str(intento)})
-    if creado.get("status") == "succeeded":
+    if _reembolso_completo(pago, creado):
         return creado["id"]
+    if creado.get("status") == "succeeded":
+        _reembolso_parcial(db, pago, creado)
     if creado.get("status") in _REEMBOLSO_VIVO:
         raise ErrorPago("operacion_en_curso", "reembolso pendiente en Stripe")
     _fallo_al_mover(db, pago["id"], creado, intento, "reembolso_fallido", "Reembolso fallido")
@@ -1408,8 +1447,9 @@ def _resolver(db, uid: str, datos: dict) -> dict:
 # ── Tarea programada ──
 
 def liberar_vencidos(db) -> dict:
-    """Pagos en `terminado` con el plazo vencido, por lotes y con tope por
-    ejecución, y después la revisión de los retenidos sin avance.
+    """Lo que hace la tarea horaria: los pagos en `terminado` con el plazo
+    vencido, por lotes y con tope por ejecución; después, la revisión de los
+    retenidos sin avance y la cola /limpieza_stripe.
 
     Cada pago lleva su espera (`liberacion`: fallos y proximoIntento): uno que
     falla se reintenta cada vez más tarde, sin gastar el tope de los demás, y al
@@ -1421,7 +1461,21 @@ def liberar_vencidos(db) -> dict:
                 .where(filter=FieldFilter("liberarEn", "<=", ahora))
                 .order_by("liberarEn")
                 .limit(LIBERAR_LOTE))
-    resultado = {"liberados": 0, "fallidos": 0, "aplazados": 0, "avisados": 0}
+    resultado = {"liberados": 0, "fallidos": 0, "aplazados": 0, "avisados": 0, "limpiezas": 0}
+    try:
+        _liberar_lotes(db, consulta, ahora, resultado)
+    except _SinClaveStripe:
+        pass        # sin clave válida fallarían todos; lo demás sigue
+    resultado["avisados"] = _revisar_retenidos(db)
+    resultado["limpiezas"] = _procesar_limpiezas(db)
+    return resultado
+
+
+class _SinClaveStripe(Exception):
+    """La clave de Stripe no sirve: no tiene sentido seguir intentando liberar."""
+
+
+def _liberar_lotes(db, consulta, ahora: int, resultado: dict) -> None:
     ultimo, intentados = None, 0
     while intentados < LIBERAR_MAX_EJECUCION:
         lote = list((consulta if ultimo is None else consulta.start_after(ultimo)).stream())
@@ -1441,16 +1495,19 @@ def liberar_vencidos(db) -> dict:
                 resultado["fallidos"] += 1
                 print(f"[PAGOS] No se pudo liberar {snap.id}: {e}")
                 if isinstance(e, ErrorPago) and e.codigo == "stripe_no_configurado":
-                    return resultado        # sin clave válida fallarían todos
+                    raise _SinClaveStripe() from e
                 if not (isinstance(e, ErrorPago) and e.codigo in _NO_ES_FALLO_DE_LIBERACION):
                     _apuntar_fallo_liberacion(db, snap.id, e)
         if len(lote) < LIBERAR_LOTE:
             break
         ultimo = lote[-1]
-    resultado["avisados"] = _revisar_retenidos(db)
-    return resultado
 
 
+# PENDIENTE (revisión del bloque E, bajo): un pago en `terminado` que acaba con
+# requiereAdmin por fallos de liberación no tiene salida de administrador
+# (pagos_resolver solo actúa sobre `en_disputa`). Hoy lo resuelve el cliente
+# confirmando, o el administrador a mano en Stripe. No se cambia la tabla de
+# transiciones sin decidirlo antes.
 def _apuntar_fallo_liberacion(db, pago_id: str, error: Exception) -> None:
     ref = db.collection("pagos").document(pago_id)
     ahora = _ahora_ms()
@@ -1784,11 +1841,16 @@ def _respuesta(codigo: int, resultado: str) -> https_fn.Response:
 
 
 # ── Borrado de cuenta ──
-# Orden en main._borrar_cuenta: marcar_borrando → pagos_activos (si hay, no se
-# borra nada y se quita la marca) → cerrar_pagos_para_borrar → Play → purga.
+# El borrado no llama a Stripe: es obligatorio (Google Play) y tiene que
+# funcionar aunque Stripe no esté configurado o no responda. Orden en
+# main._borrar_cuenta: marcar_borrando → pagos_activos (con dinero cobrado no
+# se borra nada) → Play → cerrar_pagos_para_borrar → purga; si algo falla
+# antes de terminar, se quita la marca. Lo de Stripe (anular cobros y borrar
+# el Customer) se encola en /limpieza_stripe: lo hace pagos_limpiar_stripe al
+# crearse el documento y, si falla, la tarea horaria.
 
 def pagos_activos(db, uid: str) -> list:
-    """Ids de los pagos de `uid` (como cliente o profesional) con dinero en camino o retenido."""
+    """Ids de los pagos de `uid` (como cliente o profesional) con el dinero ya cobrado."""
     activos = []
     for campo in ("cliente", "profesional"):
         for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
@@ -1797,11 +1859,18 @@ def pagos_activos(db, uid: str) -> list:
     return activos
 
 
+def _con_pagos() -> https_fn.HttpsError:
+    return https_fn.HttpsError(https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                               "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
+                               {"motivo": "pagos"})
+
+
 def marcar_borrando(db, uid: str) -> None:
     """Primer paso del borrado: desde aquí, solicitar, aceptar y reintentar se
     rechazan (cuenta_en_borrado), comprobado dentro de su transacción. Así no
-    se cuela un cobro entre mirar si hay pagos en curso y borrar."""
-    db.collection("usuarios").document(uid).set({"borrando": True}, merge=True)
+    se cuela un cobro entre mirar si hay pagos en curso y borrar. Se guarda la
+    hora (`borrandoDesde`): la marca caduca a los BORRADO_CADUCA_MS."""
+    db.collection("usuarios").document(uid).set({"borrandoDesde": _ahora_ms()}, merge=True)
 
 
 def desmarcar_borrando(db, uid: str) -> None:
@@ -1812,45 +1881,125 @@ def desmarcar_borrando(db, uid: str) -> None:
         snap = ref.get()
         if not snap.exists:
             return
-        if set(snap.to_dict() or {}) <= {"borrando"}:
+        if set(snap.to_dict() or {}) <= {"borrandoDesde"}:
             ref.delete()
         else:
-            ref.update({"borrando": firestore.DELETE_FIELD})
+            ref.update({"borrandoDesde": firestore.DELETE_FIELD})
     except Exception as e:
         print(f"[PAGOS] No se pudo quitar la marca de borrado de {uid}: {e}")
 
 
 def cerrar_pagos_para_borrar(db, uid: str) -> int:
-    """Antes de purgar: cancela los pagos de `uid` que aún no tienen dinero
-    (solicitado o fallido; el cobro de un fallido se anula en Stripe, para que
-    nadie lo pague después) y borra su Customer de Stripe. Los errores salen
-    como HttpsError y el borrado no sigue. Devuelve cuántos ha cancelado."""
-    try:
-        cancelados = 0
-        for campo in ("cliente", "profesional"):
-            for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
-                if (snap.to_dict() or {}).get("estado") in ("solicitado", "fallido"):
-                    _cancelar(db, uid, {"pagoId": snap.id})
-                    cancelados += 1
-        _borrar_cliente_stripe(db, uid)
-        return cancelados
-    except ErrorPago as e:
-        raise _error_https(e) from None
-    except stripe.StripeError as e:
-        print(f"[PAGOS] Stripe falló al preparar el borrado de {uid}: {type(e).__name__}: {e}")
-        raise https_fn.HttpsError(https_fn.FunctionsErrorCode.UNAVAILABLE,
-                                  "El servicio de pagos no responde. Inténtalo más tarde.", {"motivo": "stripe"}) from None
-
-
-def _borrar_cliente_stripe(db, uid: str) -> None:
-    """Borra el Customer de Stripe del usuario (sus tarjetas guardadas), si lo
-    tiene. La cuenta Connect del profesional no se borra: la cierra él desde
-    Stripe y su historial lo guarda Stripe."""
+    """Antes de purgar, solo en Firestore: cancela los pagos de `uid` sin dinero
+    cobrado (solicitado, pendiente_pago y fallido) y encola en /limpieza_stripe
+    anular sus cobros y borrar su Customer. Si un pago ya tiene el dinero (un
+    cobro que acaba de completarse), no sigue: HttpsError con motivo «pagos».
+    Si el cliente paga un cobro antes de que se anule, el webhook lo reembolsa,
+    porque su pago ya está cancelado. Devuelve cuántos ha cancelado."""
+    cobros, cancelados = [], 0
+    for campo, actor in (("cliente", CLIENTE), ("profesional", PROFESIONAL)):
+        for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
+            estado = (snap.to_dict() or {}).get("estado")
+            if estado in ESTADOS_CON_DINERO:
+                raise _con_pagos()
+            if estado not in ESTADOS_CANCELABLES_AL_BORRAR:
+                continue
+            try:
+                nuevo = _transicion(db, snap.id, "cancelar", actor, uid)
+            except ErrorPago as e:
+                # Se ha cobrado mientras tanto: ya tiene dinero
+                if _leer_pago(db, snap.id).get("estado") in ESTADOS_CON_DINERO:
+                    raise _con_pagos() from None
+                raise _error_https(e) from None
+            cancelados += 1
+            if nuevo.get("stripePaymentIntentId"):
+                cobros.append(nuevo["stripePaymentIntentId"])
     customer_id = _datos(db, "cuentas_stripe", uid).get("customerId")
-    if not customer_id:
-        return
-    _stripe().borrar_cliente(customer_id)
-    db.collection("cuentas_stripe").document(uid).update({"customerId": firestore.DELETE_FIELD})
+    if cobros or customer_id:
+        # Sin el uid: solo lo que hay que hacer en Stripe
+        db.collection("limpieza_stripe").document().set({
+            "cobros": cobros, "customerId": customer_id or None,
+            "creado": _ahora_ms(), "fallos": 0, "proximoIntento": 0,
+        })
+    return cancelados
+
+
+# proximoIntento de una limpieza que ya no se reintenta (requiereAdmin): fuera
+# de la consulta de la tarea horaria
+_NUNCA_MS = 2 ** 53
+
+
+def procesar_limpieza(db, ref) -> bool:
+    """Hace en Stripe lo que dejó encolado el borrado de una cuenta: anula los
+    cobros que aún se podían pagar y borra el Customer (sus tarjetas). Todo se
+    puede repetir. True si ha terminado (y borra el documento); si falla, lo
+    apunta para reintentarlo más tarde."""
+    snap = ref.get()
+    if not snap.exists:
+        return True
+    datos = snap.to_dict() or {}
+    if datos.get("requiereAdmin") is True:
+        return False
+    try:
+        api = _stripe()
+        for cobro_id in datos.get("cobros") or []:
+            # Ya pagado (o pagándose): lo reembolsa el webhook, porque su pago está cancelado
+            if api.leer_cobro(cobro_id).get("status") in ("succeeded", "processing", "canceled"):
+                continue
+            api.cancelar_cobro(cobro_id, f"limpieza:{cobro_id}")
+        if datos.get("customerId"):
+            api.borrar_cliente(datos["customerId"])
+    except Exception as e:
+        _apuntar_fallo_limpieza(db, ref, e)
+        return False
+    ref.delete()
+    return True
+
+
+def _apuntar_fallo_limpieza(db, ref, error: Exception) -> None:
+    ahora = _ahora_ms()
+    codigo = (error.codigo if isinstance(error, ErrorPago) else type(error).__name__)[:100]
+    print(f"[PAGOS] La limpieza de Stripe {ref.id} ha fallado ({codigo}): {error}")
+
+    @firestore.transactional
+    def _apuntar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return False
+        datos = snap.to_dict() or {}
+        fallos = int(datos.get("fallos") or 0) + 1
+        cambios = {"fallos": fallos, "ultimoError": codigo,
+                   "proximoIntento": ahora + LIMPIEZA_ESPERA_MS * 2 ** (fallos - 1)}
+        al_admin = fallos >= LIMPIEZA_FALLOS_MAX and datos.get("requiereAdmin") is not True
+        if fallos >= LIMPIEZA_FALLOS_MAX:
+            cambios.update(requiereAdmin=True, proximoIntento=_NUNCA_MS)
+        txn.update(ref, cambios)
+        return al_admin
+
+    try:
+        if _apuntar(db.transaction()):
+            _avisar_admin(db, f"limpieza_{ref.id}", "Limpieza de Stripe fallida",
+                          f"Tras {LIMPIEZA_FALLOS_MAX} intentos no se ha podido anular los cobros ni borrar el "
+                          f"Customer de una cuenta borrada (/limpieza_stripe/{ref.id}; último error: {codigo}). "
+                          "Hacerlo a mano en Stripe.")
+    except Exception as e:
+        print(f"[PAGOS] No se pudo apuntar el fallo de la limpieza {ref.id}: {e}")
+
+
+def _procesar_limpiezas(db) -> int:
+    """Las limpiezas de Stripe a las que ya les toca reintentarse. Devuelve cuántas ha terminado."""
+    consulta = (db.collection("limpieza_stripe")
+                .where(filter=FieldFilter("proximoIntento", "<=", _ahora_ms()))
+                .order_by("proximoIntento")
+                .limit(LIMPIEZAS_LOTE))
+    hechas = 0
+    for snap in consulta.stream():
+        try:
+            if procesar_limpieza(db, snap.reference):
+                hechas += 1
+        except Exception as e:
+            print(f"[PAGOS] No se pudo procesar la limpieza {snap.id}: {e}")
+    return hechas
 
 
 def seudonimizar_pagos(db, uid: str) -> int:
@@ -2228,6 +2377,20 @@ def stripe_webhook(req: https_fn.Request) -> https_fn.Response:
     secrets=[STRIPE_SECRET_KEY] + _SECRETOS_CORREO,
 )
 def pagos_liberar_vencidos(event: scheduler_fn.ScheduledEvent) -> None:
-    """Libera los pagos terminados cuyo plazo ha vencido sin disputa y avisa
-    de los que llevan demasiado tiempo retenidos."""
-    print(f"[PAGOS] Liberación de plazos vencidos: {liberar_vencidos(firestore.client())}")
+    """Libera los pagos terminados cuyo plazo ha vencido sin disputa, avisa de
+    los que llevan demasiado tiempo retenidos y reintenta la cola /limpieza_stripe."""
+    print(f"[PAGOS] Tarea horaria de pagos: {liberar_vencidos(firestore.client())}")
+
+
+@firestore_fn.on_document_created(
+    document="limpieza_stripe/{limpiezaId}",
+    region=REGION,
+    max_instances=MAX_INSTANCIAS_PAGOS,
+    timeout_sec=TIMEOUT_FUNCIONES_S,
+    secrets=[STRIPE_SECRET_KEY] + _SECRETOS_CORREO,
+)
+def pagos_limpiar_stripe(event) -> None:
+    """Hace enseguida en Stripe lo que deja encolado el borrado de una cuenta
+    (que no llama a Stripe). Si falla, lo reintenta la tarea horaria."""
+    db = firestore.client()
+    procesar_limpieza(db, db.collection("limpieza_stripe").document(event.params["limpiezaId"]))

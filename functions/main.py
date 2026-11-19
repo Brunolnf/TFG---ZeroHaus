@@ -288,8 +288,9 @@ def _purgar_usuario(db, uid: str) -> dict:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
-    # Borrar la cuenta anula cobros sin pagar y el Customer de Stripe (pagos.py)
-    secrets=["STRIPE_SECRET_KEY"],
+    # Play, la cancelación de pagos y la purga. Sin la clave de Stripe a
+    # propósito: el borrado no puede depender de Stripe (pagos.py)
+    timeout_sec=120,
 )
 def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     """Borra definitivamente un usuario: Auth, Firestore (cascada) y Storage.
@@ -325,12 +326,14 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
     alguna quedó sin cancelar (Play no nos dejó, o el administrador forzó el
     borrado) y hay que cancelarla en Google Play.
 
-    Con un pago en curso (cobrándose, retenido, terminado o en disputa) no se
+    Con un pago con el dinero cobrado (retenido, terminado o en disputa) no se
     borra nada, ni se toca Play: sin la cuenta, el dinero se quedaría sin
     nadie que lo confirme, lo dispute o lo reciba. Antes de mirarlo se marca
-    la cuenta (`borrando`), para que no se abra un cobro nuevo mientras tanto;
-    los pagos sin dinero (solicitado o fallido) se cancelan y el Customer de
-    Stripe se borra. Si algo falla antes de purgar, se quita la marca."""
+    la cuenta (`borrandoDesde`), para que no se abra un cobro nuevo mientras
+    tanto. Después, Play (puede fallar, y entonces la cuenta sigue viva con sus
+    pagos intactos) y, solo entonces, los pagos sin dinero se cancelan y se
+    purga. El borrado no llama a Stripe: lo de Stripe queda en una cola
+    (pagos.py). Si algo falla antes de terminar, se quita la marca."""
     pagos.marcar_borrando(db, uid)
     try:
         if pagos.pagos_activos(db, uid):
@@ -339,15 +342,15 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
                 "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
                 {"motivo": "pagos"},
             )
-        pagos.cerrar_pagos_para_borrar(db, uid)
         if cancelar_en_play:
             canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
         else:
             canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
+        pagos.cerrar_pagos_para_borrar(db, uid)
+        stats = _purgar_usuario(db, uid)
     except Exception:
         pagos.desmarcar_borrando(db, uid)
         raise
-    stats = _purgar_usuario(db, uid)
     return {
         "ok": True, "uid": uid, "stats": stats,
         "suscripcionCancelada": canceladas > 0,
@@ -437,7 +440,7 @@ def _sincronizar_bloqueados(db) -> int:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
-    secrets=["STRIPE_SECRET_KEY"],      # como eliminar_usuario_completo
+    timeout_sec=120,      # como eliminar_usuario_completo
 )
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
@@ -2787,6 +2790,6 @@ pagos.configurar(
 )
 from pagos import (  # noqa: E402,F401
     pagos_aceptar, pagos_cancelar, pagos_confirmar, pagos_disputar, pagos_liberar_vencidos,
-    pagos_reintentar, pagos_resolver, pagos_solicitar, pagos_terminar,
+    pagos_limpiar_stripe, pagos_reintentar, pagos_resolver, pagos_solicitar, pagos_terminar,
     stripe_crear_enlace_cuenta, stripe_estado_cuenta, stripe_webhook,
 )
