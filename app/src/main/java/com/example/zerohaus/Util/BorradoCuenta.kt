@@ -25,7 +25,14 @@ object BorradoCuenta {
     fun esFalloTransitorioDePlay(codigo: String?, detalles: Any?): Boolean =
         codigo == "UNAVAILABLE" && (detalles as? Map<*, *>)?.get("motivo") == "play"
 
-    enum class TipoError { RED, PLAY, OTRO }
+    /**
+     * `true` si el servidor no borra porque hay un pago en curso
+     * (`FAILED_PRECONDITION` con `motivo: "pagos"`): hay que terminarlo o cancelarlo.
+     */
+    fun esBloqueoPorPagos(codigo: String?, detalles: Any?): Boolean =
+        codigo == "FAILED_PRECONDITION" && (detalles as? Map<*, *>)?.get("motivo") == "pagos"
+
+    enum class TipoError { RED, PLAY, PAGOS, OTRO }
 
     /** Clasifica el fallo de `eliminar_mi_cuenta` para elegir el mensaje a mostrar. */
     fun clasificarError(e: Exception): TipoError {
@@ -37,6 +44,7 @@ object BorradoCuenta {
     fun clasificar(esFalloDeRed: Boolean, codigo: String?, detalles: Any?): TipoError = when {
         esFalloDeRed -> TipoError.RED
         esFalloTransitorioDePlay(codigo, detalles) -> TipoError.PLAY
+        esBloqueoPorPagos(codigo, detalles) -> TipoError.PAGOS
         else -> TipoError.OTRO
     }
 }

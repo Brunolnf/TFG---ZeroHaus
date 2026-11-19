@@ -10,7 +10,25 @@ plugins {
 
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
-    if (f.exists()) load(f.inputStream())
+    // use: sin cerrarlo, el daemon de Gradle deja local.properties bloqueado en Windows
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
+// Clave publicable de Stripe (STRIPE_PUBLISHABLE_KEY en local.properties).
+// Solo se acepta una de modo test: si falta o no empieza por pk_test_, la build
+// no falla, la clave queda vacía y la app trata los pagos como no disponibles.
+// Así nunca se compila con una clave live. El patrón es el mismo que
+// ClaveStripe.esValida (Modelos/Pago.kt) y, al ser solo [A-Za-z0-9_], el valor
+// no puede romper el literal de BuildConfig.
+val stripePublishableKey: String = localProps.getProperty("STRIPE_PUBLISHABLE_KEY", "").trim().let { clave ->
+    when {
+        clave.isEmpty() -> ""
+        Regex("pk_test_[A-Za-z0-9]{10,247}").matches(clave) -> clave
+        else -> {
+            logger.warn("STRIPE_PUBLISHABLE_KEY no es una clave pk_test_ válida: se ignora y los pagos quedan no disponibles")
+            ""
+        }
+    }
 }
 
 android {
@@ -26,6 +44,7 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY", "")
+        buildConfigField("String", "STRIPE_PUBLISHABLE_KEY", "\"$stripePublishableKey\"")
     }
 
     signingConfigs {
@@ -105,6 +124,10 @@ dependencies {
     // Google Play Billing (suscripciones de profesionales). Play exige al
     // menos la v8 para publicar actualizaciones desde el 31/08/2026.
     implementation("com.android.billingclient:billing-ktx:9.1.0")
+
+    // Stripe (pago con retención, bloque E): PaymentSheet. Versión fija; solo
+    // modo test (ver STRIPE_PUBLISHABLE_KEY arriba).
+    implementation("com.stripe:stripe-android:23.25.1")
 
     // Google Maps
     implementation("com.google.maps.android:maps-compose:9.0.1")

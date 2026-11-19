@@ -378,11 +378,16 @@ fun AppNavegacion() {
             )
         }
         composable("chat/{chatId}") { backEntry ->
+            // Uno por pantalla: el estado de pagos no sobrevive a la conversación ni a la cuenta
+            val pagosVM: PagosViewModel = viewModel()
             ChatScreen(
                 viewModel = chatVM,
                 chatId = backEntry.arguments?.getString("chatId") ?: "",
+                pagosViewModel = pagosVM,
                 onVolver = { nav.popBackStack() },
-                onVerPerfil = { tecnicoDocId -> nav.navigate("perfil_tecnico/$tecnicoDocId") }
+                onVerPerfil = { tecnicoDocId -> nav.navigate("perfil_tecnico/$tecnicoDocId") },
+                onAbrirPagos = { nav.navigate("pagos") },
+                onAbrirPago = { id -> nav.navigate("pago/$id") }
             )
         }
         composable("graficas") {
@@ -404,7 +409,24 @@ fun AppNavegacion() {
             AjustesScreen(
                 viewModel = ajustesVM,
                 onVolver = { nav.popBackStack() },
-                onCerrarSesion = cerrarSesion
+                onCerrarSesion = cerrarSesion,
+                onPagos = { nav.navigate("pagos") }
+            )
+        }
+        composable("pagos") {
+            val pagosVM: PagosViewModel = viewModel()
+            PagosScreen(
+                viewModel = pagosVM,
+                onVolver = { nav.popBackStack() },
+                onAbrirPago = { id -> nav.navigate("pago/$id") }
+            )
+        }
+        composable("pago/{pagoId}") { backEntry ->
+            val pagosVM: PagosViewModel = viewModel()
+            PagoDetalleScreen(
+                viewModel = pagosVM,
+                pagoId = backEntry.arguments?.getString("pagoId") ?: "",
+                onVolver = { nav.popBackStack() }
             )
         }
 

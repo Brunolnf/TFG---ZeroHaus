@@ -28,4 +28,13 @@ class ClasificarErrorBorradoTest {
     @Test fun otroErrorDelServidor() {
         assertEquals(TipoError.OTRO, BorradoCuenta.clasificar(false, "INTERNAL", play))
     }
+
+    @Test fun pagosEnCursoBloqueanElBorrado() {
+        val pagos = mapOf("motivo" to "pagos")
+        assertEquals(TipoError.PAGOS, BorradoCuenta.clasificar(false, "FAILED_PRECONDITION", pagos))
+        // Otro motivo o código: no es el bloqueo por pagos
+        assertEquals(TipoError.OTRO, BorradoCuenta.clasificar(false, "FAILED_PRECONDITION", null))
+        assertEquals(TipoError.OTRO, BorradoCuenta.clasificar(false, "INTERNAL", pagos))
+        assertEquals(TipoError.RED, BorradoCuenta.clasificar(true, "FAILED_PRECONDITION", pagos))
+    }
 }

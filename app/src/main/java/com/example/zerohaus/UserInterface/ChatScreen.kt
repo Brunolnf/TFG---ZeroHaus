@@ -15,6 +15,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +50,9 @@ import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Util.LocalCadenas
 import com.example.zerohaus.ViewModel.ChatViewModel
+import com.example.zerohaus.ViewModel.PagosViewModel
+import com.example.zerohaus.Modelos.DestinoSolicitar
+import com.example.zerohaus.Modelos.PresentacionPagos
 import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
@@ -61,8 +66,11 @@ import java.util.*
 fun ChatScreen(
     viewModel: ChatViewModel,
     chatId: String,
+    pagosViewModel: PagosViewModel,
     onVolver: () -> Unit = {},
-    onVerPerfil: (String) -> Unit = {}
+    onVerPerfil: (String) -> Unit = {},
+    onAbrirPagos: () -> Unit = {},
+    onAbrirPago: (String) -> Unit = {}
 ) {
     val verde = MaterialTheme.colorScheme.primary
     val verdeClaro = Color(0xFF22C55E)
@@ -89,6 +97,12 @@ fun ChatScreen(
     var mostrarBloquear by remember { mutableStateOf(false) }
     var enviandoDenuncia by remember { mutableStateOf(false) }
     var avisoMod by remember { mutableStateOf<AvisoModeracion?>(null) }
+
+    // Pagos del chat (ocultos del todo si pagos_habilitados es falso)
+    val pagosE = pagosViewModel.estado
+    val soyProfesional = PresentacionPagos.esProfesional(AppEstado.tipoUsuarioCache)
+    var mostrarSolicitar by remember { mutableStateOf(false) }
+    val pagosToast = mensajeToastPagos(cad, pagosE, incluirError = !mostrarSolicitar)
 
     val imagenLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -118,6 +132,22 @@ fun ChatScreen(
     }
 
     LaunchedEffect(chatId) { viewModel.abrirChat(chatId) }
+    LaunchedEffect(chatId) {
+        pagosViewModel.refrescarDisponibilidad()
+        // Los pagos que ya hay en el chat se ven siempre; la cuenta de cobros solo importa para pedir nuevos
+        pagosViewModel.cargarChat(chatId)
+        if (PresentacionPagos.mostrarCobros(pagosViewModel.estado.disponibles, soyProfesional)) pagosViewModel.cargarCuenta()
+    }
+    HojaDePagoEfecto(pagosViewModel)
+    // Solicitud enviada: se cierra el diálogo y se avisa
+    LaunchedEffect(pagosE.pagoSolicitado) {
+        if (pagosE.pagoSolicitado != null) {
+            mostrarSolicitar = false
+            pagosViewModel.solicitudVista()
+            errorLocal = cad.pagoSolicitudEnviada
+            toastExito = true
+        }
+    }
     DisposableEffect(Unit) { onDispose { viewModel.cerrarChat() } }
     // Baja al final solo cuando llega un mensaje NUEVO (no al cargar anteriores)
     LaunchedEffect(estado.mensajes.lastOrNull()?.id) {
@@ -133,10 +163,15 @@ fun ChatScreen(
             // Errores de la pantalla y del envío (antes los del envío no se
             // mostraban: un mensaje que no salía desaparecía sin avisar)
             ZeroToast(
-                mensaje   = avisoMod?.texto ?: errorLocal ?: estado.error,
+                mensaje   = avisoMod?.texto ?: errorLocal ?: estado.error ?: pagosToast?.first,
                 tipo      = avisoMod?.tipo
-                    ?: if (toastExito && errorLocal != null) ToastTipo.EXITO else ToastTipo.ERROR,
-                alOcultar = { avisoMod = null; errorLocal = null; toastExito = false; viewModel.limpiarError() }
+                    ?: if (toastExito && errorLocal != null) ToastTipo.EXITO
+                    else if (errorLocal == null && estado.error == null && pagosToast != null) pagosToast.second
+                    else ToastTipo.ERROR,
+                alOcultar = {
+                    if (avisoMod == null && errorLocal == null && estado.error == null && pagosToast != null) pagosViewModel.toastVisto()
+                    avisoMod = null; errorLocal = null; toastExito = false; viewModel.limpiarError()
+                }
             )
         },
         topBar = {
@@ -182,6 +217,20 @@ fun ChatScreen(
                                 Icon(Icons.Default.MoreVert, cad.modMasOpciones)
                             }
                             DropdownMenu(expanded = menuAbierto, onDismissRequest = { menuAbierto = false }) {
+                                if (PresentacionPagos.ofreceSolicitar(pagosE.disponibles, soyProfesional)) {
+                                    DropdownMenuItem(
+                                        text = { Text(cad.pagoSolicitar) },
+                                        leadingIcon = { Icon(Icons.Default.Payments, null) },
+                                        onClick = {
+                                            menuAbierto = false
+                                            when (PresentacionPagos.destinoSolicitar(pagosE)) {
+                                                DestinoSolicitar.DIALOGO -> mostrarSolicitar = true
+                                                DestinoSolicitar.COBROS -> onAbrirPagos()
+                                                DestinoSolicitar.ESPERAR -> Unit
+                                            }
+                                        }
+                                    )
+                                }
                                 DropdownMenuItem(
                                     text = { Text(cad.modDenunciar) },
                                     leadingIcon = { Icon(Icons.Default.Flag, null) },
@@ -213,6 +262,28 @@ fun ChatScreen(
                 .fillMaxSize()
                 .imePadding()
         ) {
+
+            run {
+                val franja = PresentacionPagos.franjaChat(pagosE.pagosChat)
+                if (franja.visibles.isNotEmpty() || franja.ocultos > 0 ||
+                    PresentacionPagos.avisoFlujo(pagosE.flujoPago) == com.example.zerohaus.Modelos.AvisoFlujo.EnMarcha
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AvisoFlujoPago(pagosE.flujoPago)
+                        franja.visibles.forEach { p ->
+                            TarjetaPago(p, pagosE, pagosViewModel, onAbrir = { onAbrirPago(p.id) })
+                        }
+                        TextButton(onClick = onAbrirPagos) { Text(cad.pagoVerTodos, fontSize = 13.sp) }
+                    }
+                }
+            }
 
             if (estado.mensajes.isEmpty()) {
                 Box(
@@ -389,6 +460,16 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (mostrarSolicitar) {
+        DialogoSolicitarPago(
+            solicitando = pagosE.solicitando,
+            errorServidor = pagosE.error,
+            onEnviar = { cent, descripcion -> pagosViewModel.solicitar(chatId, cent, descripcion) },
+            onCancelar = { mostrarSolicitar = false; pagosViewModel.errorVisto() },
+            onConfigurarCobros = { mostrarSolicitar = false; pagosViewModel.errorVisto(); onAbrirPagos() }
+        )
     }
 
     if (mostrarDenuncia) {
