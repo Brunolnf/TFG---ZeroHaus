@@ -37,6 +37,7 @@ fun AppCadenas.textoError(e: ErrorPago): String = when (e) {
     ErrorPago.NO_AUTORIZADO -> pagoErrNoAutorizado
     ErrorPago.BLOQUEO -> pagoErrBloqueo
     ErrorPago.CHAT_NO_VALIDO -> pagoErrChatNoValido
+    ErrorPago.COBRO_NO_VALIDO -> pagoErrCobroNoValido
     ErrorPago.OPERACION_EN_CURSO -> pagoErrOperacionEnCurso
     ErrorPago.STRIPE_NO_RESPONDE -> pagoErrStripeNoResponde
     ErrorPago.EMAIL_SIN_VERIFICAR -> pagoErrEmailSinVerificar
@@ -77,6 +78,8 @@ fun AppCadenas.textoAvisoFlujo(a: AvisoFlujo): String? = when (a) {
     AvisoFlujo.Retenido -> pagoFlujoRetenido
     AvisoFlujo.CobroFallido -> pagoFlujoFallido
     AvisoFlujo.Caducado -> pagoFlujoCaducado
+    AvisoFlujo.PagoCancelado -> pagoFlujoCanceladoPago
+    AvisoFlujo.Confirmando -> pagoFlujoConfirmando
     AvisoFlujo.HojaCerrada -> pagoFlujoCancelado
     AvisoFlujo.ErrorHoja -> pagoFlujoErrorHoja
     is AvisoFlujo.Error -> textoError(a.error)

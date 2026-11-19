@@ -38,6 +38,7 @@ class ErroresPagoTest {
             "no_es_profesional" to ErrorPago.NO_AUTORIZADO,
             "bloqueo" to ErrorPago.BLOQUEO,
             "chat_no_valido" to ErrorPago.CHAT_NO_VALIDO,
+            "cobro_no_valido" to ErrorPago.COBRO_NO_VALIDO,
             "cuenta_no_activa" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
             "sin_cuenta" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
             "pago_no_encontrado" to ErrorPago.PAGO_NO_ENCONTRADO,
@@ -52,7 +53,7 @@ class ErroresPagoTest {
     }
 
     @Test fun fallosQueLaAppNoDeberiaProvocarSonDesconocidos() {
-        for (m in listOf("cobro_no_valido", "version_no_valida", "id_no_valido", "decision_no_valida")) {
+        for (m in listOf("version_no_valida", "id_no_valido", "decision_no_valida")) {
             assertEquals(m, ErrorPago.DESCONOCIDO, ErroresPago.clasificar(false, "INVALID_ARGUMENT", motivo(m)))
         }
     }
@@ -62,7 +63,7 @@ class ErroresPagoTest {
         val py = listOf(java.io.File("../functions/pagos.py"), java.io.File("functions/pagos.py")).firstOrNull { it.isFile }?.readText()
         org.junit.Assume.assumeTrue("No se encuentra functions/pagos.py", py != null)
         val delServidor = Regex("""ErrorPago\("([a-z_]+)"""").findAll(py!!).map { it.groupValues[1] }.toSet()
-        val aRegistrar = setOf("cobro_no_valido", "version_no_valida", "id_no_valido", "decision_no_valida",
+        val aRegistrar = setOf("version_no_valida", "id_no_valido", "decision_no_valida",
             "pago_no_valido", "fecha_no_valida", "plazo_no_vencido")
         val sinClasificar = delServidor - ErroresPago.MOTIVOS.keys - aRegistrar
         assertEquals("Códigos del servidor sin clasificar en la app", emptySet<String>(), sinClasificar)

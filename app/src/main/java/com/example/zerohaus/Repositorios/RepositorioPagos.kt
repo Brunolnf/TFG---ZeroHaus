@@ -25,7 +25,12 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.google.firebase.remoteconfig.remoteConfig
+import com.example.zerohaus.Modelos.hastaElPrimerError
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
@@ -89,7 +94,7 @@ class RepositorioPagos {
                 b is ResultadoPago.Error -> b
                 else -> ResultadoPago.Ok(Pago.ordenar((a as ResultadoPago.Ok).valor + (b as ResultadoPago.Ok).valor))
             }
-        }
+        }.hastaElPrimerError()
     }
 
     /**
@@ -102,6 +107,7 @@ class RepositorioPagos {
             val reg = q.addSnapshotListener { snap, error ->
                 if (error != null || snap == null) {
                     trySend(ResultadoPago.Error(errorDeLectura(error)))
+                    close() // el listener ya no emite: que quien lo recoge pueda volver a suscribirse
                     return@addSnapshotListener
                 }
                 trySend(ResultadoPago.Ok(Pago.ordenar(snap.documents.mapNotNull { Pago.desdeMapa(it.id, it.data) })))
@@ -118,6 +124,7 @@ class RepositorioPagos {
             val reg = db.collection(PAGOS).document(pagoId).addSnapshotListener { snap, error ->
                 if (error != null || snap == null) {
                     trySend(ResultadoPago.Error(errorDeLectura(error)))
+                    close() // el listener ya no emite: que quien lo recoge pueda volver a suscribirse
                     return@addSnapshotListener
                 }
                 trySend(ResultadoPago.Ok(if (snap.exists()) Pago.desdeMapa(snap.id, snap.data) else null))
@@ -126,14 +133,13 @@ class RepositorioPagos {
         }
     }
 
-    /** Mi cuenta de Stripe Connect; Ok(null) si aún no la he dado de alta. */
-    fun miCuentaStripe(): Flow<ResultadoPago<CuentaStripe?>> {
-        val uid = miUid()
-        if (uid.isBlank()) return flowOf(ResultadoPago.Error(ErrorPago.SIN_SESION))
-        return callbackFlow {
+    /** Mi cuenta de Stripe Connect; Ok(null) si aún no la he dado de alta. Sigue al usuario de la sesión. */
+    fun miCuentaStripe(): Flow<ResultadoPago<CuentaStripe?>> = porUsuario { uid ->
+        callbackFlow {
             val reg = db.collection(CUENTAS_STRIPE).document(uid).addSnapshotListener { snap, error ->
                 if (error != null || snap == null) {
                     trySend(ResultadoPago.Error(errorDeLectura(error)))
+                    close()
                     return@addSnapshotListener
                 }
                 trySend(ResultadoPago.Ok(if (snap.exists()) CuentaStripe.desdeMapa(snap.data) else null))
@@ -142,15 +148,14 @@ class RepositorioPagos {
         }
     }
 
-    private fun consulta(campoParte: String, chatId: String?): Flow<ResultadoPago<List<Pago>>> {
-        val uid = miUid()
-        if (uid.isBlank()) return flowOf(ResultadoPago.Error(ErrorPago.SIN_SESION))
+    private fun consulta(campoParte: String, chatId: String?): Flow<ResultadoPago<List<Pago>>> = porUsuario { uid ->
         var q: Query = db.collection(PAGOS).whereEqualTo(campoParte, uid)
         if (chatId != null) q = q.whereEqualTo("chatId", chatId)
-        return callbackFlow {
+        callbackFlow {
             val reg = q.addSnapshotListener { snap, error ->
                 if (error != null || snap == null) {
                     trySend(ResultadoPago.Error(errorDeLectura(error)))
+                    close()
                     return@addSnapshotListener
                 }
                 // Un documento que no se puede leer bien no sale (antes que mostrar 0,00 €)
@@ -158,6 +163,39 @@ class RepositorioPagos {
             }
             awaitClose { reg.remove() }
         }
+    }
+
+    /** uid de la sesión; cambia al cerrar sesión o entrar con otra cuenta. */
+    private fun uidActual(): Flow<String> = callbackFlow {
+        val oyente = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.uid.orEmpty()) }
+        auth.addAuthStateListener(oyente)
+        awaitClose { auth.removeAuthStateListener(oyente) }
+    }.distinctUntilChanged()
+
+    /**
+     * Crea la lectura para el uid de la sesión y, si la sesión cambia, la vuelve
+     * a crear con el nuevo (una consulta de otra cuenta daría permiso denegado).
+     * Termina tras un error de lectura; sin sesión espera a que haya una.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun <T> porUsuario(crear: (String) -> Flow<ResultadoPago<T>>): Flow<ResultadoPago<T>> =
+        uidActual()
+            .flatMapLatest { uid -> if (uid.isBlank()) flowOf(ResultadoPago.Error(ErrorPago.SIN_SESION)) else crear(uid) }
+            .transformWhile { r ->
+                emit(r)
+                !(r is ResultadoPago.Error && r.error != ErrorPago.SIN_SESION)
+            }
+
+    /** ¿Tengo algún pago como cliente o como profesional? Un `get()` con límite 1 por papel, sin listeners. */
+    suspend fun tengoPagos(): Boolean {
+        val uid = miUid()
+        if (uid.isBlank()) return false
+        suspend fun hay(campo: String): Boolean = suspendCancellableCoroutine { cont ->
+            db.collection(PAGOS).whereEqualTo(campo, uid).limit(1).get()
+                .addOnSuccessListener { cont.resume(!it.isEmpty) }
+                .addOnFailureListener { cont.resume(false) }
+        }
+        return hay("cliente") || hay("profesional")
     }
 
     private fun errorDeLectura(e: FirebaseFirestoreException?): ErrorPago = when (e?.code) {

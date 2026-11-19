@@ -302,6 +302,8 @@ enum class ErrorPago {
     /** Hay un bloqueo entre las dos partes. */
     BLOQUEO,
     CHAT_NO_VALIDO,
+    /** El cobro (PaymentIntent) ya no sirve; hay que volver a abrir el pago. */
+    COBRO_NO_VALIDO,
     /** Otra operación sobre el mismo pago no ha terminado: inténtalo en un momento. */
     OPERACION_EN_CURSO,
     /** Stripe no responde: inténtalo más tarde. */
@@ -330,8 +332,7 @@ object ErroresPago {
     /**
      * `details.motivo` → [ErrorPago]: los códigos de `ErrorPago` de
      * `functions/pagos.py`, los de las callables (`stripe`, `email_sin_verificar`)
-     * y los del contrato (`importe_maximo`). Los que no están (`cobro_no_valido`,
-     * `version_no_valida`, `id_no_valido`…) son fallos que no debería provocar
+     * y los del contrato (`importe_maximo`). Los que no están (`version_no_valida`, `id_no_valido`…) son fallos que no debería provocar
      * la app: salen como DESCONOCIDO y se registran en Crashlytics.
      */
     val MOTIVOS: Map<String, ErrorPago> = mapOf(
@@ -351,6 +352,7 @@ object ErroresPago {
         "no_es_profesional" to ErrorPago.NO_AUTORIZADO,
         "bloqueo" to ErrorPago.BLOQUEO,
         "chat_no_valido" to ErrorPago.CHAT_NO_VALIDO,
+        "cobro_no_valido" to ErrorPago.COBRO_NO_VALIDO,
         "cuenta_no_activa" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
         "sin_cuenta" to ErrorPago.CUENTA_STRIPE_NO_ACTIVA,
         "pago_no_encontrado" to ErrorPago.PAGO_NO_ENCONTRADO,
@@ -410,8 +412,8 @@ object FormatoPago {
     private val TEXTO_IMPORTE = Regex("[0-9]{1,7}([.,][0-9]{1,2})?")
 
     /** 1234 → «12,34 €»; 123456 → «1.234,56 €». Otra moneda: su código en mayúsculas. */
-    fun importe(cent: Long, moneda: String = MONEDA): String {
-        val cifra = DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(LOCALE))
+    fun importe(cent: Long, moneda: String = MONEDA, locale: Locale = LOCALE): String {
+        val cifra = DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(locale))
             .format(BigDecimal.valueOf(cent, 2))
         val simbolo = if (moneda.equals(MONEDA, ignoreCase = true)) "€" else moneda.uppercase(Locale.ROOT)
         return "$cifra$NBSP$simbolo"
@@ -427,9 +429,24 @@ object FormatoPago {
      * No valida mínimo ni máximo: eso lo decide el servidor.
      */
     fun centimosDesdeTexto(texto: String): Long? {
-        val t = texto.trim()
+        val t = normalizarDigitos(texto.trim())
         if (!TEXTO_IMPORTE.matches(t)) return null
         return BigDecimal(t.replace(',', '.')).movePointRight(2).longValueExact()
+    }
+
+    /**
+     * Cualquier dígito Unicode (árabe-índico, devanagari…) pasa a 0-9, y el
+     * separador decimal árabe (٫) a punto: el teclado del idioma de la app lo
+     * puede escribir así.
+     */
+    private fun normalizarDigitos(t: String): String = buildString(t.length) {
+        for (ch in t) {
+            when {
+                ch == '\u066B' -> append('.')
+                Character.isDigit(ch) -> append(('0' + Character.digit(ch, 10)))
+                else -> append(ch)
+            }
+        }
     }
 
     /**

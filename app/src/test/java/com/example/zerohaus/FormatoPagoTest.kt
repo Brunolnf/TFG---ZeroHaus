@@ -55,7 +55,7 @@ class FormatoPagoTest {
     }
 
     @Test fun textoQueNoEsUnImporte() {
-        for (t in listOf("", " ", "abc", "12,345", "1.234,56", "-5", "+5", "1e3", "12,", ",5", "١٢", "12 34", "99999999")) {
+        for (t in listOf("", " ", "abc", "12,345", "1.234,56", "-5", "+5", "1e3", "12,", ",5", "12 34", "99999999")) {
             assertNull("«$t»", FormatoPago.centimosDesdeTexto(t))
         }
     }

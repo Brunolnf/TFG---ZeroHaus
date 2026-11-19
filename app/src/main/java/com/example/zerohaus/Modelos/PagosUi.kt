@@ -2,6 +2,16 @@ package com.example.zerohaus.Modelos
 
 import com.example.zerohaus.ViewModel.FlujoPago
 import com.example.zerohaus.ViewModel.PagosEstado
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.transformWhile
+
+/**
+ * Corta el flujo tras el primer error. Un listener de Firestore que falla ya no
+ * emite más: si el flujo siguiera abierto, quien lo recoge creería que sigue
+ * escuchando y no volvería a suscribirse.
+ */
+fun <T> Flow<ResultadoPago<T>>.hastaElPrimerError(): Flow<ResultadoPago<T>> =
+    transformWhile { emit(it); it !is ResultadoPago.Error }
 
 /*
  * Lógica de presentación de los pagos (T-E8), pura y sin Compose: qué se
@@ -67,6 +77,10 @@ sealed interface AvisoFlujo {
     data object CobroFallido : AvisoFlujo
     /** El cobro caducó y el servidor canceló el pago. */
     data object Caducado : AvisoFlujo
+    /** Stripe dijo Completed pero el servidor aún no lo ha confirmado (pasó el límite de espera). */
+    data object Confirmando : AvisoFlujo
+    /** Lo canceló la otra parte (no caducó). */
+    data object PagoCancelado : AvisoFlujo
     /** Cerró la hoja sin pagar: el pago sigue pendiente. */
     data object HojaCerrada : AvisoFlujo
     /** Falló la hoja de Stripe (no el servidor). */
@@ -152,19 +166,21 @@ object PresentacionPagos {
     fun avisoFlujo(flujo: FlujoPago): AvisoFlujo = when (flujo) {
         FlujoPago.Inactivo -> AvisoFlujo.Ninguno
         is FlujoPago.Preparando, is FlujoPago.Listo, is FlujoPago.Presentado, is FlujoPago.Procesando -> AvisoFlujo.EnMarcha
+        is FlujoPago.Confirmando -> AvisoFlujo.Confirmando
         is FlujoPago.Cancelado -> AvisoFlujo.HojaCerrada
         is FlujoPago.Fallido -> flujo.error?.let { AvisoFlujo.Error(it) } ?: AvisoFlujo.ErrorHoja
         is FlujoPago.Resuelto -> when (flujo.estado) {
             EstadoPago.RETENIDO -> AvisoFlujo.Retenido
             EstadoPago.FALLIDO -> AvisoFlujo.CobroFallido
-            EstadoPago.CANCELADO -> AvisoFlujo.Caducado
+            // Caducó el cobro (lo cancela el sistema) o lo canceló la otra parte
+            EstadoPago.CANCELADO -> if (flujo.actor == "sistema") AvisoFlujo.Caducado else AvisoFlujo.PagoCancelado
             else -> AvisoFlujo.Ninguno
         }
     }
 
     /** Un aviso que ya es el final del flujo (hay que llamar a `flujoVisto` al enseñarlo). */
     fun esFinalDeFlujo(flujo: FlujoPago): Boolean =
-        flujo is FlujoPago.Cancelado || flujo is FlujoPago.Fallido || flujo is FlujoPago.Resuelto
+        flujo is FlujoPago.Cancelado || flujo is FlujoPago.Fallido || flujo is FlujoPago.Resuelto || flujo is FlujoPago.Confirmando
 
     /** Pagos que el administrador tiene que resolver. */
     fun disputas(pagos: Collection<Pago>): List<Pago> = Pago.ordenar(pagos.filter { it.estado == EstadoPago.EN_DISPUTA })

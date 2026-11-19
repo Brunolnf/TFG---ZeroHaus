@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -40,7 +41,7 @@ fun PagosScreen(
     val c = LocalCadenas.current
     val estado = viewModel.estado
     val profesional = PresentacionPagos.esProfesional(AppEstado.tipoUsuarioCache)
-    var pestana by remember { mutableIntStateOf(if (profesional) 1 else 0) }
+    var pestana by rememberSaveable { mutableIntStateOf(if (profesional) 1 else 0) }
 
     LaunchedEffect(Unit) {
         // Los pagos que ya existen se ven siempre; solo «cobros» depende del interruptor
@@ -116,7 +117,7 @@ private fun FilaPago(pago: Pago, onClick: () -> Unit) {
                 EstadoChip(c.textoEstado(pago.estado), colorEstadoPago(pago.estado))
             }
             Spacer(Modifier.width(8.dp))
-            Text(FormatoPago.importe(pago.importeCent, pago.moneda), fontWeight = FontWeight.Bold)
+            Text(importeApp(pago.importeCent, pago.moneda), fontWeight = FontWeight.Bold)
         }
     }
 }

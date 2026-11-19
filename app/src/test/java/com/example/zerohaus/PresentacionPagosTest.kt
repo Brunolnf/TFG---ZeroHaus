@@ -195,7 +195,7 @@ class PresentacionPagosTest {
 
     @Test fun finalesDelFlujo() {
         assertEquals(AvisoFlujo.CobroFallido, PresentacionPagos.avisoFlujo(FlujoPago.Resuelto("p", EstadoPago.FALLIDO)))
-        assertEquals(AvisoFlujo.Caducado, PresentacionPagos.avisoFlujo(FlujoPago.Resuelto("p", EstadoPago.CANCELADO)))
+        assertEquals(AvisoFlujo.Caducado, PresentacionPagos.avisoFlujo(FlujoPago.Resuelto("p", EstadoPago.CANCELADO, "sistema")))
         assertEquals(AvisoFlujo.Ninguno, PresentacionPagos.avisoFlujo(FlujoPago.Resuelto("p", EstadoPago.TERMINADO)))
         assertEquals(AvisoFlujo.HojaCerrada, PresentacionPagos.avisoFlujo(FlujoPago.Cancelado("p")))
         assertEquals(AvisoFlujo.ErrorHoja, PresentacionPagos.avisoFlujo(FlujoPago.Fallido("p", null, "x")))

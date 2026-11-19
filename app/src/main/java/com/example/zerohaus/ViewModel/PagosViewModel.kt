@@ -17,6 +17,7 @@ import com.example.zerohaus.Modelos.ResultadoHojaPago
 import com.example.zerohaus.Modelos.ResultadoPago
 import com.example.zerohaus.Repositorios.RepositorioPagos
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -39,15 +40,22 @@ sealed interface FlujoPago {
     data class Preparando(val pagoId: String, val accion: AccionPago, val historialBase: Int) : FlujoPago
     data class Listo(val pagoId: String, val datos: DatosPaymentSheet, val historialBase: Int) : FlujoPago
     data class Presentado(val pagoId: String, val historialBase: Int) : FlujoPago
-    data class Procesando(val pagoId: String, val historialBase: Int) : FlujoPago
+    /** [desdeMs]: cuándo dijo Stripe Completed, para no esperar al webhook sin límite. */
+    data class Procesando(val pagoId: String, val historialBase: Int, val desdeMs: Long = 0L) : FlujoPago
+    /** Pasó el límite de espera sin que el servidor confirmara: ya no bloquea; el estado llega por los listeners. */
+    data class Confirmando(val pagoId: String, val historialBase: Int) : FlujoPago
     data class Cancelado(val pagoId: String) : FlujoPago
     /** [error] si falló la llamada al servidor; [mensajeStripe] si falló PaymentSheet (solo para el registro). */
     data class Fallido(val pagoId: String, val error: ErrorPago?, val mensajeStripe: String?) : FlujoPago
-    data class Resuelto(val pagoId: String, val estado: EstadoPago) : FlujoPago
+    /** [actor]: quién hizo el último cambio (`sistema` si caducó el cobro). */
+    data class Resuelto(val pagoId: String, val estado: EstadoPago, val actor: String = "") : FlujoPago
 }
 
 /** Transiciones del [FlujoPago], puras. Lo que no encaja (un evento atrasado o repetido) deja el flujo como está. */
 object FlujosPago {
+
+    /** Máximo que se espera al webhook tras Completed. */
+    const val PROCESANDO_MAX_MS = 60_000L
 
     /** Estados en que el pago sigue en marcha: no se empieza otro ni se ofrecen acciones. */
     fun enCurso(f: FlujoPago): Boolean =
@@ -71,18 +79,24 @@ object FlujosPago {
         if (actual is FlujoPago.Listo) FlujoPago.Presentado(actual.pagoId, actual.historialBase) else actual
 
     /** Completed no marca nada como pagado: pasa a esperar el snapshot. */
-    fun resultadoHoja(actual: FlujoPago, r: ResultadoHojaPago): FlujoPago {
+    fun resultadoHoja(actual: FlujoPago, r: ResultadoHojaPago, ahoraMs: Long = 0L): FlujoPago {
         val (pagoId, base) = when (actual) {
             is FlujoPago.Listo -> actual.pagoId to actual.historialBase
             is FlujoPago.Presentado -> actual.pagoId to actual.historialBase
             else -> return actual
         }
         return when (r) {
-            ResultadoHojaPago.Completado -> FlujoPago.Procesando(pagoId, base)
+            ResultadoHojaPago.Completado -> FlujoPago.Procesando(pagoId, base, ahoraMs)
             ResultadoHojaPago.Cancelado -> FlujoPago.Cancelado(pagoId)
             is ResultadoHojaPago.Fallido -> FlujoPago.Fallido(pagoId, null, r.mensaje)
         }
     }
+
+    /** Pasado el límite sin snapshot que lo resuelva, Procesando deja de bloquear (pasa a Confirmando). */
+    fun vencido(actual: FlujoPago, ahoraMs: Long, limiteMs: Long = PROCESANDO_MAX_MS): FlujoPago =
+        if (actual is FlujoPago.Procesando && ahoraMs - actual.desdeMs >= limiteMs) {
+            FlujoPago.Confirmando(actual.pagoId, actual.historialBase)
+        } else actual
 
     /**
      * Snapshot de `/pagos/{id}`. Con la hoja abierta o tras Completed, se
@@ -94,11 +108,14 @@ object FlujosPago {
         val (pagoId, base) = when (actual) {
             is FlujoPago.Presentado -> actual.pagoId to actual.historialBase
             is FlujoPago.Procesando -> actual.pagoId to actual.historialBase
+            is FlujoPago.Confirmando -> actual.pagoId to actual.historialBase
             else -> return actual
         }
         if (pago.id != pagoId) return actual
         val esperando = pago.estado == EstadoPago.SOLICITADO || pago.estado == EstadoPago.PENDIENTE_PAGO
-        return if (!esperando && pago.historial.size >= base + 2) FlujoPago.Resuelto(pagoId, pago.estado) else actual
+        return if (!esperando && pago.historial.size >= base + 2) {
+            FlujoPago.Resuelto(pagoId, pago.estado, pago.historial.lastOrNull()?.actor.orEmpty())
+        } else actual
     }
 }
 
@@ -137,7 +154,9 @@ data class PagosEstado(
     val pagoSolicitado: String? = null,
     /** Último error de una acción; tras mostrarlo, [PagosViewModel.errorVisto]. */
     val error: ErrorPago? = null,
-    val flujoPago: FlujoPago = FlujoPago.Inactivo
+    val flujoPago: FlujoPago = FlujoPago.Inactivo,
+    /** Tengo algún pago (como cliente o profesional): decide si Ajustes enseña «Pagos» con los pagos apagados. */
+    val tengoPagos: Boolean = false
 ) {
     /** Todos mis pagos, el más reciente primero. */
     val todos: List<Pago> get() = Pago.ordenar(comoCliente + comoProfesional)
@@ -165,12 +184,24 @@ data class PagosEstado(
  * Nunca cambia un pago en local: el estado solo cambia cuando llega el
  * snapshot de `/pagos` con lo que ha escrito el servidor.
  */
-class PagosViewModel(private val repo: RepositorioPagos = RepositorioPagos()) : ViewModel() {
+class PagosViewModel(
+    private val repo: RepositorioPagos = RepositorioPagos(),
+    /** Reloj y límite inyectables para probar la espera de Procesando. */
+    private val reloj: () -> Long = System::currentTimeMillis,
+    private val limiteProcesandoMs: Long = FlujosPago.PROCESANDO_MAX_MS
+) : ViewModel() {
 
     var estado by mutableStateOf(PagosEstado())
         private set
 
-    private var jobListas: Job? = null
+    private var jobCliente: Job? = null
+    private var jobProfesional: Job? = null
+    private var jobEnlace: Job? = null
+    private var jobLimite: Job? = null
+    private var errorCliente: ErrorPago? = null
+    private var errorProfesional: ErrorPago? = null
+    private var cargandoCliente = false
+    private var cargandoProfesional = false
     private var jobChat: Job? = null
     private var jobDetalle: Job? = null
     private var jobCuenta: Job? = null
@@ -181,39 +212,49 @@ class PagosViewModel(private val repo: RepositorioPagos = RepositorioPagos()) : 
         estado = estado.copy(disponibles = repo.pagosDisponibles(), miUid = repo.miUid())
     }
 
-    /** Mis pagos como cliente y como profesional, en tiempo real. */
+    /** Mis pagos como cliente y como profesional, en tiempo real. Vuelve a suscribir la consulta que haya muerto. */
     fun cargar() {
         refrescarDisponibilidad()
-        if (jobListas?.isActive == true) return
-        // Cada consulta lleva su error: un Ok de una no tapa el fallo de la otra
-        var errorCliente: ErrorPago? = null
-        var errorProfesional: ErrorPago? = null
-        var pendientes = 2
-        fun aplicar(cambio: PagosEstado.() -> PagosEstado, primera: Boolean) {
-            if (primera) pendientes--
+        val clienteVivo = jobCliente?.isActive == true
+        val profesionalVivo = jobProfesional?.isActive == true
+        if (clienteVivo && profesionalVivo) return
+        fun publicar(cambio: PagosEstado.() -> PagosEstado) {
             estado = estado.cambio().copy(
-                cargandoListas = pendientes > 0,
+                cargandoListas = cargandoCliente || cargandoProfesional,
                 errorListas = errorCliente ?: errorProfesional
             )
         }
-        estado = estado.copy(cargandoListas = true, errorListas = null)
-        jobListas = viewModelScope.launch {
-            launch {
-                var primera = true
+        if (!clienteVivo) {
+            errorCliente = null
+            cargandoCliente = true
+            jobCliente = viewModelScope.launch {
                 repo.misPagosComoCliente().collect { r ->
                     errorCliente = (r as? ResultadoPago.Error)?.error
-                    aplicar({ if (r is ResultadoPago.Ok) copy(comoCliente = r.valor) else this }, primera)
-                    primera = false
+                    cargandoCliente = false
+                    publicar { if (r is ResultadoPago.Ok) copy(comoCliente = r.valor) else this }
                 }
+                cargandoCliente = false
             }
-            launch {
-                var primera = true
+        }
+        if (!profesionalVivo) {
+            errorProfesional = null
+            cargandoProfesional = true
+            jobProfesional = viewModelScope.launch {
                 repo.misPagosComoProfesional().collect { r ->
                     errorProfesional = (r as? ResultadoPago.Error)?.error
-                    aplicar({ if (r is ResultadoPago.Ok) copy(comoProfesional = r.valor) else this }, primera)
-                    primera = false
+                    cargandoProfesional = false
+                    publicar { if (r is ResultadoPago.Ok) copy(comoProfesional = r.valor) else this }
                 }
+                cargandoProfesional = false
             }
+        }
+        publicar { this }
+    }
+
+    /** ¿Tengo algún pago? Una lectura por papel, sin listeners (para la fila «Pagos» de Ajustes). */
+    fun comprobarTengoPagos() {
+        viewModelScope.launch {
+            if (repo.tengoPagos()) estado = estado.copy(tengoPagos = true)
         }
     }
 
@@ -277,7 +318,7 @@ class PagosViewModel(private val repo: RepositorioPagos = RepositorioPagos()) : 
     fun crearEnlaceCuenta() {
         if (estado.pidiendoEnlace) return
         estado = estado.copy(pidiendoEnlace = true, error = null)
-        viewModelScope.launch {
+        jobEnlace = viewModelScope.launch {
             estado = when (val r = repo.crearEnlaceCuenta()) {
                 is ResultadoPago.Ok -> estado.copy(pidiendoEnlace = false, enlaceCuenta = r.valor)
                 is ResultadoPago.Error -> estado.copy(pidiendoEnlace = false, error = r.error)
@@ -287,6 +328,13 @@ class PagosViewModel(private val repo: RepositorioPagos = RepositorioPagos()) : 
 
     fun enlaceAbierto() {
         estado = estado.copy(enlaceCuenta = null)
+    }
+
+    /** La pantalla se fue mientras se pedía el enlace: no se abre el navegador más tarde. */
+    fun descartarEnlace() {
+        jobEnlace?.cancel()
+        jobEnlace = null
+        estado = estado.copy(pidiendoEnlace = false, enlaceCuenta = null)
     }
 
     /** Al volver del alta: pregunta a Stripe sin esperar al webhook. */
@@ -357,11 +405,22 @@ class PagosViewModel(private val repo: RepositorioPagos = RepositorioPagos()) : 
 
     /** Resultado de PaymentSheet (callback de `rememberHojaDePago`). */
     fun resultadoHoja(r: ResultadoHojaPago) {
-        estado = estado.copy(flujoPago = FlujosPago.resultadoHoja(estado.flujoPago, r))
+        val flujo = FlujosPago.resultadoHoja(estado.flujoPago, r, reloj())
+        estado = estado.copy(flujoPago = flujo)
+        if (flujo is FlujoPago.Procesando) {
+            // Sin snapshot que lo resuelva en el plazo, deja de bloquear (el estado sigue llegando por los listeners)
+            jobLimite?.cancel()
+            jobLimite = viewModelScope.launch {
+                delay(limiteProcesandoMs)
+                estado = estado.copy(flujoPago = FlujosPago.vencido(estado.flujoPago, reloj(), limiteProcesandoMs))
+            }
+        }
     }
 
     /** La pantalla ya ha mostrado el final del flujo (o se ha ido): vuelve a Inactivo. */
     fun flujoVisto() {
+        jobLimite?.cancel()
+        jobLimite = null
         jobSeguimiento?.cancel()
         jobSeguimiento = null
         estado = estado.copy(flujoPago = FlujoPago.Inactivo)

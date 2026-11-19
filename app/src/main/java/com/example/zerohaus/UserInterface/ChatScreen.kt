@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -101,7 +102,7 @@ fun ChatScreen(
     // Pagos del chat (ocultos del todo si pagos_habilitados es falso)
     val pagosE = pagosViewModel.estado
     val soyProfesional = PresentacionPagos.esProfesional(AppEstado.tipoUsuarioCache)
-    var mostrarSolicitar by remember { mutableStateOf(false) }
+    var mostrarSolicitar by rememberSaveable { mutableStateOf(false) }
     val pagosToast = mensajeToastPagos(cad, pagosE, incluirError = !mostrarSolicitar)
 
     val imagenLauncher = rememberLauncherForActivityResult(
@@ -139,6 +140,8 @@ fun ChatScreen(
         if (PresentacionPagos.mostrarCobros(pagosViewModel.estado.disponibles, soyProfesional)) pagosViewModel.cargarCuenta()
     }
     HojaDePagoEfecto(pagosViewModel)
+    // Al salir, el flujo se cierra: al volver no se reabre una hoja ya presentada
+    DisposableEffect(Unit) { onDispose { pagosViewModel.flujoVisto() } }
     // Solicitud enviada: se cierra el diálogo y se avisa
     LaunchedEffect(pagosE.pagoSolicitado) {
         if (pagosE.pagoSolicitado != null) {
@@ -224,9 +227,13 @@ fun ChatScreen(
                                         onClick = {
                                             menuAbierto = false
                                             when (PresentacionPagos.destinoSolicitar(pagosE)) {
-                                                DestinoSolicitar.DIALOGO -> mostrarSolicitar = true
+                                                DestinoSolicitar.DIALOGO -> {
+                                                    pagosViewModel.errorVisto() // sin restos de errores de otras acciones
+                                                    mostrarSolicitar = true
+                                                }
                                                 DestinoSolicitar.COBROS -> onAbrirPagos()
-                                                DestinoSolicitar.ESPERAR -> Unit
+                                                DestinoSolicitar.ESPERAR ->
+                                                    avisoMod = AvisoModeracion(cad.cobrosComprobando, ToastTipo.INFO)
                                             }
                                         }
                                     )
@@ -278,7 +285,7 @@ fun ChatScreen(
                     ) {
                         AvisoFlujoPago(pagosE.flujoPago)
                         franja.visibles.forEach { p ->
-                            TarjetaPago(p, pagosE, pagosViewModel, onAbrir = { onAbrirPago(p.id) })
+                            key(p.id) { TarjetaPago(p, pagosE, pagosViewModel, onAbrir = { onAbrirPago(p.id) }) }
                         }
                         TextButton(onClick = onAbrirPagos) { Text(cad.pagoVerTodos, fontSize = 13.sp) }
                     }
@@ -464,7 +471,8 @@ fun ChatScreen(
 
     if (mostrarSolicitar) {
         DialogoSolicitarPago(
-            solicitando = pagosE.solicitando,
+            // Desactivado también desde el Ok hasta que se cierra el diálogo
+            solicitando = pagosE.solicitando || pagosE.pagoSolicitado != null,
             errorServidor = pagosE.error,
             onEnviar = { cent, descripcion -> pagosViewModel.solicitar(chatId, cent, descripcion) },
             onCancelar = { mostrarSolicitar = false; pagosViewModel.errorVisto() },

@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,9 @@ import com.example.zerohaus.ViewModel.PagosEstado
 import com.example.zerohaus.ViewModel.PagosViewModel
 
 /* Piezas de la interfaz de pagos que comparten el chat y las pantallas de pagos. */
+
+/** Importe en el formato numérico del idioma de la app; el símbolo € no cambia. */
+fun importeApp(cent: Long, moneda: String): String = FormatoPago.importe(cent, moneda, Formato.locale())
 
 fun colorEstadoPago(e: EstadoPago): Color = when (e) {
     EstadoPago.RETENIDO, EstadoPago.LIBERADO -> Color(0xFF16A34A)
@@ -131,15 +135,19 @@ fun TarjetaPago(
     val sdf = remember(AppEstado.idioma) { Formato.fechas("dd/MM/yyyy HH:mm") }
     val acciones = estado.acciones(pago)
     val papel = estado.papel(pago)
-    var confirmando by remember { mutableStateOf<AccionPago?>(null) }
-    var disputando by remember { mutableStateOf(false) }
+    // Sobreviven a girar la pantalla
+    var confirmando by rememberSaveable { mutableStateOf<AccionPago?>(null) }
+    var disputando by rememberSaveable { mutableStateOf(false) }
     val flujo = estado.flujoPago
     val enCursoAqui = estado.accionEnCurso?.pagoId == pago.id || (flujo is FlujoPago.Preparando && flujo.pagoId == pago.id)
 
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.fillMaxWidth().then(if (onAbrir != null) Modifier.clickable(onClick = onAbrir) else Modifier)
+        // Con un pago en marcha no se sale a otra pantalla: la hoja y su resultado viven en esta
+        modifier = Modifier.fillMaxWidth().then(
+            if (onAbrir != null && !estado.ocupado) Modifier.clickable(onClick = onAbrir) else Modifier
+        )
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -149,7 +157,7 @@ fun TarjetaPago(
                     maxLines = if (detalle) 10 else 2, modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(FormatoPago.importe(pago.importeCent, pago.moneda), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(importeApp(pago.importeCent, pago.moneda), fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
             EstadoChip(c.textoEstado(pago.estado), colorEstadoPago(pago.estado))
 
@@ -157,7 +165,7 @@ fun TarjetaPago(
                 PresentacionPagos.desglose(pago, papel).forEach { l ->
                     Row(Modifier.fillMaxWidth()) {
                         Text(c.textoConcepto(l.concepto), color = gris, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                        Text(FormatoPago.importe(l.cent, pago.moneda), fontSize = 13.sp)
+                        Text(importeApp(l.cent, pago.moneda), fontSize = 13.sp)
                     }
                 }
             }
@@ -230,8 +238,8 @@ fun TarjetaPago(
 @Composable
 fun DialogoMotivoDisputa(onEnviar: (String) -> Unit, onCancelar: () -> Unit) {
     val c = LocalCadenas.current
-    var motivo by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<ErrorPago?>(null) }
+    var motivo by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<ErrorPago?>(null) }
     AlertDialog(
         onDismissRequest = onCancelar,
         title = { Text(c.pagoDisputaTitulo, fontWeight = FontWeight.SemiBold) },
@@ -271,9 +279,9 @@ fun DialogoSolicitarPago(
     onConfigurarCobros: () -> Unit
 ) {
     val c = LocalCadenas.current
-    var importe by remember { mutableStateOf("") }
-    var descripcion by remember { mutableStateOf("") }
-    var errorLocal by remember { mutableStateOf<ErrorPago?>(null) }
+    var importe by rememberSaveable { mutableStateOf("") }
+    var descripcion by rememberSaveable { mutableStateOf("") }
+    var errorLocal by rememberSaveable { mutableStateOf<ErrorPago?>(null) }
     val error = errorLocal ?: errorServidor
     AlertDialog(
         onDismissRequest = { if (!solicitando) onCancelar() },
@@ -351,6 +359,9 @@ fun TarjetaCobros(estado: PagosEstado, vm: PagosViewModel) {
         lifecycle.addObserver(obs)
         onDispose { lifecycle.removeObserver(obs) }
     }
+
+    // Si la pantalla se va mientras se pide el enlace, no se abre el navegador más tarde
+    DisposableEffect(Unit) { onDispose { vm.descartarEnlace() } }
 
     val cobros = PresentacionPagos.estadoCobros(estado.cuentaStripe, estado.cuentaCargada)
     Card(

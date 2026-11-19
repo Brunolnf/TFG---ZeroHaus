@@ -58,9 +58,12 @@ fun AjustesScreen(
 ) {
     val c = LocalCadenas.current
     // Entrada a pagos: con pagos disponibles, o si ya tengo alguno (se pueden seguir cancelando, confirmando o disputando)
-    LaunchedEffect(Unit) { pagosViewModel.cargar() }
+    LaunchedEffect(Unit) {
+        pagosViewModel.refrescarDisponibilidad()
+        pagosViewModel.comprobarTengoPagos() // un get() por papel, sin listeners
+    }
     val pagosDisponibles = com.example.zerohaus.Modelos.PresentacionPagos.mostrarEntradaAjustes(
-        pagosViewModel.estado.disponibles, pagosViewModel.estado.todos.isNotEmpty()
+        pagosViewModel.estado.disponibles, pagosViewModel.estado.tengoPagos
     )
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant

@@ -813,6 +813,10 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "No se ha podido completar el pago. Inténtalo de nuevo.",
     "ajustesEliminarErrorPagos" to "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
     "pagoRetencionAvisoDia" to "El pago queda retenido por ZeroHaus y se libera al profesional cuando confirmes el trabajo, o al cabo de {n} día de marcarlo terminado si no abres una disputa.",
+    "pagoErrCobroNoValido" to "Este cobro ya no es válido. Vuelve a abrir el pago.",
+    "pagoFlujoConfirmando" to "Estamos confirmando el pago con el banco. Te avisaremos cuando esté listo.",
+    "pagoFlujoCanceladoPago" to "El pago se ha cancelado.",
+    "cobrosComprobando" to "Comprobando tu cuenta de cobros…",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1587,6 +1591,10 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "The payment could not be completed. Try again.",
     "ajustesEliminarErrorPagos" to "You have payments in progress. Finish or cancel them before deleting your account.",
     "pagoRetencionAvisoDia" to "The payment is held by ZeroHaus and released to the professional when you confirm the work, or {n} day after it is marked finished if you do not open a dispute.",
+    "pagoErrCobroNoValido" to "This charge is no longer valid. Open the payment again.",
+    "pagoFlujoConfirmando" to "We are confirming the payment with the bank. We will let you know when it is ready.",
+    "pagoFlujoCanceladoPago" to "The payment has been cancelled.",
+    "cobrosComprobando" to "Checking your payout account…",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2361,6 +2369,10 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "No s'ha pogut completar el pagament. Torna-ho a provar.",
     "ajustesEliminarErrorPagos" to "Tens pagaments en curs. Acaba'ls o cancel·la'ls abans d'esborrar el compte.",
     "pagoRetencionAvisoDia" to "El pagament queda retingut per ZeroHaus i s'allibera al professional quan confirmis el treball, o al cap de {n} dia de marcar-lo acabat si no obres una disputa.",
+    "pagoErrCobroNoValido" to "Aquest cobrament ja no és vàlid. Torna a obrir el pagament.",
+    "pagoFlujoConfirmando" to "Estem confirmant el pagament amb el banc. T'avisarem quan estigui llest.",
+    "pagoFlujoCanceladoPago" to "El pagament s'ha cancel·lat.",
+    "cobrosComprobando" to "Comprovant el teu compte de cobraments…",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3135,6 +3147,10 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Ezin izan da ordainketa osatu. Saiatu berriro.",
     "ajustesEliminarErrorPagos" to "Ordainketak abian dituzu. Amaitu edo bertan behera utzi kontua ezabatu aurretik.",
     "pagoRetencionAvisoDia" to "Ordainketa ZeroHausek atxikiko du eta profesionalari askatuko zaio lana berresten duzunean, edo amaitutzat markatu eta {n} egunera auzirik ireki ezean.",
+    "pagoErrCobroNoValido" to "Kobrantza hau ez da baliozkoa jada. Ireki ordainketa berriro.",
+    "pagoFlujoConfirmando" to "Ordainketa bankuarekin berresten ari gara. Prest dagoenean abisatuko dizugu.",
+    "pagoFlujoCanceladoPago" to "Ordainketa bertan behera geratu da.",
+    "cobrosComprobando" to "Zure kobrantza-kontua egiaztatzen…",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3909,6 +3925,10 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Non se puido completar o pagamento. Téntao de novo.",
     "ajustesEliminarErrorPagos" to "Tes pagamentos en curso. Termínaos ou cancélaos antes de borrar a conta.",
     "pagoRetencionAvisoDia" to "O pagamento queda retido por ZeroHaus e libérase ao profesional cando confirmes o traballo, ou ao cabo de {n} día de marcalo como terminado se non abres unha disputa.",
+    "pagoErrCobroNoValido" to "Este cobro xa non é válido. Volve abrir o pagamento.",
+    "pagoFlujoConfirmando" to "Estamos a confirmar o pagamento co banco. Avisarémoste cando estea listo.",
+    "pagoFlujoCanceladoPago" to "O pagamento cancelouse.",
+    "cobrosComprobando" to "Comprobando a túa conta de cobros…",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4683,6 +4703,10 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Não foi possível concluir o pagamento. Tente novamente.",
     "ajustesEliminarErrorPagos" to "Você tem pagamentos em andamento. Conclua-os ou cancele-os antes de excluir a conta.",
     "pagoRetencionAvisoDia" to "O pagamento fica retido pela ZeroHaus e é liberado ao profissional quando você confirmar o trabalho, ou {n} dia após ser marcado como concluído se você não abrir uma disputa.",
+    "pagoErrCobroNoValido" to "Esta cobrança já não é válida. Abra o pagamento novamente.",
+    "pagoFlujoConfirmando" to "Estamos confirmando o pagamento com o banco. Avisaremos quando estiver pronto.",
+    "pagoFlujoCanceladoPago" to "O pagamento foi cancelado.",
+    "cobrosComprobando" to "Verificando sua conta de recebimentos…",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5457,6 +5481,10 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Le paiement n'a pas pu être finalisé. Réessayez.",
     "ajustesEliminarErrorPagos" to "Vous avez des paiements en cours. Terminez-les ou annulez-les avant de supprimer le compte.",
     "pagoRetencionAvisoDia" to "Le paiement est retenu par ZeroHaus et versé au professionnel lorsque vous confirmez le travail, ou {n} jour après qu'il est marqué terminé si vous n'ouvrez pas de litige.",
+    "pagoErrCobroNoValido" to "Ce prélèvement n'est plus valable. Rouvrez le paiement.",
+    "pagoFlujoConfirmando" to "Nous confirmons le paiement auprès de la banque. Nous vous préviendrons dès qu'il sera prêt.",
+    "pagoFlujoCanceladoPago" to "Le paiement a été annulé.",
+    "cobrosComprobando" to "Vérification de votre compte d'encaissement…",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6231,6 +6259,10 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Die Zahlung konnte nicht abgeschlossen werden. Versuche es erneut.",
     "ajustesEliminarErrorPagos" to "Du hast laufende Zahlungen. Schließe sie ab oder storniere sie, bevor du das Konto löschst.",
     "pagoRetencionAvisoDia" to "Die Zahlung wird von ZeroHaus einbehalten und an den Profi freigegeben, wenn du die Arbeit bestätigst, oder {n} Tag nach der Fertigmeldung, falls du keinen Streitfall eröffnest.",
+    "pagoErrCobroNoValido" to "Diese Abbuchung ist nicht mehr gültig. Öffne die Zahlung erneut.",
+    "pagoFlujoConfirmando" to "Wir bestätigen die Zahlung mit der Bank. Wir melden uns, sobald sie fertig ist.",
+    "pagoFlujoCanceladoPago" to "Die Zahlung wurde storniert.",
+    "cobrosComprobando" to "Dein Auszahlungskonto wird geprüft…",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7005,6 +7037,10 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Non è stato possibile completare il pagamento. Riprova.",
     "ajustesEliminarErrorPagos" to "Hai pagamenti in corso. Terminali o annullali prima di eliminare l'account.",
     "pagoRetencionAvisoDia" to "Il pagamento viene trattenuto da ZeroHaus e rilasciato al professionista quando confermi il lavoro, oppure {n} giorno dopo che è stato segnato come terminato se non apri una contestazione.",
+    "pagoErrCobroNoValido" to "Questo addebito non è più valido. Riapri il pagamento.",
+    "pagoFlujoConfirmando" to "Stiamo confermando il pagamento con la banca. Ti avviseremo quando sarà pronto.",
+    "pagoFlujoCanceladoPago" to "Il pagamento è stato annullato.",
+    "cobrosComprobando" to "Verifica del tuo account di incasso…",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7779,6 +7815,10 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "تعذّر إكمال الدفع. حاول مرة أخرى.",
     "ajustesEliminarErrorPagos" to "لديك مدفوعات جارية. أنهِها أو ألغِها قبل حذف الحساب.",
     "pagoRetencionAvisoDia" to "يحتفظ ZeroHaus بالمبلغ ويحوّله إلى المحترف عندما تؤكد العمل، أو بعد {n} يوم من وضع علامة الانتهاء إذا لم تفتح نزاعاً.",
+    "pagoErrCobroNoValido" to "لم يعد هذا التحصيل صالحاً. افتح الدفعة من جديد.",
+    "pagoFlujoConfirmando" to "نقوم بتأكيد الدفع مع البنك. سنُعلمك عندما يكتمل.",
+    "pagoFlujoCanceladoPago" to "تم إلغاء الدفعة.",
+    "cobrosComprobando" to "جارٍ التحقق من حساب التحصيل الخاص بك…",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8553,6 +8593,10 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "无法完成付款，请重试。",
     "ajustesEliminarErrorPagos" to "你有进行中的付款。请先完成或取消它们，再删除账户。",
     "pagoRetencionAvisoDia" to "款项由 ZeroHaus 托管，在你确认工作后发放给专业人员；若工作被标记为完成后 {n} 天内你未发起争议，也会自动发放。",
+    "pagoErrCobroNoValido" to "此次扣款已失效，请重新打开付款。",
+    "pagoFlujoConfirmando" to "我们正在与银行确认付款，完成后会通知你。",
+    "pagoFlujoCanceladoPago" to "付款已被取消。",
+    "cobrosComprobando" to "正在检查你的收款账户…",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9327,6 +9371,10 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Plata nu a putut fi finalizată. Încearcă din nou.",
     "ajustesEliminarErrorPagos" to "Ai plăți în curs. Finalizează-le sau anulează-le înainte de a șterge contul.",
     "pagoRetencionAvisoDia" to "Plata este reținută de ZeroHaus și eliberată profesionistului când confirmi lucrarea sau la {n} zi după ce este marcată ca terminată, dacă nu deschizi o dispută.",
+    "pagoErrCobroNoValido" to "Această încasare nu mai este valabilă. Redeschide plata.",
+    "pagoFlujoConfirmando" to "Confirmăm plata cu banca. Te vom anunța când este gata.",
+    "pagoFlujoCanceladoPago" to "Plata a fost anulată.",
+    "cobrosComprobando" to "Se verifică contul tău de încasări…",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -10101,6 +10149,10 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "De betaling kon niet worden voltooid. Probeer het opnieuw.",
     "ajustesEliminarErrorPagos" to "Je hebt lopende betalingen. Rond ze af of annuleer ze voordat je je account verwijdert.",
     "pagoRetencionAvisoDia" to "De betaling wordt door ZeroHaus vastgehouden en aan de professional vrijgegeven wanneer jij het werk bevestigt, of {n} dag nadat het als afgerond is gemarkeerd als je geen geschil opent.",
+    "pagoErrCobroNoValido" to "Deze afschrijving is niet meer geldig. Open de betaling opnieuw.",
+    "pagoFlujoConfirmando" to "We bevestigen de betaling bij de bank. We laten het je weten zodra het klaar is.",
+    "pagoFlujoCanceladoPago" to "De betaling is geannuleerd.",
+    "cobrosComprobando" to "Je uitbetalingsaccount wordt gecontroleerd…",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -10875,4 +10927,8 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoFlujoErrorHoja" to "Nie udało się zakończyć płatności. Spróbuj ponownie.",
     "ajustesEliminarErrorPagos" to "Masz płatności w toku. Zakończ je lub anuluj przed usunięciem konta.",
     "pagoRetencionAvisoDia" to "Płatność jest wstrzymana przez ZeroHaus i trafia do profesjonalisty, gdy potwierdzisz wykonanie, lub {n} dzień po oznaczeniu pracy jako zakończonej, jeśli nie otworzysz sporu.",
+    "pagoErrCobroNoValido" to "To obciążenie nie jest już ważne. Otwórz płatność ponownie.",
+    "pagoFlujoConfirmando" to "Potwierdzamy płatność w banku. Powiadomimy Cię, gdy będzie gotowe.",
+    "pagoFlujoCanceladoPago" to "Płatność została anulowana.",
+    "cobrosComprobando" to "Sprawdzanie konta do wypłat…",
 ), respaldo = espanol) }
