@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.Planes
 import com.example.zerohaus.Modelos.Suscripcion
 import com.example.zerohaus.Modelos.Tecnico
@@ -13,8 +14,12 @@ import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.BillingManager
 import com.example.zerohaus.Util.ErrorCompra
 import com.example.zerohaus.Util.PlanAnterior
+import com.example.zerohaus.Util.ResultadoRestauracion
 import com.example.zerohaus.Util.getCadenas
 import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Estado de la pantalla de suscripción: perfil, suscripciones y precios de Google Play.
@@ -63,13 +68,33 @@ class SuscripcionViewModel : ViewModel() {
     // activada" cada vez que un profesional suscrito entraba).
     private var avisarActivacion = false
 
+    // Tope de espera: si la activación no llega, la pantalla no se queda en «activando»
+    private var topeActivacion: Job? = null
+
+    private fun empezarActivando() {
+        estado = estado.copy(activando = true, error = null)
+        topeActivacion?.cancel()
+        topeActivacion = viewModelScope.launch {
+            delay(TOPE_ACTIVACION_MS)
+            if (estado.activando) {
+                avisarActivacion = false
+                estado = estado.copy(activando = false, error = getCadenas(AppEstado.idioma).subActivacionTarda)
+            }
+        }
+    }
+
+    private fun dejarDeActivar() {
+        topeActivacion?.cancel()
+        topeActivacion = null
+    }
+
     fun iniciarBilling(activity: Activity) {
         if (billing != null) return
         val bm = BillingManager(activity)
         billing = bm
 
         bm.onSuscripcionPendiente = { productoId, token ->
-            estado = estado.copy(activando = true, error = null)
+            empezarActivando()
             repoMonetizacion.activarSuscripcion(productoId, token) { result ->
                 result
                     .onSuccess { resultado ->
@@ -77,6 +102,7 @@ class SuscripcionViewModel : ViewModel() {
                         bm.acknowledge(token)
                         val avisar = avisarActivacion || resultado != "ya_activada"
                         avisarActivacion = false
+                        dejarDeActivar()
                         estado = estado.copy(
                             activando = false,
                             exitoMensaje = if (avisar) getCadenas(AppEstado.idioma).subActivada else estado.exitoMensaje
@@ -84,6 +110,7 @@ class SuscripcionViewModel : ViewModel() {
                     }
                     .onFailure {
                         avisarActivacion = false
+                        dejarDeActivar()
                         estado = estado.copy(activando = false, error = it.message)
                     }
             }
@@ -96,6 +123,7 @@ class SuscripcionViewModel : ViewModel() {
                 ErrorCompra.NO_COMPLETADA -> c.subErrorCompra
             }
             avisarActivacion = false
+            dejarDeActivar()
             estado = estado.copy(error = msg, activando = false)
         }
         bm.conectar {
@@ -139,13 +167,18 @@ class SuscripcionViewModel : ViewModel() {
             return
         }
         avisarActivacion = true
-        estado = estado.copy(activando = true, error = null)
-        bm.restaurarCompras { n ->
-            if (n <= 0) avisarActivacion = false
-            estado = when {
-                n < 0 -> estado.copy(activando = false, error = c.subPlayNoDisponible)
-                n == 0 -> estado.copy(activando = false, exitoMensaje = c.subNadaRestaurar)
-                else -> estado // la confirmación llega al activarlas en el servidor
+        empezarActivando()
+        bm.restaurarCompras { resultado ->
+            if (resultado !is ResultadoRestauracion.Enviadas) {
+                avisarActivacion = false
+                dejarDeActivar()
+            }
+            estado = when (resultado) {
+                ResultadoRestauracion.PlayNoDisponible -> estado.copy(activando = false, error = c.subPlayNoDisponible)
+                ResultadoRestauracion.NadaQueRestaurar -> estado.copy(activando = false, exitoMensaje = c.subNadaRestaurar)
+                ResultadoRestauracion.SoloDeOtraCuenta -> estado.copy(activando = false, error = c.subOtraCuentaZeroHaus)
+                // la confirmación llega al activarlas en el servidor (o salta el tope de espera)
+                is ResultadoRestauracion.Enviadas -> estado
             }
         }
     }
@@ -163,7 +196,11 @@ class SuscripcionViewModel : ViewModel() {
         listenerSubs?.remove()
         listenerPerfil = null
         listenerSubs = null
+        topeActivacion?.cancel()
         billing?.liberar()
         billing = null
     }
 }
+
+/** Espera máxima a que el servidor active una compra antes de salir de «activando». */
+const val TOPE_ACTIVACION_MS = 30_000L

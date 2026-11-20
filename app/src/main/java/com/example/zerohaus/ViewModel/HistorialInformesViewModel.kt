@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Repositorios.RepositorioInformes
+import com.example.zerohaus.Util.listadoDe
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -20,7 +21,10 @@ data class HistorialEstado(
     val informeComparar: InformeEnergetico? = null,
     val modoComparar: Boolean = false,
     val cargando: Boolean = false,
-    val error: String? = null
+    // Los datos vienen de la caché (el servidor no respondió a tiempo)
+    val datosGuardados: Boolean = false,
+    // No se han podido leer (distinto de «todavía no tienes informes»)
+    val errorCarga: Boolean = false
 )
 
 /**
@@ -38,11 +42,17 @@ class HistorialInformesViewModel : ViewModel() {
     fun cargarInformes(forzar: Boolean = false) {
         if (!forzar && estado.informes.isNotEmpty()) return
         viewModelScope.launch {
-            estado = estado.copy(cargando = true, error = null)
-            val lista = suspendCancellableCoroutine<List<InformeEnergetico>> { cont ->
-                repo.obtenerInformes { cont.resume(it) }
+            estado = estado.copy(cargando = true, errorCarga = false)
+            val lectura = suspendCancellableCoroutine { cont ->
+                repo.obtenerInformesConOrigen { cont.resume(it) }
             }
-            estado = estado.copy(informes = lista, cargando = false)
+            val listado = listadoDe(lectura)
+            estado = estado.copy(
+                informes = listado.informes,
+                cargando = false,
+                datosGuardados = listado.datosGuardados,
+                errorCarga = listado.errorCarga
+            )
         }
     }
 

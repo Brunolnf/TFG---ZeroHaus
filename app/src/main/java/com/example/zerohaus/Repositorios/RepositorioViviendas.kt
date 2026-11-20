@@ -16,6 +16,9 @@ class RepositorioViviendas {
 
     private fun uid() = auth.currentUser?.uid ?: ""
 
+    /** Reserva el id de una vivienda nueva sin escribir nada (para que un reintento lo reutilice). */
+    fun reservarId(): String = db.collection("viviendas").document().id
+
     fun guardarVivienda(vivienda: Vivienda, callback: (Result<String>) -> Unit) {
         val ref = if (vivienda.id.isNotEmpty()) {
             db.collection("viviendas").document(vivienda.id)

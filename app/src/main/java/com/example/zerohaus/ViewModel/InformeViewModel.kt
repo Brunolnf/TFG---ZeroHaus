@@ -12,6 +12,7 @@ import com.example.zerohaus.Repositorios.ErrorIAException
 import com.example.zerohaus.Repositorios.RepositorioIA
 import com.example.zerohaus.Repositorios.SugerenciasIA
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.esRespuestaVigente
 import com.example.zerohaus.Repositorios.RepositorioInformes
 import com.example.zerohaus.Repositorios.RepositorioViviendas
 
@@ -46,24 +47,46 @@ class InformeViewModel : ViewModel() {
     private val repoViviendas = RepositorioViviendas()
     private val repoIA = RepositorioIA()
 
+    // Cada petición de IA lleva un número: solo la última puede apagar generandoIA,
+    // y al cambiar de informe se invalidan las que estaban en vuelo.
+    private var peticionIA = 0
+
+    private fun invalidarPeticionesIA() {
+        peticionIA++
+        generandoIA = false
+    }
+
+    private fun vigente(informeId: String, idioma: String) =
+        esRespuestaVigente(informeId, idioma, informe?.id.orEmpty(), AppEstado.idioma)
+
     /** Muestra los consejos ya generados para este informe e idioma (sin gastar consulta). */
     fun cargarSugerenciasGuardadas() {
         val id = informe?.id.orEmpty()
-        val clave = "$id|${AppEstado.idioma}"
+        val idioma = AppEstado.idioma
+        val clave = "$id|$idioma"
         if (id.isEmpty() || cacheIAConsultada == clave) return
+        // Otro informe u otro idioma: lo que estuviera generándose ya no vale
+        invalidarPeticionesIA()
         cacheIAConsultada = clave
         sugerencias = null
         errorIA = null
-        repo.obtenerSugerenciasGuardadas(id, AppEstado.idioma) { s -> if (s != null) sugerencias = s }
+        repo.obtenerSugerenciasGuardadas(id, idioma) { s ->
+            if (s != null && vigente(id, idioma)) sugerencias = s
+        }
     }
 
     fun generarSugerencias(regenerar: Boolean = false) {
         val id = informe?.id.orEmpty()
         if (id.isEmpty() || generandoIA) return
+        val idioma = AppEstado.idioma
+        val peticion = ++peticionIA
         generandoIA = true
         errorIA = null
-        repoIA.generarSugerencias(id, AppEstado.idioma, regenerar) { r ->
-            generandoIA = false
+        repoIA.generarSugerencias(id, idioma, regenerar) { r ->
+            // Solo la petición más reciente apaga el indicador; una respuesta
+            // ignorada no lo deja encendido porque al cambiar se invalidó
+            if (peticion == peticionIA) generandoIA = false
+            if (!vigente(id, idioma)) return@generarSugerencias
             r.onSuccess { sugerencias = it }
                 .onFailure { errorIA = (it as? ErrorIAException)?.tipo ?: ErrorIA.NO_DISPONIBLE }
         }
@@ -72,12 +95,14 @@ class InformeViewModel : ViewModel() {
     fun cargarUltimoInforme() {
         cargando = true
         repo.obtenerUltimoInforme { result ->
+            if (result?.id != informe?.id) invalidarPeticionesIA()
             informe = result
             cargando = false
         }
     }
 
     fun cargarInforme(inf: InformeEnergetico) {
+        if (inf.id != informe?.id) invalidarPeticionesIA()
         informe = inf
         cargando = false
     }
@@ -113,6 +138,7 @@ class InformeViewModel : ViewModel() {
         repo.generarInforme(v) { r ->
             recalculando = false
             r.onSuccess { nuevo ->
+                invalidarPeticionesIA()
                 informe = nuevo
                 seleccionadas = emptySet()
                 // Los consejos de IA eran del informe anterior
@@ -131,7 +157,7 @@ class InformeViewModel : ViewModel() {
         mejoras = emptyList()
         seleccionadas = emptySet()
         sugerencias = null
-        generandoIA = false
+        invalidarPeticionesIA()
         errorIA = null
         cacheIAConsultada = null
         recalculando = false
