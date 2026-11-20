@@ -334,7 +334,7 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
     pagos intactos) y, solo entonces, los pagos sin dinero se cancelan y se
     purga. El borrado no llama a Stripe: lo de Stripe queda en una cola
     (pagos.py). Si algo falla antes de terminar, se quita la marca."""
-    pagos.marcar_borrando(db, uid)
+    marca = pagos.marcar_borrando(db, uid)
     try:
         if pagos.pagos_activos(db, uid):
             raise https_fn.HttpsError(
@@ -346,11 +346,14 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
             canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
         else:
             canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
-        pagos.cerrar_pagos_para_borrar(db, uid)
+        customer_stripe = pagos.cerrar_pagos_para_borrar(db, uid)
         stats = _purgar_usuario(db, uid)
     except Exception:
-        pagos.desmarcar_borrando(db, uid)
+        pagos.desmarcar_borrando(db, uid, marca)
         raise
+    # El Customer de Stripe, solo con la cuenta ya purgada: si la purga fallara,
+    # la cuenta seguiría viva y lo necesitaría para pagar
+    pagos.encolar_limpieza(db, customer_id=customer_stripe)
     return {
         "ok": True, "uid": uid, "stats": stats,
         "suscripcionCancelada": canceladas > 0,

@@ -272,8 +272,16 @@ class _StripeFalso:
         self.versiones.append(version)
         return f"{self._id('ek_test')}_secret"
 
+    def leer_cliente(self, customer_id):
+        self._llamada("leer_cliente")
+        if customer_id not in self.clientes:
+            raise stripe.InvalidRequestError(f"No such customer: {customer_id}", "id", code="resource_missing")
+        return copy.deepcopy(self.clientes[customer_id])
+
     def crear_cobro(self, pago, customer_id, clave):
         self._llamada("crear_cobro", clave)
+        if customer_id not in self.clientes:
+            raise stripe.InvalidRequestError(f"No such customer: {customer_id}", "customer", code="resource_missing")
 
         def crear():
             cobro_id = self._id("pi")
@@ -1500,10 +1508,13 @@ class BorradoCuentaTest(_Base):
         self.delete_user.assert_called_once_with("cli")
         # Sin llamar a Stripe: lo de Stripe queda en la cola, sin el uid
         self.assertEqual(len(self.stripe.llamadas), llamadas)
-        (ruta, limpieza), = self.limpiezas().items()
-        self.assertEqual((sorted(limpieza["cobros"]), limpieza["customerId"]), (cobros, customer))
-        self.assertNotIn('"cli"', json.dumps(limpieza))
-        self.limpiar(ruta)
+        # Dos encargos: los cobros de los pagos cancelados y, tras purgar, el Customer
+        limpiezas = self.limpiezas()
+        self.assertEqual(sorted(c for l in limpiezas.values() for c in l["cobros"]), cobros)
+        self.assertEqual([l["customerId"] for l in limpiezas.values() if l["customerId"]], [customer])
+        self.assertNotIn('"cli"', json.dumps(limpiezas))
+        for ruta in list(limpiezas):
+            self.limpiar(ruta)
         self.assertEqual([self.stripe.cobros[c]["status"] for c in cobros], ["canceled", "canceled"])
         self.assertEqual(sorted(self.stripe.creaciones("cancelar_cobro")), [f"limpieza:{c}" for c in cobros])
         self.assertEqual(self.stripe.clientes_borrados, [customer])
@@ -1531,7 +1542,8 @@ class BorradoCuentaTest(_Base):
         self.assertEqual(usos, [])
         self.assertEqual(self.pago(pendiente)["estado"], "cancelado")
         self.assertEqual([c.args[0] for c in self.delete_user.call_args_list], ["otro", "cli"])
-        self.assertEqual(len(self.limpiezas()), 1)          # solo la de quien tenía algo en Stripe
+        # Solo las de quien tenía algo en Stripe: su cobro y su Customer
+        self.assertEqual(len(self.limpiezas()), 2)
 
     def test_se_borra_sin_el_secreto_de_stripe(self):
         self.borrar_sin_stripe({})
@@ -1602,11 +1614,86 @@ class BorradoCuentaTest(_Base):
         self.assertEqual(self.webhook(self.evento_cobro(pendiente)), (200, "reembolso_huerfano"))
         reembolso, = self.stripe.reembolsos
         self.assertEqual((reembolso["payment_intent"], reembolso["amount"]), (cobro_id, 1005))
-        (ruta, _), = self.limpiezas().items()
-        self.limpiar(ruta)                              # ya pagado: no se intenta anular
+        for ruta in list(self.limpiezas()):
+            self.limpiar(ruta)                          # ya pagado: no se intenta anular
         self.assertEqual(self.stripe.creaciones("cancelar_cobro"), [])
         self.assertEqual(self.limpiezas(), {})
         self.assertEqual(len(self.stripe.reembolsos), 1)
+
+    def test_si_la_purga_falla_el_customer_no_se_encola_y_la_cuenta_sigue_pagando(self):
+        pendiente = self.solicitar()
+        self.aceptar(pendiente)
+        customer = self.db.docs["cuentas_stripe/cli"]["customerId"]
+        with mock.patch.object(main, "_purgar_usuario", mock.Mock(side_effect=RuntimeError("Firestore no responde"))):
+            with self.assertRaises(RuntimeError):
+                llamar(main.eliminar_mi_cuenta, "cli")
+        # Solo el cobro del pago ya cancelado; el Customer, no (la cuenta sigue viva)
+        self.assertEqual([l["customerId"] for l in self.limpiezas().values()], [None])
+        for ruta in list(self.limpiezas()):
+            self.limpiar(ruta)
+        self.assertEqual(self.stripe.clientes_borrados, [])
+        nuevo = self.solicitar()
+        self.assertEqual(self.aceptar(nuevo)["customerId"], customer)
+
+    def test_si_el_customer_ya_no_existe_en_stripe_se_crea_otro(self):
+        pago_id = self.solicitar()
+        viejo = self.aceptar(pago_id)["customerId"]
+        llamar(pagos.pagos_cancelar, "cli", pagoId=pago_id)
+        self.stripe.borrar_cliente(viejo)                  # p. ej. una limpieza de antes
+        nuevo_pago = self.solicitar()
+        nuevo = self.aceptar(nuevo_pago)["customerId"]
+        self.assertNotEqual(nuevo, viejo)
+        self.assertEqual(self.db.docs["cuentas_stripe/cli"]["customerId"], nuevo)
+        # Otra clave: con la de antes, Stripe devolvería el Customer borrado
+        self.assertEqual(self.stripe.creaciones("crear_cliente"), ["cliente:cli", f"cliente:cli:{viejo}"])
+        self.assertEqual(self.stripe.cobros[self.pago(nuevo_pago)["stripePaymentIntentId"]]["customer"], nuevo)
+
+    def test_con_un_pago_con_dinero_no_se_cancela_ninguno(self):
+        # Aunque la comprobación de main no lo viera, no se cancela nada a medias
+        solicitado = self.solicitar()
+        retenido = self.solicitar()
+        self.aceptar(retenido)
+        self.cobrar(retenido)
+        with mock.patch.object(pagos, "pagos_activos", lambda db, uid: []):
+            e = self.error(main.eliminar_mi_cuenta, "cli")
+        self.assertEqual((e.code, e.details), (F.FAILED_PRECONDITION, {"motivo": "pagos"}))
+        self.assertEqual(self.pago(solicitado)["estado"], "solicitado")
+        self.assertEqual(self.limpiezas(), {})
+
+    def test_cancelacion_parcial_encola_los_cobros_de_lo_ya_cancelado(self):
+        pendiente, fallido = self.pendiente_y_fallido()
+        real = pagos._transicion
+        cancelados = []
+
+        def falla_la_segunda(db, pago_id, evento, *args, **kwargs):
+            if evento == "cancelar":
+                cancelados.append(pago_id)
+                if len(cancelados) == 2:
+                    raise RuntimeError("Firestore no responde")
+            return real(db, pago_id, evento, *args, **kwargs)
+        with mock.patch.object(pagos, "_transicion", falla_la_segunda):
+            with self.assertRaises(RuntimeError):
+                llamar(main.eliminar_mi_cuenta, "cli")
+        primero, segundo = cancelados
+        self.assertEqual((self.pago(primero)["estado"], self.pago(segundo)["estado"] != "cancelado"),
+                         ("cancelado", True))
+        limpieza, = self.limpiezas().values()
+        self.assertEqual((limpieza["cobros"], limpieza["customerId"]),
+                         ([self.pago(primero)["stripePaymentIntentId"]], None))
+        self.assertNotIn("borrandoToken", self.db.docs["usuarios/cli"])
+        self.delete_user.assert_not_called()
+
+    def test_dos_borrados_solapados_no_se_quitan_la_marca(self):
+        pendiente = self.solicitar()
+
+        def play_y_entra_otro_borrado(db, uid):
+            # Mientras este espera a Play, otro borrado de la misma cuenta pone su marca
+            self.db.docs["usuarios/cli"].update(borrandoDesde=self.reloj[0], borrandoToken="del_otro")
+            raise main.https_fn.HttpsError(F.UNAVAILABLE, "Play no responde")
+        self.play.side_effect = play_y_entra_otro_borrado
+        self.error(main.eliminar_mi_cuenta, "cli")
+        self.assertEqual(self.db.docs["usuarios/cli"]["borrandoToken"], "del_otro")     # la del otro sigue
+        self.assertError(pagos.pagos_aceptar, "cli", F.FAILED_PRECONDITION, "cuenta_en_borrado", pagoId=pendiente)
 
     def test_mientras_se_borra_la_cuenta_no_se_abre_dinero_nuevo(self):
         pago_id = self.solicitar()
@@ -1658,30 +1745,60 @@ class LimpiezaStripeTest(_Base):
 
     def setUp(self):
         super().setUp()
-        for parche in (mock.patch.object(main.auth, "delete_user", mock.Mock()),
-                       mock.patch.object(main, "_borrar_storage", lambda prefijo: 0),
-                       mock.patch.object(main, "_cancelar_suscripciones_play", mock.Mock(return_value=(0, 0)))):
-            parche.start()
-            self.addCleanup(parche.stop)
         pendiente = self.solicitar()
         self.aceptar(pendiente)
         self.cobro = self.pago(pendiente)["stripePaymentIntentId"]
         self.customer = self.db.docs["cuentas_stripe/cli"]["customerId"]
-        llamar(main.eliminar_mi_cuenta, "cli")
-        (self.ruta, _), = [(r, d) for r, d in self.db.docs.items() if r.startswith("limpieza_stripe/")]
+        self.ruta = "limpieza_stripe/" + pagos.encolar_limpieza(self.db, [self.cobro], self.customer)
 
     def limpieza(self):
         return self.db.docs.get(self.ruta)
 
-    def test_con_exito_al_crearse(self):
+    def disparar(self):
         inspect.unwrap(pagos.pagos_limpiar_stripe)(SimpleNamespace(params={"limpiezaId": self.ruta.split("/")[1]}))
+
+    def test_con_exito_al_crearse(self):
+        self.disparar()
         self.assertIsNone(self.limpieza())
         self.assertEqual(self.stripe.cobros[self.cobro]["status"], "canceled")
         self.assertEqual(self.stripe.clientes_borrados, [self.customer])
 
+    def test_el_mismo_encargo_no_crea_otro_documento(self):
+        self.stripe.caido = True
+        self.disparar()                                   # falla una vez
+        self.assertEqual("limpieza_stripe/" + pagos.encolar_limpieza(self.db, [self.cobro], self.customer), self.ruta)
+        self.assertEqual(len([r for r in self.db.docs if r.startswith("limpieza_stripe/")]), 1)
+        self.assertEqual(self.limpieza()["fallos"], 1)    # repetirlo no reinicia sus fallos
+        self.assertIsNone(pagos.encolar_limpieza(self.db, [], None))          # nada que hacer
+
+    def test_el_trigger_y_la_tarea_a_la_vez_no_la_hacen_dos_veces(self):
+        leer = self.stripe.leer_cobro
+        tarea = []
+
+        def leer_y_entra_la_tarea(cobro_id):
+            if not tarea:
+                tarea.append(pagos.liberar_vencidos(self.db)["limpiezas"])   # la tarea horaria, a la vez
+            return leer(cobro_id)
+        with mock.patch.object(self.stripe, "leer_cobro", leer_y_entra_la_tarea):
+            self.disparar()
+        self.assertEqual(tarea, [0])                    # la vio reclamada y no la tocó
+        self.assertEqual(self.stripe.creaciones("cancelar_cobro"), [f"limpieza:{self.cobro}"])
+        self.assertEqual(self.stripe.clientes_borrados, [self.customer])
+        self.assertIsNone(self.limpieza())
+
+    def test_una_fase_que_falla_no_corta_las_demas(self):
+        with mock.patch.object(pagos, "_revisar_retenidos", mock.Mock(side_effect=RuntimeError("Firestore no responde"))):
+            resultado = pagos.liberar_vencidos(self.db)
+        self.assertEqual(resultado["limpiezas"], 1)
+        self.assertIsNone(self.limpieza())
+        with mock.patch.object(pagos, "_liberar_lotes", mock.Mock(side_effect=RuntimeError("Firestore no responde"))), \
+                mock.patch.object(pagos, "_procesar_limpiezas", mock.Mock(side_effect=RuntimeError("no responde"))):
+            resultado = pagos.liberar_vencidos(self.db)       # no lanza
+        self.assertEqual(resultado["limpiezas"], 0)
+
     def test_un_fallo_se_reintenta_en_la_tarea_horaria(self):
         self.stripe.caido = True
-        inspect.unwrap(pagos.pagos_limpiar_stripe)(SimpleNamespace(params={"limpiezaId": self.ruta.split("/")[1]}))
+        self.disparar()
         limpieza = self.limpieza()
         self.assertEqual((limpieza["fallos"], limpieza["proximoIntento"]), (1, AHORA + pagos.LIMPIEZA_ESPERA_MS))
         self.stripe.caido = False

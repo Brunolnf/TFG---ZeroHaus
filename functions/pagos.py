@@ -39,6 +39,7 @@ Todo el dinero va en céntimos (int) y en euros: con float, 5000 céntimos al
 1,13 % dan 56,4999… en vez de 56,5 y se pierde el céntimo del redondeo.
 """
 import copy
+import hashlib
 import json
 import math
 import re
@@ -701,6 +702,9 @@ class _StripeAPI:
     def crear_cliente(self, uid: str, clave: str) -> dict:
         return _a_dict(stripe.Customer.create(metadata={"uid": uid}, idempotency_key=clave))
 
+    def leer_cliente(self, customer_id: str) -> dict:
+        return _a_dict(stripe.Customer.retrieve(customer_id))
+
     def borrar_cliente(self, customer_id: str) -> None:
         """Borra el Customer y sus métodos de pago guardados. Repetirlo no falla."""
         try:
@@ -1292,11 +1296,24 @@ def _solicitar(db, uid: str, datos: dict) -> dict:
 
 
 def _customer(db, api, uid: str) -> str:
-    """Customer de Stripe del cliente: uno por cuenta, en /cuentas_stripe/{uid}."""
+    """Customer de Stripe del cliente: uno por cuenta, en /cuentas_stripe/{uid}.
+
+    Si el guardado ya no existe en Stripe (lo borró, p. ej., una limpieza de un
+    borrado de cuenta que no llegó a terminar), se crea otro: si no, aceptar y
+    reintentar fallarían siempre. Con otra clave de idempotencia, porque con la
+    de antes Stripe devolvería el borrado."""
     customer_id = _datos(db, "cuentas_stripe", uid).get("customerId")
+    clave = f"cliente:{uid}"
     if customer_id:
-        return customer_id
-    customer_id = api.crear_cliente(uid, f"cliente:{uid}")["id"]
+        try:
+            if api.leer_cliente(customer_id).get("deleted") is not True:
+                return customer_id
+        except stripe.InvalidRequestError as e:
+            if getattr(e, "code", None) != "resource_missing":
+                raise
+        print(f"[PAGOS] El Customer {customer_id} de {uid} ya no existe en Stripe: se crea otro")
+        clave = f"cliente:{uid}:{customer_id}"
+    customer_id = api.crear_cliente(uid, clave)["id"]
     db.collection("cuentas_stripe").document(uid).set({"uid": uid, "customerId": customer_id}, merge=True)
     return customer_id
 
@@ -1462,12 +1479,21 @@ def liberar_vencidos(db) -> dict:
                 .order_by("liberarEn")
                 .limit(LIBERAR_LOTE))
     resultado = {"liberados": 0, "fallidos": 0, "aplazados": 0, "avisados": 0, "limpiezas": 0}
+    # Cada fase por su cuenta: un fallo en una no corta las demás
     try:
         _liberar_lotes(db, consulta, ahora, resultado)
     except _SinClaveStripe:
         pass        # sin clave válida fallarían todos; lo demás sigue
-    resultado["avisados"] = _revisar_retenidos(db)
-    resultado["limpiezas"] = _procesar_limpiezas(db)
+    except Exception as e:
+        print(f"[PAGOS] La liberación de plazos vencidos no se ha completado: {e}")
+    try:
+        resultado["avisados"] = _revisar_retenidos(db)
+    except Exception as e:
+        print(f"[PAGOS] La revisión de pagos retenidos no se ha completado: {e}")
+    try:
+        resultado["limpiezas"] = _procesar_limpiezas(db)
+    except Exception as e:
+        print(f"[PAGOS] La limpieza de Stripe no se ha completado: {e}")
     return resultado
 
 
@@ -1865,63 +1891,103 @@ def _con_pagos() -> https_fn.HttpsError:
                                {"motivo": "pagos"})
 
 
-def marcar_borrando(db, uid: str) -> None:
+def marcar_borrando(db, uid: str) -> str:
     """Primer paso del borrado: desde aquí, solicitar, aceptar y reintentar se
     rechazan (cuenta_en_borrado), comprobado dentro de su transacción. Así no
     se cuela un cobro entre mirar si hay pagos en curso y borrar. Se guarda la
-    hora (`borrandoDesde`): la marca caduca a los BORRADO_CADUCA_MS."""
-    db.collection("usuarios").document(uid).set({"borrandoDesde": _ahora_ms()}, merge=True)
+    hora (`borrandoDesde`: la marca caduca a los BORRADO_CADUCA_MS) y un token
+    (`borrandoToken`), que devuelve: solo la quita quien la puso."""
+    token = secrets.token_hex(8)
+    db.collection("usuarios").document(uid).set({"borrandoDesde": _ahora_ms(), "borrandoToken": token}, merge=True)
+    return token
 
 
-def desmarcar_borrando(db, uid: str) -> None:
-    """El borrado no sigue: la cuenta vuelve a poder pagar. Si /usuarios no
+def desmarcar_borrando(db, uid: str, token: str) -> None:
+    """El borrado no sigue: la cuenta vuelve a poder pagar. Solo si la marca
+    sigue siendo la de este borrado: si otro la ha puesto después (dos
+    borrados de la misma cuenta a la vez), se queda la suya. Si /usuarios no
     existía, se quita también el documento que creó la marca."""
-    try:
-        ref = db.collection("usuarios").document(uid)
-        snap = ref.get()
-        if not snap.exists:
+    ref = db.collection("usuarios").document(uid)
+
+    @firestore.transactional
+    def _quitar(txn):
+        snap = ref.get(transaction=txn)
+        datos = (snap.to_dict() or {}) if snap.exists else {}
+        if datos.get("borrandoToken") != token:
             return
-        if set(snap.to_dict() or {}) <= {"borrandoDesde"}:
-            ref.delete()
+        if set(datos) <= {"borrandoDesde", "borrandoToken"}:
+            txn.delete(ref)
         else:
-            ref.update({"borrandoDesde": firestore.DELETE_FIELD})
+            txn.update(ref, {"borrandoDesde": firestore.DELETE_FIELD, "borrandoToken": firestore.DELETE_FIELD})
+
+    try:
+        _quitar(db.transaction())
     except Exception as e:
         print(f"[PAGOS] No se pudo quitar la marca de borrado de {uid}: {e}")
 
 
-def cerrar_pagos_para_borrar(db, uid: str) -> int:
+def cerrar_pagos_para_borrar(db, uid: str) -> Optional[str]:
     """Antes de purgar, solo en Firestore: cancela los pagos de `uid` sin dinero
-    cobrado (solicitado, pendiente_pago y fallido) y encola en /limpieza_stripe
-    anular sus cobros y borrar su Customer. Si un pago ya tiene el dinero (un
-    cobro que acaba de completarse), no sigue: HttpsError con motivo «pagos».
-    Si el cliente paga un cobro antes de que se anule, el webhook lo reembolsa,
-    porque su pago ya está cancelado. Devuelve cuántos ha cancelado."""
-    cobros, cancelados = [], 0
+    cobrado (solicitado, pendiente_pago y fallido). Primero mira TODOS: si uno
+    ya tiene el dinero, no cancela ninguno (HttpsError con motivo «pagos»).
+
+    Los cobros de los pagos que llega a cancelar se encolan en /limpieza_stripe
+    aunque algo falle después: sus pagos ya no los esperan. Si el cliente paga
+    uno antes de que se anule, el webhook lo reembolsa (el pago está
+    cancelado). Devuelve el Customer de Stripe, que main.py encola solo cuando
+    la purga ha terminado: si fallara, la cuenta seguiría viva y lo necesitaría."""
+    cancelables = []
     for campo, actor in (("cliente", CLIENTE), ("profesional", PROFESIONAL)):
         for snap in db.collection("pagos").where(filter=FieldFilter(campo, "==", uid)).stream():
             estado = (snap.to_dict() or {}).get("estado")
             if estado in ESTADOS_CON_DINERO:
                 raise _con_pagos()
-            if estado not in ESTADOS_CANCELABLES_AL_BORRAR:
-                continue
+            if estado in ESTADOS_CANCELABLES_AL_BORRAR:
+                cancelables.append((snap.id, actor))
+    customer_id = _datos(db, "cuentas_stripe", uid).get("customerId") or None
+    cobros = []
+    try:
+        for pago_id, actor in cancelables:
             try:
-                nuevo = _transicion(db, snap.id, "cancelar", actor, uid)
+                nuevo = _transicion(db, pago_id, "cancelar", actor, uid)
             except ErrorPago as e:
                 # Se ha cobrado mientras tanto: ya tiene dinero
-                if _leer_pago(db, snap.id).get("estado") in ESTADOS_CON_DINERO:
+                if _leer_pago(db, pago_id).get("estado") in ESTADOS_CON_DINERO:
                     raise _con_pagos() from None
                 raise _error_https(e) from None
-            cancelados += 1
             if nuevo.get("stripePaymentIntentId"):
                 cobros.append(nuevo["stripePaymentIntentId"])
-    customer_id = _datos(db, "cuentas_stripe", uid).get("customerId")
-    if cobros or customer_id:
-        # Sin el uid: solo lo que hay que hacer en Stripe
-        db.collection("limpieza_stripe").document().set({
-            "cobros": cobros, "customerId": customer_id or None,
-            "creado": _ahora_ms(), "fallos": 0, "proximoIntento": 0,
-        })
-    return cancelados
+    finally:
+        encolar_limpieza(db, cobros=cobros)
+    return customer_id
+
+
+def encolar_limpieza(db, cobros=(), customer_id: Optional[str] = None) -> Optional[str]:
+    """Encarga anular `cobros` y borrar el Customer en Stripe. Sin el uid: solo
+    lo que hay que hacer allí. El id del documento sale de lo que hay que hacer
+    (un hash), así que repetir el encargo no crea otro. Devuelve el id, o None
+    si no hay nada que hacer o no se ha podido encolar. Nunca lanza: puede ir
+    después de borrar la cuenta, y el fallo solo se apunta en el registro."""
+    cobros = sorted({c for c in cobros if isinstance(c, str) and c})
+    if not cobros and not customer_id:
+        return None
+    clave = hashlib.sha256(("|".join(cobros) + "#" + (customer_id or "")).encode("utf-8")).hexdigest()[:40]
+    ref = db.collection("limpieza_stripe").document(clave)
+    ahora = _ahora_ms()
+
+    @firestore.transactional
+    def _crear(txn):
+        if not ref.get(transaction=txn).exists:
+            txn.set(ref, {"cobros": cobros, "customerId": customer_id, "creado": ahora,
+                          "fallos": 0, "proximoIntento": 0, "procesandoHasta": 0})
+
+    try:
+        _crear(db.transaction())
+        return clave
+    except Exception as e:
+        print(f"[PAGOS] ERROR: no se pudo encolar la limpieza de Stripe (cobros {cobros}, "
+              f"Customer {customer_id}): {e}. Hacerla a mano en Stripe.")
+        return None
 
 
 # proximoIntento de una limpieza que ya no se reintenta (requiereAdmin): fuera
@@ -1929,16 +1995,37 @@ def cerrar_pagos_para_borrar(db, uid: str) -> int:
 _NUNCA_MS = 2 ** 53
 
 
+# Lo que se reserva una limpieza al empezar (procesandoHasta): más que lo que
+# dura la función (120 s), para que el trigger y la tarea horaria no la hagan a la vez
+LIMPIEZA_RECLAMO_MS = 5 * 60 * 1000
+
+
+def _reclamar_limpieza(db, ref):
+    """La reserva para procesarla, en una transacción. Devuelve sus datos, o
+    None si no existe, la tiene otro (procesandoHasta) o ya no se reintenta."""
+    ahora = _ahora_ms()
+
+    @firestore.transactional
+    def _reclamar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return None
+        datos = snap.to_dict() or {}
+        if datos.get("requiereAdmin") is True or int(datos.get("procesandoHasta") or 0) > ahora:
+            return None
+        txn.update(ref, {"procesandoHasta": ahora + LIMPIEZA_RECLAMO_MS})
+        return datos
+
+    return _reclamar(db.transaction())
+
+
 def procesar_limpieza(db, ref) -> bool:
     """Hace en Stripe lo que dejó encolado el borrado de una cuenta: anula los
     cobros que aún se podían pagar y borra el Customer (sus tarjetas). Todo se
     puede repetir. True si ha terminado (y borra el documento); si falla, lo
-    apunta para reintentarlo más tarde."""
-    snap = ref.get()
-    if not snap.exists:
-        return True
-    datos = snap.to_dict() or {}
-    if datos.get("requiereAdmin") is True:
+    apunta para reintentarlo más tarde. Si la tiene otro, no la toca."""
+    datos = _reclamar_limpieza(db, ref)
+    if datos is None:
         return False
     try:
         api = _stripe()
@@ -1968,7 +2055,7 @@ def _apuntar_fallo_limpieza(db, ref, error: Exception) -> None:
             return False
         datos = snap.to_dict() or {}
         fallos = int(datos.get("fallos") or 0) + 1
-        cambios = {"fallos": fallos, "ultimoError": codigo,
+        cambios = {"fallos": fallos, "ultimoError": codigo, "procesandoHasta": 0,
                    "proximoIntento": ahora + LIMPIEZA_ESPERA_MS * 2 ** (fallos - 1)}
         al_admin = fallos >= LIMPIEZA_FALLOS_MAX and datos.get("requiereAdmin") is not True
         if fallos >= LIMPIEZA_FALLOS_MAX:
