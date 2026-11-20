@@ -9,3 +9,6 @@ firebase-admin==7.7.0
 tzdata==2026.6
 # Gemini en Vertex AI (consejos del informe y lectura de facturas)
 google-genai==2.33.0
+# Pago con retención (pagos.py). La versión de la API de Stripe va fijada en
+# pagos.STRIPE_API_VERSION: al subir el SDK, revisarla con él
+stripe==16.1.0

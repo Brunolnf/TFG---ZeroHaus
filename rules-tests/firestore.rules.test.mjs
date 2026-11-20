@@ -1,5 +1,6 @@
 // Tests de firestore.rules. Ejecutar desde esta carpeta:
 //   npm install && npm test
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { after, before, beforeEach, describe, it } from "node:test";
 import {
@@ -990,5 +991,175 @@ describe("denuncias", () => {
     await assertSucceeds(getDocs(collection(admin, "denuncias")));
     await assertSucceeds(updateDoc(doc(admin, "denuncias/cliente_pro"), { estado: "revisada" }));
     await assertSucceeds(deleteDoc(doc(admin, "denuncias/cliente_pro")));
+  });
+});
+
+// Bloque E (T-E6): pagos con retención. Todo lo escribe el servidor (Admin SDK)
+describe("pagos: solo los leen las partes y el administrador; nadie los escribe desde la app", () => {
+  // Lo que escribe la Cloud Function al solicitar y cobrar un pago
+  const pago = (extra = {}) => ({
+    id: "p1", cliente: "cliente", profesional: "pro", chatId: "con_mensajes",
+    descripcion: "Instalar aerotermia", importeCent: 10000, comisionCent: 1000, netoCent: 9000,
+    moneda: "eur", comisionPct: 10, liberacionDias: 7, estado: "retenido",
+    historial: [{ estado: "solicitado", fecha: 1 }, { estado: "retenido", fecha: 2 }],
+    creado: 1, actualizado: 2, stripePaymentIntentId: "pi_test", stripeTransferId: "",
+    stripeRefundId: "", terminadoEn: 0, liberarEn: 0, disputa: null, ...extra,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "pagos/p1"), pago());
+      // Otro cliente con el mismo profesional: el primer cliente no debe verlo
+      await setDoc(doc(db, "pagos/p2"), pago({ id: "p2", cliente: "otro", chatId: "ajeno" }));
+    });
+  });
+
+  it("el cliente y el profesional leen su pago", async () => {
+    await assertSucceeds(getDoc(doc(verificado("cliente"), "pagos/p1")));
+    await assertSucceeds(getDoc(doc(verificado("pro"), "pagos/p1")));
+  });
+
+  it("un tercero no lee el pago ni lo consulta con el uid de otro", async () => {
+    const db = verificado("otro");
+    await assertFails(getDoc(doc(db, "pagos/p1")));
+    await assertFails(getDocs(query(collection(db, "pagos"), where("cliente", "==", "cliente"))));
+    await assertFails(getDocs(query(collection(db, "pagos"), where("profesional", "==", "pro"))));
+  });
+
+  it("sin el email verificado ni las partes lo leen", async () => {
+    await assertFails(getDoc(doc(sinVerificar("cliente"), "pagos/p1")));
+    await assertFails(getDoc(doc(sinVerificar("pro"), "pagos/p1")));
+    await assertFails(getDocs(query(collection(sinVerificar("cliente"), "pagos"),
+      where("cliente", "==", "cliente"))));
+  });
+
+  it("las consultas de la app: por cliente, por profesional y por chat con una de las partes", async () => {
+    const cli = verificado("cliente");
+    const pro = verificado("pro");
+    const comoCliente = await assertSucceeds(getDocs(query(collection(cli, "pagos"),
+      where("cliente", "==", "cliente"))));
+    assert.equal(comoCliente.size, 1);
+    const comoPro = await assertSucceeds(getDocs(query(collection(pro, "pagos"),
+      where("profesional", "==", "pro"))));
+    assert.equal(comoPro.size, 2);
+    const chatCliente = await assertSucceeds(getDocs(query(collection(cli, "pagos"),
+      where("chatId", "==", "con_mensajes"), where("cliente", "==", "cliente"))));
+    assert.equal(chatCliente.size, 1);
+    const chatPro = await assertSucceeds(getDocs(query(collection(pro, "pagos"),
+      where("chatId", "==", "ajeno"), where("profesional", "==", "pro"))));
+    assert.equal(chatPro.size, 1);
+  });
+
+  it("una consulta que no filtra por la propia parte se deniega", async () => {
+    const db = verificado("cliente");
+    await assertFails(getDocs(collection(db, "pagos")));
+    await assertFails(getDocs(query(collection(db, "pagos"), where("chatId", "==", "con_mensajes"))));
+    await assertFails(getDocs(query(collection(db, "pagos"), where("cliente", "==", "otro"))));
+    await assertFails(getDocs(query(collection(db, "pagos"), where("estado", "==", "retenido"))));
+  });
+
+  it("el administrador lee cualquier pago y los lista todos", async () => {
+    const admin = comoAdmin();
+    await assertSucceeds(getDoc(doc(admin, "pagos/p2")));
+    const todos = await assertSucceeds(getDocs(collection(admin, "pagos")));
+    assert.equal(todos.size, 2);
+  });
+
+  it("nadie crea, cambia ni borra pagos desde la app, tampoco el administrador", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["pro", verificado("pro")],
+                               ["admin", comoAdmin()]]) {
+      await assertFails(setDoc(doc(db, "pagos/nuevo"), pago({ id: "nuevo" })), `${quien}: crear`);
+      await assertFails(updateDoc(doc(db, "pagos/p1"), { estado: "liberado" }), `${quien}: estado`);
+      await assertFails(updateDoc(doc(db, "pagos/p1"), { importeCent: 1 }), `${quien}: importe`);
+      await assertFails(setDoc(doc(db, "pagos/p1"), pago({ netoCent: 10000, comisionCent: 0 })),
+        `${quien}: reescribir`);
+      await assertFails(deleteDoc(doc(db, "pagos/p1")), `${quien}: borrar`);
+    }
+  });
+});
+
+describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
+  const cuenta = (extra = {}) => ({
+    accountId: "acct_test", estado: "pendiente", chargesEnabled: false, payoutsEnabled: false,
+    detailsSubmitted: false, actualizado: 1, ...extra,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, "cuentas_stripe/pro"), cuenta());
+      await setDoc(doc(db, "eventos_stripe/evt_1"), { tipo: "payment_intent.succeeded", procesado: 1 });
+      await setDoc(doc(db, "limites_pagos/cliente"), { solicitudes: 3, dia: 20261118 });
+      await setDoc(doc(db, "operaciones_pagos/p1"), {
+        pagoId: "p1", operacion: "transferencia", evento: "confirmar", reserva: "r1", creado: 1, renovado: 1, intento: 1,
+      });
+      await setDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1"), { asunto: "x", texto: "y", fecha: 1 });
+      await setDoc(doc(db, "limpieza_stripe/l1"), { cobros: ["pi_1"], customerId: "cus_1", fallos: 0, proximoIntento: 0 });
+    });
+  });
+
+  it("cada uno lee su propia cuenta de Stripe y el administrador todas", async () => {
+    await assertSucceeds(getDoc(doc(verificado("pro"), "cuentas_stripe/pro")));
+    await assertSucceeds(getDoc(doc(comoAdmin(), "cuentas_stripe/pro")));
+  });
+
+  it("nadie lee ni lista la cuenta de Stripe de otro; sin verificar, tampoco la propia", async () => {
+    await assertFails(getDoc(doc(verificado("cliente"), "cuentas_stripe/pro")));
+    await assertFails(getDocs(collection(verificado("cliente"), "cuentas_stripe")));
+    await assertFails(getDocs(collection(verificado("pro"), "cuentas_stripe")));
+    await assertFails(getDoc(doc(sinVerificar("pro"), "cuentas_stripe/pro")));
+  });
+
+  it("nadie escribe la cuenta de Stripe desde la app, tampoco el administrador", async () => {
+    for (const [quien, db] of [["pro", verificado("pro")], ["admin", comoAdmin()]]) {
+      await assertFails(setDoc(doc(db, "cuentas_stripe/nueva"), cuenta()), `${quien}: crear`);
+      await assertFails(updateDoc(doc(db, "cuentas_stripe/pro"), { chargesEnabled: true, payoutsEnabled: true }),
+        `${quien}: habilitar cobros`);
+      await assertFails(updateDoc(doc(db, "cuentas_stripe/pro"), { accountId: "acct_otro" }), `${quien}: cuenta`);
+      await assertFails(deleteDoc(doc(db, "cuentas_stripe/pro")), `${quien}: borrar`);
+    }
+    // Ni crearse la propia apuntando a la cuenta de Stripe de otro profesional
+    await assertFails(setDoc(doc(verificado("cliente"), "cuentas_stripe/cliente"), cuenta()));
+  });
+
+  it("los eventos de Stripe y los límites de pagos solo los usa el servidor", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["admin", comoAdmin()]]) {
+      await assertFails(getDoc(doc(db, "eventos_stripe/evt_1")), `${quien}: leer evento`);
+      await assertFails(getDocs(collection(db, "eventos_stripe")), `${quien}: listar eventos`);
+      await assertFails(setDoc(doc(db, "eventos_stripe/evt_2"), { tipo: "x" }), `${quien}: crear evento`);
+      await assertFails(deleteDoc(doc(db, "eventos_stripe/evt_1")), `${quien}: borrar evento`);
+      await assertFails(getDoc(doc(db, "limites_pagos/cliente")), `${quien}: leer límite`);
+      await assertFails(setDoc(doc(db, "limites_pagos/cliente"), { solicitudes: 0, dia: 20261118 }),
+        `${quien}: reiniciar límite`);
+      await assertFails(deleteDoc(doc(db, "limites_pagos/cliente")), `${quien}: borrar límite`);
+      await assertFails(setDoc(doc(db, "limites_pagos/cliente/dias/20261118"), { n: 0 }),
+        `${quien}: subcolección del límite`);
+    }
+  });
+
+  // Reserva de cada transferencia o reembolso (la que impide disputar mientras
+  // se mueve el dinero) y avisos al administrador: si la app pudiera borrar una
+  // reserva, se colaría una disputa con la transferencia ya en marcha
+  it("las reservas de operaciones con dinero y los avisos al administrador solo los usa el servidor", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["pro", verificado("pro")], ["admin", comoAdmin()]]) {
+      await assertFails(getDoc(doc(db, "operaciones_pagos/p1")), `${quien}: leer reserva`);
+      await assertFails(getDocs(collection(db, "operaciones_pagos")), `${quien}: listar reservas`);
+      await assertFails(setDoc(doc(db, "operaciones_pagos/p2"), { operacion: "reembolso", renovado: 0 }),
+        `${quien}: crear reserva`);
+      await assertFails(updateDoc(doc(db, "operaciones_pagos/p1"), { renovado: 0 }), `${quien}: soltar reserva`);
+      await assertFails(deleteDoc(doc(db, "operaciones_pagos/p1")), `${quien}: borrar reserva`);
+      await assertFails(getDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1")), `${quien}: leer aviso`);
+      await assertFails(getDocs(collection(db, "avisos_admin_pagos")), `${quien}: listar avisos`);
+      await assertFails(deleteDoc(doc(db, "avisos_admin_pagos/p1_reembolso_fallido_re_1")), `${quien}: borrar aviso`);
+      await assertFails(setDoc(doc(db, "avisos_admin_pagos/otro"), { asunto: "x" }), `${quien}: crear aviso`);
+      // Cola de limpieza de Stripe que deja el borrado de una cuenta: si la app
+      // pudiera crearla, haría anular cobros o borrar Customers ajenos
+      await assertFails(getDoc(doc(db, "limpieza_stripe/l1")), `${quien}: leer limpieza`);
+      await assertFails(getDocs(collection(db, "limpieza_stripe")), `${quien}: listar limpiezas`);
+      await assertFails(setDoc(doc(db, "limpieza_stripe/l2"), { cobros: ["pi_ajeno"], customerId: "cus_ajeno" }),
+        `${quien}: crear limpieza`);
+      await assertFails(deleteDoc(doc(db, "limpieza_stripe/l1")), `${quien}: borrar limpieza`);
+    }
   });
 });

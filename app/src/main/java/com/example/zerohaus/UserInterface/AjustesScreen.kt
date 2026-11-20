@@ -52,9 +52,19 @@ private const val PLAY_ID = "es.zerohaus.app"
 fun AjustesScreen(
     viewModel: AjustesViewModel,
     onVolver: () -> Unit = {},
-    onCerrarSesion: () -> Unit = {}
+    onCerrarSesion: () -> Unit = {},
+    onPagos: () -> Unit = {},
+    pagosViewModel: com.example.zerohaus.ViewModel.PagosViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val c = LocalCadenas.current
+    // Entrada a pagos: con pagos disponibles, o si ya tengo alguno (se pueden seguir cancelando, confirmando o disputando)
+    LaunchedEffect(Unit) {
+        pagosViewModel.refrescarDisponibilidad()
+        pagosViewModel.comprobarTengoPagos() // un get() por papel, sin listeners
+    }
+    val pagosDisponibles = com.example.zerohaus.Modelos.PresentacionPagos.mostrarEntradaAjustes(
+        pagosViewModel.estado.disponibles, pagosViewModel.estado.tengoPagos
+    )
     val verde = MaterialTheme.colorScheme.primary
     val gris = MaterialTheme.colorScheme.onSurfaceVariant
     val rojo = MaterialTheme.colorScheme.error
@@ -309,6 +319,13 @@ fun AjustesScreen(
                                 })
                             }
                         }
+                    }
+                }
+
+                // ── Pagos ──
+                if (pagosDisponibles) {
+                    AjustesCard(c.pagosTitulo) {
+                        AccionRow(Icons.Filled.Payments, c.pagosTitulo, c.pagosAjustesSub, verde) { onPagos() }
                     }
                 }
 

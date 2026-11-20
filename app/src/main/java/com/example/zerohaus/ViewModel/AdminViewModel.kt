@@ -3,7 +3,17 @@ package com.example.zerohaus.ViewModel
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.zerohaus.Modelos.DecisionDisputa
 import com.example.zerohaus.Modelos.Denuncia
+import com.example.zerohaus.Modelos.Pago
+import com.example.zerohaus.Modelos.PresentacionPagos
+import com.example.zerohaus.Modelos.ResultadoPago
+import com.example.zerohaus.Repositorios.RepositorioPagos
+import com.example.zerohaus.Util.getCadenas
+import com.example.zerohaus.Util.textoError
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import com.example.zerohaus.Modelos.Usuario
 import com.example.zerohaus.Repositorios.RepositorioAdmin
 import com.example.zerohaus.Repositorios.RepositorioModeracion
@@ -21,6 +31,18 @@ class AdminViewModel : ViewModel() {
 
     val denuncias = mutableStateListOf<Denuncia>()
     val cargandoDenuncias = mutableStateOf(true)
+
+    // Disputas de pagos (T-E8): el panel está en español fijo, también los errores
+    private val repoPagos by lazy { RepositorioPagos() }
+    private var jobDisputas: Job? = null
+    val disputas = mutableStateListOf<Pago>()
+    val cargandoDisputas = mutableStateOf(false)
+    private var jobAtencion: Job? = null
+    val atencion = mutableStateListOf<Pago>()
+    val cargandoAtencion = mutableStateOf(false)
+
+    /** Pago cuya resolución está en curso (desactiva sus botones). */
+    val resolviendo = mutableStateOf<String?>(null)
 
     val usuarios = mutableStateListOf<Usuario>()
     val cargando = mutableStateOf(false)
@@ -60,6 +82,54 @@ class AdminViewModel : ViewModel() {
         }
     }
 
+    /** Escucha los pagos en disputa. Se ven siempre: resolver no depende del interruptor de pagos. */
+    fun escucharDisputas() {
+        if (jobDisputas?.isActive == true) return
+        cargandoDisputas.value = true
+        jobDisputas = viewModelScope.launch {
+            repoPagos.pagosEnDisputa().collect { r ->
+                cargandoDisputas.value = false
+                when (r) {
+                    is ResultadoPago.Ok -> { disputas.clear(); disputas.addAll(PresentacionPagos.disputas(r.valor)) }
+                    is ResultadoPago.Error ->
+                        if (FirebaseAuth.getInstance().currentUser != null) error.value = getCadenas("Español").textoError(r.error)
+                }
+            }
+        }
+    }
+
+    /** Escucha los pagos con `requiereAdmin` (informativo: sin acciones). */
+    fun escucharAtencion() {
+        if (jobAtencion?.isActive == true) return
+        cargandoAtencion.value = true
+        jobAtencion = viewModelScope.launch {
+            repoPagos.pagosQueRequierenAdmin().collect { r ->
+                cargandoAtencion.value = false
+                when (r) {
+                    is ResultadoPago.Ok -> { atencion.clear(); atencion.addAll(PresentacionPagos.requierenAtencion(r.valor)) }
+                    is ResultadoPago.Error ->
+                        if (FirebaseAuth.getInstance().currentUser != null) error.value = getCadenas("Español").textoError(r.error)
+                }
+            }
+        }
+    }
+
+    /** Libera el dinero al profesional o lo reembolsa al cliente. El servidor comprueba que soy administrador. */
+    fun resolverDisputa(pago: Pago, decision: DecisionDisputa) {
+        if (resolviendo.value != null) return
+        resolviendo.value = pago.id
+        viewModelScope.launch {
+            when (val r = repoPagos.resolver(pago.id, decision)) {
+                is ResultadoPago.Ok -> mensaje.value = when (decision) {
+                    DecisionDisputa.LIBERAR -> "Pago liberado al profesional"
+                    DecisionDisputa.REEMBOLSAR -> "Pago reembolsado al cliente"
+                }
+                is ResultadoPago.Error -> error.value = getCadenas("Español").textoError(r.error)
+            }
+            resolviendo.value = null
+        }
+    }
+
     fun marcarDenuncia(denuncia: Denuncia, estado: String) {
         repoModeracion.marcarEstado(denuncia.id, estado) { ok ->
             if (ok) mensaje.value = "Denuncia $estado" else error.value = "No se pudo actualizar la denuncia"
@@ -82,6 +152,8 @@ class AdminViewModel : ViewModel() {
 
     override fun onCleared() {
         listenerDenuncias?.remove()
+        jobDisputas?.cancel()
+        jobAtencion?.cancel()
         super.onCleared()
     }
 

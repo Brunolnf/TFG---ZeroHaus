@@ -21,7 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.zerohaus.Modelos.DecisionDisputa
 import com.example.zerohaus.Modelos.Denuncia
+import com.example.zerohaus.Modelos.FormatoPago
+import com.example.zerohaus.Modelos.Pago
+import com.example.zerohaus.Util.textoEstado
 import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Modelos.Usuario
 import java.text.SimpleDateFormat
@@ -45,12 +49,13 @@ fun AdminScreen(
     viewModel: AdminViewModel,
     onCerrarSesion: () -> Unit
 ) {
-    LaunchedEffect(Unit) { viewModel.cargar(); viewModel.escucharDenuncias() }
+    LaunchedEffect(Unit) { viewModel.cargar(); viewModel.escucharDenuncias(); viewModel.escucharDisputas(); viewModel.escucharAtencion() }
 
     val context = LocalContext.current
     var pestana by remember { mutableIntStateOf(0) }
     var denunciaBloquear by remember { mutableStateOf<Denuncia?>(null) }
     val pendientes = viewModel.denuncias.count { it.estado == Denuncia.ESTADO_PENDIENTE }
+    var disputaResolver by remember { mutableStateOf<Pair<Pago, DecisionDisputa>?>(null) }
     var mostrarCrear by remember { mutableStateOf(false) }
     var usuarioEditar by remember { mutableStateOf<Usuario?>(null) }
     var usuarioConfirmarEliminar by remember { mutableStateOf<Usuario?>(null) }
@@ -109,6 +114,25 @@ fun AdminScreen(
                     onClick = { pestana = 1 },
                     text = { Text(if (pendientes > 0) "Denuncias ($pendientes)" else "Denuncias") }
                 )
+                Tab(
+                    selected = pestana == 2,
+                    onClick = { pestana = 2 },
+                    text = { Text(if (viewModel.disputas.isNotEmpty()) "Disputas (${viewModel.disputas.size})" else "Disputas") }
+                )
+                Tab(
+                    selected = pestana == 3,
+                    onClick = { pestana = 3 },
+                    text = { Text(if (viewModel.atencion.isNotEmpty()) "Requieren atención (${viewModel.atencion.size})" else "Requieren atención") }
+                )
+            }
+
+            if (pestana == 2) {
+                ListaDisputas(viewModel = viewModel, onResolver = { p, d -> disputaResolver = p to d })
+                return@Column
+            }
+            if (pestana == 3) {
+                ListaAtencion(viewModel)
+                return@Column
             }
 
             if (pestana == 1) {
@@ -161,6 +185,30 @@ fun AdminScreen(
                 }
             }
         }
+    }
+
+    // Confirmación de resolver una disputa (mueve dinero: no se puede deshacer)
+    disputaResolver?.let { (pago, decision) ->
+        val importe = FormatoPago.importe(pago.importeCent, pago.moneda)
+        val liberar = decision == DecisionDisputa.LIBERAR
+        AlertDialog(
+            onDismissRequest = { disputaResolver = null },
+            icon = { Icon(Icons.Default.Gavel, null, tint = if (liberar) VERDE else ROJO) },
+            title = { Text(if (liberar) "Liberar al profesional" else "Reembolsar al cliente") },
+            text = {
+                Text(
+                    if (liberar) "¿Liberar $importe a ${viewModel.nombreDe(pago.profesional)}? El cliente no recibirá el dinero. No se puede deshacer."
+                    else "¿Reembolsar $importe a ${viewModel.nombreDe(pago.cliente)}? El profesional no recibirá el dinero. No se puede deshacer."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.resolverDisputa(pago, decision); disputaResolver = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = if (liberar) VERDE else ROJO)
+                ) { Text(if (liberar) "Liberar" else "Reembolsar", color = Color.White, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { disputaResolver = null }) { Text("Cancelar") } }
+        )
     }
 
     // Confirmación de bloquear la cuenta de un denunciado
@@ -264,6 +312,119 @@ private fun ListaDenuncias(viewModel: AdminViewModel, onBloquearCuenta: (Denunci
                 onDescartar = { viewModel.marcarDenuncia(d, Denuncia.ESTADO_DESCARTADA) },
                 onBloquearCuenta = { onBloquearCuenta(d) }
             )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun ListaDisputas(viewModel: AdminViewModel, onResolver: (Pago, DecisionDisputa) -> Unit) {
+    if (viewModel.cargandoDisputas.value) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = VERDE) }
+        return
+    }
+    if (viewModel.disputas.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No hay disputas abiertas", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-ES")) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(viewModel.disputas, key = { it.id }) { p ->
+            val gris = MaterialTheme.colorScheme.onSurfaceVariant
+            val ocupado = viewModel.resolviendo.value != null
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EtiquetaMini("En disputa", ROJO)
+                        Spacer(Modifier.weight(1f))
+                        val fecha = p.disputa?.fecha ?: 0L
+                        Text(if (fecha > 0) sdf.format(Date(fecha)) else "—", fontSize = 11.sp, color = gris)
+                    }
+                    Text(
+                        "${FormatoPago.importe(p.importeCent, p.moneda)} (comisión ${FormatoPago.importe(p.comisionCent, p.moneda)}, neto ${FormatoPago.importe(p.netoCent, p.moneda)})",
+                        fontWeight = FontWeight.SemiBold, fontSize = 14.sp
+                    )
+                    Text("Cliente: ${viewModel.nombreDe(p.cliente)}", fontSize = 13.sp)
+                    Text("Profesional: ${viewModel.nombreDe(p.profesional)}", fontSize = 13.sp)
+                    if (p.descripcion.isNotBlank()) Text("Trabajo: ${p.descripcion}", fontSize = 13.sp, color = gris)
+                    Text("Motivo: «${p.disputa?.motivo.orEmpty()}»", fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { onResolver(p, DecisionDisputa.LIBERAR) }, enabled = !ocupado,
+                            colors = ButtonDefaults.buttonColors(containerColor = VERDE)
+                        ) { Text("Liberar al profesional", fontSize = 12.sp, color = Color.White) }
+                        OutlinedButton(
+                            onClick = { onResolver(p, DecisionDisputa.REEMBOLSAR) }, enabled = !ocupado
+                        ) { Text("Reembolsar al cliente", fontSize = 12.sp, color = ROJO) }
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+/** Pagos que el servidor marca con `requiereAdmin`: solo informativo. */
+@Composable
+private fun ListaAtencion(viewModel: AdminViewModel) {
+    if (viewModel.cargandoAtencion.value) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = VERDE) }
+        return
+    }
+    if (viewModel.atencion.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("No hay pagos que requieran atención", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+    val es = remember { com.example.zerohaus.Util.getCadenas("Español") }
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.forLanguageTag("es-ES")) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(viewModel.atencion, key = { it.id }) { p ->
+            val gris = MaterialTheme.colorScheme.onSurfaceVariant
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        EtiquetaMini(es.textoEstado(p.estado), NARANJA)
+                        Spacer(Modifier.weight(1f))
+                        Text(FormatoPago.importe(p.importeCent, p.moneda), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Text("Cliente: ${viewModel.nombreDe(p.cliente)}", fontSize = 13.sp)
+                    Text("Profesional: ${viewModel.nombreDe(p.profesional)}", fontSize = 13.sp)
+                    if (p.descripcion.isNotBlank()) Text("Trabajo: ${p.descripcion}", fontSize = 13.sp, color = gris)
+                    p.liberacion?.let { l ->
+                        val prox = l.proximoIntento?.takeIf { it > 0 }?.let { " (próximo intento: ${sdf.format(Date(it))})" }.orEmpty()
+                        Text("Fallos al liberar: ${l.fallos}$prox", fontSize = 13.sp)
+                    }
+                    p.contracargo?.let { c ->
+                        val res = when (c.resultado) {
+                            com.example.zerohaus.Modelos.ResultadoContracargo.GANADO -> "ganado"
+                            com.example.zerohaus.Modelos.ResultadoContracargo.PERDIDO -> "perdido"
+                            com.example.zerohaus.Modelos.ResultadoContracargo.DESCONOCIDO -> "abierto"
+                        }
+                        val f = if (c.fecha > 0) " (${sdf.format(Date(c.fecha))})" else ""
+                        Text("Contracargo: $res$f", fontSize = 13.sp, color = ROJO)
+                    }
+                }
+            }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }

@@ -285,6 +285,7 @@ class RepositorioAutenticacion {
                 callback(Result.failure(Exception(when (BorradoCuenta.clasificarError(e)) {
                     BorradoCuenta.TipoError.RED -> textos().errorRed
                     BorradoCuenta.TipoError.PLAY -> textos().ajustesEliminarErrorPlay
+                    BorradoCuenta.TipoError.PAGOS -> textos().ajustesEliminarErrorPagos
                     BorradoCuenta.TipoError.OTRO -> textos().ajustesEliminarError
                 })))
             }

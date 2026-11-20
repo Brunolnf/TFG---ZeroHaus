@@ -28,6 +28,10 @@ Pub/Sub y programadas
                                limpieza de eventos y notificaciones.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
+Pago con retención (Stripe Connect, modo test): las funciones stripe_* y
+pagos_*, el webhook stripe_webhook y la tarea pagos_liberar_vencidos están en
+pagos.py, con sus secretos (STRIPE_SECRET_KEY y los dos STRIPE_WEBHOOK_SECRET*).
+
 Secretos (Secret Manager): SMTP_USUARIO y SMTP_CLAVE, para el correo saliente.
   firebase functions:secrets:set SMTP_USUARIO
   firebase functions:secrets:set SMTP_CLAVE
@@ -121,7 +125,10 @@ COLECCIONES_DOBLE_CAMPO = [
     ("denuncias", ["autor", "objetivo"]),
 ]
 
-DOCS_POR_ID = ["usuarios", "tecnicos", "ajustes", "estadisticas", "limites_ia", "verificaciones_email", "avisos_email"]
+# cuentas_stripe: se borra el documento, no la cuenta en Stripe (la cierra el
+# profesional desde su panel de Stripe; ZeroHaus no puede borrar su historial)
+DOCS_POR_ID = ["usuarios", "tecnicos", "ajustes", "estadisticas", "limites_ia", "verificaciones_email", "avisos_email",
+               "cuentas_stripe", "limites_pagos"]
 
 
 def _verificar_admin(req: https_fn.CallableRequest) -> None:
@@ -260,6 +267,9 @@ def _purgar_usuario(db, uid: str) -> dict:
         except Exception:
             stats[col] = 0
 
+    # Los pagos no se borran (registros contables): se seudonimizan (pagos.py)
+    stats["pagos"] = pagos.seudonimizar_pagos(db, uid)
+
     try:
         auth.delete_user(uid)
         stats["auth"] = 1
@@ -278,6 +288,9 @@ def _purgar_usuario(db, uid: str) -> dict:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+    # Play, la cancelación de pagos y la purga. Sin la clave de Stripe a
+    # propósito: el borrado no puede depender de Stripe (pagos.py)
+    timeout_sec=120,
 )
 def eliminar_usuario_completo(req: https_fn.CallableRequest) -> dict:
     """Borra definitivamente un usuario: Auth, Firestore (cascada) y Storage.
@@ -311,12 +324,36 @@ def _borrar_cuenta(db, uid: str, cancelar_en_play: bool = True) -> dict:
     después purga la cuenta. Si Play falla de forma pasajera, la cancelación
     lanza UNAVAILABLE antes de borrar nada (se reintenta). `cancelarEnPlay`:
     alguna quedó sin cancelar (Play no nos dejó, o el administrador forzó el
-    borrado) y hay que cancelarla en Google Play."""
-    if cancelar_en_play:
-        canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
-    else:
-        canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
-    stats = _purgar_usuario(db, uid)
+    borrado) y hay que cancelarla en Google Play.
+
+    Con un pago con el dinero cobrado (retenido, terminado o en disputa) no se
+    borra nada, ni se toca Play: sin la cuenta, el dinero se quedaría sin
+    nadie que lo confirme, lo dispute o lo reciba. Antes de mirarlo se marca
+    la cuenta (`borrandoDesde`), para que no se abra un cobro nuevo mientras
+    tanto. Después, Play (puede fallar, y entonces la cuenta sigue viva con sus
+    pagos intactos) y, solo entonces, los pagos sin dinero se cancelan y se
+    purga. El borrado no llama a Stripe: lo de Stripe queda en una cola
+    (pagos.py). Si algo falla antes de terminar, se quita la marca."""
+    marca = pagos.marcar_borrando(db, uid)
+    try:
+        if pagos.pagos_activos(db, uid):
+            raise https_fn.HttpsError(
+                https_fn.FunctionsErrorCode.FAILED_PRECONDITION,
+                "Tienes pagos en curso. Termínalos o cancélalos antes de borrar la cuenta.",
+                {"motivo": "pagos"},
+            )
+        if cancelar_en_play:
+            canceladas, sin_cancelar = _cancelar_suscripciones_play(db, uid)
+        else:
+            canceladas, sin_cancelar = 0, len(_suscripciones_por_cancelar(db, uid))
+        customer_stripe = pagos.cerrar_pagos_para_borrar(db, uid)
+        stats = _purgar_usuario(db, uid)
+    except Exception:
+        pagos.desmarcar_borrando(db, uid, marca)
+        raise
+    # El Customer de Stripe, solo con la cuenta ya purgada: si la purga fallara,
+    # la cuenta seguiría viva y lo necesitaría para pagar
+    pagos.encolar_limpieza(db, customer_id=customer_stripe)
     return {
         "ok": True, "uid": uid, "stats": stats,
         "suscripcionCancelada": canceladas > 0,
@@ -406,6 +443,7 @@ def _sincronizar_bloqueados(db) -> int:
     region=REGION,
     enforce_app_check=True,
     cors=options.CorsOptions(cors_origins="*", cors_methods=["post"]),
+    timeout_sec=120,      # como eliminar_usuario_completo
 )
 def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
     """Borrado self-service: el usuario autenticado elimina su PROPIA cuenta y
@@ -2725,3 +2763,36 @@ def actualizar_precio_luz_diario(event: scheduler_fn.ScheduledEvent) -> None:
 # Copias de seguridad: las hace Firestore (copias gestionadas, diaria 7 días y
 # semanal 4 semanas). La antigua función backup_firestore_diario fallaba a
 # diario con 403 por falta de permisos y nunca llegó a guardar nada.
+
+
+# ══ Pago con retención (Stripe Connect): todo en pagos.py ══
+# pagos.py no importa main (Firebase carga main.py sin meterlo en sys.modules y
+# se ejecutaría dos veces): recibe aquí lo que comparte con el resto. Va al
+# final, después de set_global_options y de las ayudas que usa. Sus funciones se
+# importan para que Firebase las encuentre en main.
+import pagos  # noqa: E402
+
+def _avisar_admin_pagos(db, asunto: str, texto: str) -> None:
+    """Correo al buzón de ZeroHaus (el propio remitente), como el de las
+    denuncias: lo que el administrador tiene que mirar en los pagos. Gasta del
+    cupo común de avisos; sin cupo, solo queda en el registro (y el aviso, en
+    /avisos_admin_pagos)."""
+    if not _reservar_cupo_correo(db, aviso=True):
+        print(f"[PAGOS] Tope diario de correos alcanzado: sin correo del aviso «{asunto}»")
+        return
+    _enviar_email(SMTP_USUARIO.value, f"Pagos: {asunto}", texto, "Aviso automático de ZeroHaus.", "Español")
+
+
+pagos.configurar(
+    exigir_email_verificado=_exigir_email_verificado,
+    verificar_admin=_verificar_admin,
+    preferencias=_preferencias,
+    crear_notificacion=_crear_notificacion_in_app,
+    enviar_push=_enviar_push,
+    avisar_admin=_avisar_admin_pagos,
+)
+from pagos import (  # noqa: E402,F401
+    pagos_aceptar, pagos_cancelar, pagos_confirmar, pagos_disputar, pagos_liberar_vencidos,
+    pagos_limpiar_stripe, pagos_reintentar, pagos_resolver, pagos_solicitar, pagos_terminar,
+    stripe_crear_enlace_cuenta, stripe_estado_cuenta, stripe_webhook,
+)
