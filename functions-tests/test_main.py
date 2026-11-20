@@ -15,6 +15,7 @@ import os
 import sys
 import time
 import unittest
+import urllib.parse
 from types import SimpleNamespace
 from unittest import mock
 
@@ -24,7 +25,7 @@ os.environ.setdefault("SMTP_CLAVE", "tests")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "functions"))
 
 import main  # noqa: E402
-from google.api_core.exceptions import NotFound  # noqa: E402
+from google.api_core.exceptions import NotFound, ServiceUnavailable  # noqa: E402
 
 
 def factura(**cambios):
@@ -206,14 +207,20 @@ class TareaDiariaTest(unittest.TestCase):
                 mock.patch.object(main, "_reintentar_deshacer_pendientes", paso("deshacer", falla=True)), \
                 mock.patch.object(main, "_revisar_suscripciones", paso("suscripciones", falla=True)), \
                 mock.patch.object(main, "_mostrar_perfiles_verificados", paso("perfiles", falla=True)), \
+                mock.patch.object(main, "_procesar_limpiezas_storage", paso("storage", falla=True)), \
                 mock.patch.object(main, "_purgar_eventos_antiguos", paso("eventos", falla=True)), \
                 mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones")), \
                 mock.patch("builtins.print"):
             inspect.unwrap(main.revisar_suscripciones_diario)(None)
-        self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "eventos", "notificaciones"])
+        self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "storage", "eventos",
+                                 "notificaciones"])
 
     def test_tiene_540_segundos_de_tiempo_limite(self):
         self.assertEqual(main.revisar_suscripciones_diario.__firebase_endpoint__.timeoutSeconds, 540)
+
+    def test_tiene_el_correo_para_avisar_de_una_limpieza_de_storage_fallida(self):
+        secretos = main.revisar_suscripciones_diario.__firebase_endpoint__.secretEnvironmentVariables
+        self.assertEqual([s["key"] for s in secretos], ["SMTP_USUARIO", "SMTP_CLAVE"])
 
     def test_ya_no_hace_los_rellenos_de_datos_antiguos(self):
         self.assertFalse(hasattr(main, "_recalcular_todos_los_ratings"))
@@ -292,6 +299,20 @@ class ConfiguracionTest(unittest.TestCase):
         self.assertLess(funciones["leer_factura"].maxInstances, normal)
         # Las denuncias son raras y cada una puede mandar un correo
         self.assertLess(funciones["on_denuncia_creada"].maxInstances, normal)
+        # Limpieza de Storage: al purgar un chat llega un evento por mensaje,
+        # y basta con pocas instancias (cada una atiende 80 a la vez)
+        for nombre in ("on_mensaje_borrado", "on_limpieza_storage_creada"):
+            with self.subTest(funcion=nombre):
+                self.assertLessEqual(funciones[nombre].maxInstances, 3)
+
+    def test_los_triggers_de_storage_escuchan_lo_que_toca(self):
+        funciones = self.funciones_desplegables()
+        borrado = funciones["on_mensaje_borrado"].eventTrigger
+        self.assertEqual(borrado["eventType"], "google.cloud.firestore.document.v1.deleted")
+        self.assertEqual(borrado["eventFilterPathPatterns"], {"document": "chats/{chatId}/mensajes/{mensajeId}"})
+        cola = funciones["on_limpieza_storage_creada"].eventTrigger
+        self.assertEqual(cola["eventType"], "google.cloud.firestore.document.v1.created")
+        self.assertEqual(cola["eventFilterPathPatterns"], {"document": "limpieza_storage/{limpiezaId}"})
 
     def test_los_esquemas_de_gemini_son_json_valido(self):
         for esquema in (main._ESQUEMA_IA, main._ESQUEMA_FACTURA):
@@ -454,7 +475,7 @@ class _RefMem:
 
 
 _OPERADORES = {
-    "==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b,
+    "==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
     "array_contains": lambda a, b: isinstance(a, list) and b in a,
 }
 
@@ -1121,7 +1142,7 @@ class _ConPurga(_ConServiciosFalsos):
 
     def _borrar_storage(self, prefijo):
         self.prefijos_storage.append(prefijo)
-        return 0
+        return 0, None   # (archivos borrados, error)
 
 
 class PurgaTest(_ConPurga):
@@ -1679,6 +1700,387 @@ class MensajeConBloqueoTest(_ConServiciosFalsos):
         self.db.docs["bloqueos/pro_otro"] = {"autor": "pro", "bloqueado": "otro", "fecha": 1}
         self.escribir()
         self.assertEqual(len(self.notificaciones()), 1)
+
+
+# ── Limpieza de Cloud Storage: borrado de cuentas y de mensajes con adjunto ──
+
+BUCKET = "zerohaus-2a865.firebasestorage.app"     # el de mensajeValido en firestore.rules
+AHORA_MS = 1_790_000_000_000
+CAMPOS_LIMPIEZA = {"prefijo", "creado", "fallos", "proximoIntento", "procesandoHasta"}
+
+
+def url_adjunto(ruta, bucket=BUCKET, host="https://firebasestorage.googleapis.com"):
+    """mediaUrl tal como la guarda la app (downloadUrl de Firebase Storage)."""
+    return f"{host}/v0/b/{bucket}/o/{urllib.parse.quote(ruta, safe='')}?alt=media&token=t0k3n-secreto"
+
+
+class _BlobFalso:
+    def __init__(self, storage, nombre):
+        self._storage, self.name = storage, nombre
+
+    def delete(self):
+        self._storage.llamadas.append(("delete", self.name))
+        if self._storage.caido:
+            raise ServiceUnavailable("Storage no responde")
+        if self.name not in self._storage.objetos:
+            raise NotFound(f"No existe {self.name}")
+        self._storage.objetos.discard(self.name)
+
+
+class _StorageFalso:
+    """Bucket de Cloud Storage en memoria (nombres de los objetos)."""
+
+    def __init__(self):
+        self.objetos = set()
+        self.caido = False
+        self.llamadas = []        # (operación, prefijo o nombre)
+        self.al_listar = None     # se ejecuta una vez justo después de listar
+
+    def list_blobs(self, prefix):
+        self.llamadas.append(("list", prefix))
+        if self.caido:
+            raise ServiceUnavailable("Storage no responde")
+        blobs = [_BlobFalso(self, n) for n in sorted(self.objetos) if n.startswith(prefix)]
+        hook, self.al_listar = self.al_listar, None
+        if hook:
+            hook()
+        return iter(blobs)
+
+    def blob(self, nombre):
+        return _BlobFalso(self, nombre)
+
+
+class _ConStorage(_ConServiciosFalsos):
+    """Firestore en memoria, Storage simulado (sin sustituir _borrar_storage),
+    Auth que borra cuentas y un reloj que manejan los tests."""
+
+    def setUp(self):
+        super().setUp()
+        self.storage = _StorageFalso()
+        self.buckets = []            # bucket pedido en cada llamada a storage.bucket
+        self.delete_user = mock.Mock()
+        self.reloj = [AHORA_MS]
+        self.avisos = []             # (destino, asunto, texto) de los correos enviados
+
+        def bucket(name=None):
+            self.buckets.append(name)
+            return self.storage
+        for parche in (
+            mock.patch.object(main.storage, "bucket", bucket),
+            mock.patch.object(main.auth, "delete_user", self.delete_user),
+            mock.patch.object(main, "_ahora_ms", lambda: self.reloj[0]),
+            mock.patch.object(main, "_enviar_email", lambda destino, asunto, texto, *a, **k:
+                              self.avisos.append((destino, asunto, texto))),
+        ):
+            parche.start()
+            self.addCleanup(parche.stop)
+        parche = mock.patch("builtins.print")
+        self.log = parche.start()
+        self.addCleanup(parche.stop)
+        self.db.docs.update({
+            "usuarios/uid_borrado": {"nombre": "Ana"},
+            "tecnicos/uid_borrado": {"uid": "uid_borrado"},
+            "usuarios/otro": {"nombre": "Otro"},
+            "chats/c1": {"participantes": ["uid_borrado", "otro"]},
+        })
+
+    def limpiezas(self):
+        return {r.split("/", 1)[1]: d for r, d in self.db.docs.items() if r.startswith("limpieza_storage/")}
+
+    def prefijos(self):
+        return sorted(d["prefijo"] for d in self.limpiezas().values())
+
+    def borrar_cuenta(self, uid="uid_borrado"):
+        return llamar(main.eliminar_mi_cuenta, uid)
+
+    def disparar_cola(self, limpieza_id):
+        """Lo que hace on_limpieza_storage_creada al crearse el documento."""
+        inspect.unwrap(main.on_limpieza_storage_creada)(SimpleNamespace(params={"limpiezaId": limpieza_id}))
+
+    def borrar_mensaje(self, chat_id, mensaje_id, datos):
+        """El evento de on_mensaje_borrado, con el documento tal como era."""
+        self.db.docs.pop(f"chats/{chat_id}/mensajes/{mensaje_id}", None)
+        evento = SimpleNamespace(id=f"ev_{mensaje_id}", params={"chatId": chat_id, "mensajeId": mensaje_id},
+                                 data=SimpleNamespace(exists=True, to_dict=lambda: dict(datos)))
+        inspect.unwrap(main.on_mensaje_borrado)(evento)
+
+    def mensaje(self, chat_id, mensaje_id, archivo=None, **extra):
+        """Guarda un mensaje (con su adjunto en Storage si lo hay) y devuelve sus datos."""
+        datos = {"id": mensaje_id, "chatId": chat_id, "emisorUid": "uid_borrado", "texto": "hola",
+                 "tipo": "texto", "fecha": 1, "leido": False, "mediaUrl": "", "mediaNombre": ""}
+        if archivo:
+            ruta = f"chats/{chat_id}/{archivo}"
+            self.storage.objetos.add(ruta)
+            datos.update(tipo="imagen", texto="", mediaUrl=url_adjunto(ruta))
+        datos.update(extra)
+        self.db.docs[f"chats/{chat_id}/mensajes/{mensaje_id}"] = dict(datos)
+        return datos
+
+
+class BorradoCuentaConStorageTest(_ConStorage):
+    """(1) Si Storage falla al borrar una cuenta, la cuenta se borra igual y
+    las carpetas pendientes quedan en /limpieza_storage, que se reintenta."""
+
+    def setUp(self):
+        super().setUp()
+        self.mensaje("c1", "m1", archivo="m1.jpg")
+        self.storage.objetos.update({"perfiles/uid_borrado/foto_perfil", "chats/ajeno/a1.jpg",
+                                     "perfiles/otro/foto_perfil"})
+
+    def test_con_storage_bien_no_queda_nada_pendiente(self):
+        respuesta = self.borrar_cuenta()
+        self.assertIs(respuesta["ok"], True)
+        self.assertEqual(respuesta["stats"]["storagePendientes"], 0)
+        self.assertEqual(respuesta["stats"]["archivos"], 2)
+        self.assertEqual(self.storage.objetos, {"chats/ajeno/a1.jpg", "perfiles/otro/foto_perfil"})
+        self.assertEqual(self.limpiezas(), {})
+        self.assertEqual(set(self.buckets), {BUCKET})
+
+    def test_si_storage_falla_la_cuenta_se_borra_y_el_reintento_limpia_las_carpetas(self):
+        self.storage.caido = True
+        respuesta = self.borrar_cuenta()
+        # Para la app no cambia nada: la cuenta está borrada
+        self.assertIs(respuesta["ok"], True)
+        self.delete_user.assert_called_once_with("uid_borrado")
+        self.assertNotIn("chats/c1", self.db.docs)
+        self.assertNotIn("chats/c1/mensajes/m1", self.db.docs)
+        self.assertEqual(respuesta["stats"]["storagePendientes"], 2)
+        self.assertEqual(self.prefijos(), ["chats/c1/", "perfiles/uid_borrado/"])
+        # Al crearse cada documento, el trigger lo intenta enseguida; Storage sigue caído
+        for limpieza_id in self.limpiezas():
+            self.disparar_cola(limpieza_id)
+        for limpieza in self.limpiezas().values():
+            self.assertEqual((limpieza["fallos"], limpieza["proximoIntento"]),
+                             (1, AHORA_MS + main.LIMPIEZA_STORAGE_ESPERA_MS))
+            self.assertEqual(limpieza["ultimoError"], "ServiceUnavailable")
+        # Storage vuelve y la tarea diaria lo reintenta cuando le toca
+        self.storage.caido = False
+        self.reloj[0] = AHORA_MS + main.LIMPIEZA_STORAGE_ESPERA_MS - 1
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 0)          # aún no le toca
+        self.reloj[0] += 1
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 2)
+        self.assertEqual(self.limpiezas(), {})
+        self.assertEqual(self.storage.objetos, {"chats/ajeno/a1.jpg", "perfiles/otro/foto_perfil"})
+
+    def test_la_carpeta_se_guarda_antes_de_borrar_el_chat(self):
+        # Si ni siquiera se puede apuntar en la cola, no se borra el chat: sin él
+        # nadie sabría que la carpeta existe. La cuenta sigue viva y se reintenta.
+        self.storage.caido = True
+        self.db.fallos.add(f"limpieza_storage/{main._id_limpieza_storage('chats/c1/')}")
+        with self.assertRaises(Exception):
+            self.borrar_cuenta()
+        self.assertIn("chats/c1", self.db.docs)
+        self.assertIn("chats/c1/mensajes/m1", self.db.docs)
+        self.delete_user.assert_not_called()
+        self.assertNotIn("borrandoDesde", self.db.docs["usuarios/uid_borrado"])
+
+    def test_el_documento_de_la_cola_no_lleva_el_uid(self):
+        self.storage.caido = True
+        self.borrar_cuenta()
+        for limpieza in self.limpiezas().values():
+            self.assertEqual(set(limpieza), CAMPOS_LIMPIEZA)       # ni uid ni ningún otro dato
+        chat, = [d for d in self.limpiezas().values() if d["prefijo"] == "chats/c1/"]
+        self.assertNotIn("uid_borrado", json.dumps(chat))
+        # El aviso al administrador tampoco: solo el id del encargo
+        for _ in range(main.LIMPIEZA_STORAGE_FALLOS_MAX):
+            self.reloj[0] += 30 * main.DIA_MS
+            main._procesar_limpiezas_storage(self.db)
+        self.assertEqual(len(self.avisos), 2)
+        for _, asunto, texto in self.avisos:
+            self.assertNotIn("uid_borrado", asunto + texto)
+
+    def test_un_archivo_que_desaparece_mientras_se_borra_no_es_un_fallo(self):
+        # Entre listar la carpeta y borrar sus archivos, otro (el trigger de un
+        # mensaje borrado a la vez) borra uno: no se encola nada
+        self.mensaje("c1", "m2", archivo="m2.jpg")
+        self.storage.al_listar = lambda: self.storage.objetos.discard("chats/c1/m1.jpg")
+        respuesta = self.borrar_cuenta()
+        self.assertEqual(respuesta["stats"]["storagePendientes"], 0)
+        self.assertEqual(respuesta["stats"]["archivos"], 2)        # m2.jpg y la foto de perfil
+        self.assertEqual(self.limpiezas(), {})
+
+
+class ColaLimpiezaStorageTest(_ConStorage):
+    """La cola /limpieza_storage: id determinista, reintentos con espera
+    creciente y, al quinto fallo, al administrador."""
+
+    def setUp(self):
+        super().setUp()
+        self.storage.objetos.update({"chats/c1/m1.jpg", "chats/c1/m2_factura.pdf", "chats/c10/x.jpg"})
+        self.storage.caido = True
+        self.id = main._encolar_limpieza_storage(self.db, "chats/c1/")
+
+    def limpieza(self):
+        return self.db.docs.get(f"limpieza_storage/{self.id}")
+
+    def test_el_id_sale_del_prefijo_y_dos_fallos_dan_un_solo_documento(self):
+        self.assertEqual(self.id, hashlib.sha256(b"chats/c1/").hexdigest()[:40])
+        self.assertEqual(self.limpieza(), {"prefijo": "chats/c1/", "creado": AHORA_MS, "fallos": 0,
+                                           "proximoIntento": 0, "procesandoHasta": 0})
+        self.disparar_cola(self.id)
+        self.assertEqual(self.limpieza()["fallos"], 1)
+        # Otro fallo con la misma carpeta: el mismo documento, sin reiniciar sus fallos
+        self.assertEqual(main._encolar_limpieza_storage(self.db, "chats/c1/"), self.id)
+        self.assertEqual(len(self.limpiezas()), 1)
+        self.assertEqual(self.limpieza()["fallos"], 1)
+
+    def test_al_quinto_fallo_pasa_al_administrador_y_no_se_reintenta_mas(self):
+        self.disparar_cola(self.id)
+        for fallos in range(2, main.LIMPIEZA_STORAGE_FALLOS_MAX + 1):
+            espera = self.limpieza()["proximoIntento"]
+            self.reloj[0] = espera
+            self.assertEqual(main._procesar_limpiezas_storage(self.db), 0)
+            self.assertEqual(self.limpieza()["fallos"], fallos)
+            if fallos < main.LIMPIEZA_STORAGE_FALLOS_MAX:
+                # Espera creciente: 1 h, 2 h, 4 h, 8 h
+                self.assertEqual(self.limpieza()["proximoIntento"],
+                                 espera + main.LIMPIEZA_STORAGE_ESPERA_MS * 2 ** (fallos - 1))
+        self.assertIs(self.limpieza()["requiereAdmin"], True)
+        (destino, asunto, texto), = self.avisos
+        self.assertEqual(destino, os.environ["SMTP_USUARIO"])        # el buzón de ZeroHaus
+        self.assertIn("Storage", asunto)
+        self.assertIn(self.id, texto)
+        # Ya no se reintenta ni vuelve a avisar
+        llamadas = len(self.storage.llamadas)
+        self.storage.caido = False
+        self.reloj[0] += 60 * main.DIA_MS
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 0)
+        self.disparar_cola(self.id)
+        self.assertEqual(len(self.storage.llamadas), llamadas)
+        self.assertEqual(len(self.avisos), 1)
+        self.assertIsNotNone(self.limpieza())
+
+    def test_reclamada_por_otro_no_se_toca(self):
+        self.db.docs[f"limpieza_storage/{self.id}"]["procesandoHasta"] = AHORA_MS + 1
+        self.storage.caido = False
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 0)
+        self.assertEqual(self.storage.llamadas, [])
+        self.reloj[0] += 1
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 1)
+
+    def test_solo_borra_su_carpeta(self):
+        self.storage.caido = False
+        self.disparar_cola(self.id)
+        self.assertIsNone(self.limpieza())
+        self.assertEqual(self.storage.objetos, {"chats/c10/x.jpg"})    # «chats/c1/» no es «chats/c10/»
+
+    def test_nunca_se_encola_ni_se_borra_una_ruta_fuera_de_un_chat_o_un_perfil(self):
+        # Un prefijo vacío o a medias borraría archivos de otras cuentas (o el bucket entero)
+        self.storage.caido = False
+        for ruta in ("", "chats/", "chats", "chats/c1", "perfiles/", "otra/c1/", "chats//", "chats/../",
+                     "chats/c1/../perfiles/otro/", "chats/./x", None, 7):
+            with self.subTest(ruta=ruta):
+                with self.assertRaises(ValueError):
+                    main._encolar_limpieza_storage(self.db, ruta)
+                self.assertEqual(main._borrar_storage(ruta), (0, "ruta_no_valida"))
+        self.assertEqual(self.storage.llamadas, [])
+        self.assertEqual(len(self.storage.objetos), 3)
+        self.assertEqual(len(self.limpiezas()), 1)
+
+
+class AdjuntoBorradoTest(_ConStorage):
+    """(6) Al borrar un mensaje con adjunto, el servidor borra su archivo."""
+
+    def setUp(self):
+        super().setUp()
+        self.db.docs["chats/c2"] = {"participantes": ["otro", "tercero"]}
+        self.storage.objetos.update({"chats/c1/m9.jpg", "chats/c1/m1.jpg.bak", "chats/c2/m5.jpg",
+                                     "perfiles/otro/foto_perfil"})
+
+    def test_borra_el_archivo_del_mensaje_y_nada_mas(self):
+        for mensaje_id, archivo in (("m1", "m1.jpg"), ("m2", "m2_Factura luz enero (1) €.pdf")):
+            with self.subTest(archivo=archivo):
+                datos = self.mensaje("c1", mensaje_id, archivo=archivo)
+                self.borrar_mensaje("c1", mensaje_id, datos)
+                self.assertNotIn(f"chats/c1/{archivo}", self.storage.objetos)
+        self.assertEqual(self.storage.objetos, {"chats/c1/m9.jpg", "chats/c1/m1.jpg.bak", "chats/c2/m5.jpg",
+                                                "perfiles/otro/foto_perfil"})
+        self.assertEqual(self.limpiezas(), {})
+        self.assertEqual(set(self.buckets), {BUCKET})
+
+    def test_un_mensaje_sin_adjunto_no_toca_storage(self):
+        for extra in ({}, {"mediaUrl": None}, {"mediaUrl": ""}):
+            with self.subTest(extra=extra):
+                self.borrar_mensaje("c1", "m1", self.mensaje("c1", "m1", **extra))
+        self.assertEqual(self.storage.llamadas, [])
+
+    def test_un_adjunto_de_otro_chat_otro_bucket_u_otra_ruta_no_se_borra(self):
+        casos = {
+            "otro chat": url_adjunto("chats/c2/m5.jpg"),
+            "otro bucket": url_adjunto("chats/c1/m9.jpg", bucket="otro-proyecto.appspot.com"),
+            "otro servidor": url_adjunto("chats/c1/m9.jpg", host="https://firebasestorage.googleapis.com.evil.es"),
+            "sin https": url_adjunto("chats/c1/m9.jpg", host="http://firebasestorage.googleapis.com"),
+            "carpeta del chat": url_adjunto("chats/c1/"),
+            "fuera del chat con ..": url_adjunto("chats/c1/../../perfiles/otro/foto_perfil"),
+            "perfil": url_adjunto("perfiles/otro/foto_perfil"),
+            "prefijo de otro chat": url_adjunto("chats/c10/m9.jpg"),
+            "no es texto": {"url": url_adjunto("chats/c1/m9.jpg")},
+        }
+        antes = set(self.storage.objetos)
+        for caso, media in casos.items():
+            with self.subTest(caso=caso):
+                self.log.reset_mock()
+                datos = self.mensaje("c1", "m1", tipo="imagen", mediaUrl=media)
+                self.borrar_mensaje("c1", "m1", datos)
+                self.assertTrue(self.log.called)                       # queda en el registro
+                self.assertNotIn("t0k3n-secreto", str(self.log.call_args_list))   # sin el token de descarga
+        self.assertEqual(self.storage.llamadas, [])
+        self.assertEqual(self.storage.objetos, antes)
+        self.assertEqual(self.limpiezas(), {})
+
+    def test_si_el_archivo_ya_no_existe_no_pasa_nada(self):
+        datos = self.mensaje("c1", "m1", archivo="m1.jpg")
+        self.storage.objetos.discard("chats/c1/m1.jpg")
+        self.borrar_mensaje("c1", "m1", datos)
+        self.borrar_mensaje("c1", "m1", datos)          # Firestore puede repetir el evento
+        self.assertEqual(self.limpiezas(), {})
+
+    def test_si_storage_falla_el_archivo_va_a_la_cola_y_se_borra_despues(self):
+        datos = self.mensaje("c1", "m1", archivo="m1.jpg")
+        self.storage.caido = True
+        self.borrar_mensaje("c1", "m1", datos)
+        self.assertEqual(self.prefijos(), ["chats/c1/m1.jpg"])     # solo ese archivo, no la carpeta
+        self.storage.caido = False
+        limpieza_id, = self.limpiezas()
+        self.disparar_cola(limpieza_id)
+        self.assertEqual(self.limpiezas(), {})
+        self.assertNotIn("chats/c1/m1.jpg", self.storage.objetos)
+        self.assertIn("chats/c1/m1.jpg.bak", self.storage.objetos)   # un archivo no es un prefijo
+        self.assertIn("chats/c1/m9.jpg", self.storage.objetos)
+
+    def chat_con_muchos_mensajes(self, n=300):
+        mensajes = {}
+        for i in range(n):
+            mensajes[f"m{i}"] = self.mensaje("c1", f"m{i}", archivo=f"m{i}.jpg" if i % 3 == 0 else None)
+        return mensajes
+
+    def test_borrar_un_chat_con_muchos_mensajes(self):
+        mensajes = self.chat_con_muchos_mensajes()
+        # Un participante borra uno de sus mensajes mientras se purga la cuenta
+        self.storage.al_listar = lambda: self.borrar_mensaje("c1", "m0", mensajes["m0"])
+        respuesta = self.borrar_cuenta()
+        # Después llega un evento por cada mensaje que ha borrado la purga
+        for mensaje_id, datos in mensajes.items():
+            self.borrar_mensaje("c1", mensaje_id, datos)
+        self.assertEqual(respuesta["stats"]["mensajes"], 299)
+        self.assertEqual(respuesta["stats"]["storagePendientes"], 0)
+        self.assertFalse([o for o in self.storage.objetos if o.startswith("chats/c1/")])
+        self.assertEqual(self.limpiezas(), {})
+        self.assertNotIn("No se pudo", str(self.log.call_args_list))
+
+    def test_con_storage_caido_un_chat_con_muchos_mensajes_deja_un_solo_encargo(self):
+        mensajes = self.chat_con_muchos_mensajes()
+        self.storage.caido = True
+        self.borrar_cuenta()
+        for mensaje_id, datos in mensajes.items():
+            self.borrar_mensaje("c1", mensaje_id, datos)
+        # La carpeta entera ya está en la cola: los 100 adjuntos no se encolan uno a uno
+        self.assertEqual(self.prefijos(), ["chats/c1/", "perfiles/uid_borrado/"])
+        self.storage.caido = False
+        self.reloj[0] += main.LIMPIEZA_STORAGE_ESPERA_MS
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 2)
+        self.assertFalse([o for o in self.storage.objetos if o.startswith("chats/c1/")])
+        self.assertEqual(self.storage.objetos, {"chats/c2/m5.jpg", "perfiles/otro/foto_perfil"})
 
 
 if __name__ == "__main__":

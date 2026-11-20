@@ -1163,3 +1163,31 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
     }
   });
 });
+
+// Cola /limpieza_storage (T-I1): lo que Storage no dejó borrar al borrar una
+// cuenta o un mensaje. Solo la usan las Cloud Functions y cae en el deny-all:
+// si la app pudiera crear un encargo, haría borrar archivos de otros chats o
+// perfiles; si pudiera borrarlo, los archivos de una cuenta borrada se quedarían.
+describe("cola de limpieza de Storage", () => {
+  const encargo = { prefijo: "chats/ajeno/", creado: 1, fallos: 0, proximoIntento: 0, procesandoHasta: 0 };
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "limpieza_storage/l1"), encargo);
+    });
+  });
+
+  it("nadie la lee, la lista ni la escribe desde la app, tampoco el administrador", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["pro", verificado("pro")],
+                               ["sin verificar", sinVerificar("cliente")], ["admin", comoAdmin()],
+                               ["sin sesión", env.unauthenticatedContext().firestore()]]) {
+      await assertFails(getDoc(doc(db, "limpieza_storage/l1")), `${quien}: leer`);
+      await assertFails(getDocs(collection(db, "limpieza_storage")), `${quien}: listar`);
+      await assertFails(setDoc(doc(db, "limpieza_storage/l2"), { ...encargo, prefijo: "perfiles/pro/" }),
+        `${quien}: crear`);
+      await assertFails(updateDoc(doc(db, "limpieza_storage/l1"), { prefijo: "perfiles/pro/" }), `${quien}: cambiar`);
+      await assertFails(updateDoc(doc(db, "limpieza_storage/l1"), { requiereAdmin: true }), `${quien}: parar`);
+      await assertFails(deleteDoc(doc(db, "limpieza_storage/l1")), `${quien}: borrar`);
+    }
+  });
+});

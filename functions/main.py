@@ -20,12 +20,15 @@ Triggers de Firestore
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
   on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
   on_denuncia_creada           Denuncia nueva → evidencia acotada y aviso al administrador.
+  on_mensaje_borrado           Mensaje borrado → borra su adjunto de Storage.
+  on_limpieza_storage_creada   Encargo nuevo en /limpieza_storage → lo intenta enseguida.
 
 Pub/Sub y programadas
   on_play_rtdn                 Avisos en tiempo real de Google Play (renovaciones…).
   revisar_suscripciones_diario Bloqueos pendientes en Auth, respaldo diario de suscripciones,
-                               perfiles profesionales ocultos de cuentas ya verificadas y
-                               limpieza de eventos y notificaciones.
+                               perfiles profesionales ocultos de cuentas ya verificadas,
+                               reintentos de /limpieza_storage y limpieza de eventos y
+                               notificaciones.
   actualizar_precio_luz_diario Precio de la luz de Remote Config con el PVPC oficial de Red Eléctrica.
 
 Pago con retención (Stripe Connect, modo test): las funciones stripe_* y
@@ -106,6 +109,10 @@ MAX_INSTANCIAS = 10
 # ráfaga de chat no se quede sin instancias y se pierdan avisos
 MAX_INSTANCIAS_CHAT = 50
 MAX_INSTANCIAS_IA = 3      # Gemini: cada llamada cuesta dinero
+# Limpieza de Storage: al purgar un chat llega un evento por mensaje borrado;
+# con 80 a la vez por instancia bastan pocas. Si alguno de la purga se pierde,
+# no pasa nada: la purga ya ha borrado (o encargado) la carpeta entera antes
+MAX_INSTANCIAS_STORAGE = 3
 options.set_global_options(region=REGION, max_instances=MAX_INSTANCIAS, cpu=None)
 
 COLECCIONES_POR_CAMPO_UID = [
@@ -193,25 +200,108 @@ def _borrar_subcoleccion(db, parent_ref, sub_name: str, batch_size=400) -> int:
             return total
 
 
-def _borrar_storage(prefijo: str) -> int:
-    """Borra todos los archivos de Cloud Storage bajo `prefijo` (bucket por
-    defecto del proyecto). Nunca rompe el borrado de la cuenta: si falla, lo
-    registra y sigue."""
+# ══ Cloud Storage: borrado de carpetas y cola /limpieza_storage ══
+# Bucket de la app: el mismo que exige mensajeValido (firestore.rules) en mediaUrl
+BUCKET_STORAGE = f"{PROJECT_ID}.firebasestorage.app"
+# Cola /limpieza_storage (solo servidor, como /limpieza_stripe): lo que Storage
+# no dejó borrar. Espera tras cada fallo de 1 h, 2 h, 4 h y 8 h como mínimo; los
+# reintentos los hace la tarea diaria, así que en la práctica es uno al día. Al
+# quinto fallo pasa al administrador y no se vuelve a intentar sola.
+LIMPIEZA_STORAGE_ESPERA_MS = 60 * 60 * 1000
+LIMPIEZA_STORAGE_FALLOS_MAX = 5
+LIMPIEZA_STORAGE_LOTE = 100
+# Reserva al empezar (procesandoHasta): más que lo que dura la función más
+# larga que la procesa (la tarea diaria, 540 s), para que no la hagan dos a la vez
+LIMPIEZA_STORAGE_RECLAMO_MS = 10 * 60 * 1000
+# proximoIntento de una limpieza que ya no se reintenta: fuera de la consulta
+_NUNCA_MS = 2 ** 53
+
+
+def _bucket():
+    return storage.bucket(BUCKET_STORAGE)
+
+
+def _ruta_limpiable(ruta) -> bool:
+    """La carpeta de un chat o de un perfil («chats/{id}/», acaba en «/») o un
+    archivo dentro de ella. Un prefijo vacío o a medias («chats/c1» también es
+    el principio de «chats/c10/…») borraría archivos de otros, o el bucket entero."""
+    if not isinstance(ruta, str):
+        return False
+    partes = ruta.split("/")
+    return (len(partes) >= 3 and partes[0] in ("chats", "perfiles")
+            and all(p not in ("", ".", "..") for p in partes[1:-1])
+            and partes[-1] not in (".", ".."))
+
+
+def _borrar_storage(ruta: str) -> tuple:
+    """Borra de Cloud Storage la carpeta `ruta` (si acaba en «/») o solo ese
+    archivo. Devuelve (archivos borrados, error): error es None si no queda
+    nada por borrar y, si algo ha fallado, el tipo de error. Nunca lanza: quien
+    llama encarga lo pendiente a /limpieza_storage. Un archivo que ya no existe
+    (lo ha borrado otro a la vez) no es un fallo."""
+    if not _ruta_limpiable(ruta):
+        print(f"[STORAGE] Ruta no válida, no se borra nada: {ruta!r}")
+        return 0, "ruta_no_valida"
+    borrados = 0
     try:
-        blobs = list(storage.bucket().list_blobs(prefix=prefijo))
-        for b in blobs:
-            b.delete()
-        return len(blobs)
+        bucket = _bucket()
+        blobs = list(bucket.list_blobs(prefix=ruta)) if ruta.endswith("/") else [bucket.blob(ruta)]
+        for blob in blobs:
+            try:
+                blob.delete()
+                borrados += 1
+            except NotFound:
+                pass
+        return borrados, None
     except Exception as e:
-        print(f"[PURGA] No se pudo borrar Storage '{prefijo}': {e}")
-        return 0
+        print(f"[STORAGE] No se pudo borrar '{ruta}': {e}")
+        return borrados, type(e).__name__[:100]
+
+
+def _id_limpieza_storage(ruta: str) -> str:
+    """Id del encargo: un hash de la ruta, así repetirlo no crea otro."""
+    return hashlib.sha256(ruta.encode("utf-8")).hexdigest()[:40]
+
+
+def _encolar_limpieza_storage(db, ruta: str) -> str:
+    """Encarga borrar `ruta` más tarde en /limpieza_storage. Solo la ruta y el
+    estado de los reintentos, sin el uid (la de un perfil lleva su id: es lo
+    mínimo para terminar el borrado, y el documento se borra al terminarlo).
+    Si ya estaba encargada no se toca, ni se reinician sus fallos. Lanza si no
+    se puede guardar: la purga no borra el chat sin haberla guardado antes."""
+    if not _ruta_limpiable(ruta):
+        raise ValueError(f"Ruta de Storage no válida: {ruta!r}")
+    ref = db.collection("limpieza_storage").document(_id_limpieza_storage(ruta))
+    ahora = _ahora_ms()
+
+    @firestore.transactional
+    def _crear(txn):
+        if not ref.get(transaction=txn).exists:
+            txn.set(ref, {"prefijo": ruta, "creado": ahora, "fallos": 0, "proximoIntento": 0,
+                          "procesandoHasta": 0})
+
+    _crear(db.transaction())
+    print(f"[STORAGE] Limpieza {ref.id} encargada")
+    return ref.id
+
+
+def _borrar_o_encolar_storage(db, ruta: str) -> tuple:
+    """Borra `ruta` y, si queda algo, la encarga a /limpieza_storage (si no se
+    puede encargar, lanza). Devuelve (archivos borrados, 1 si queda pendiente o 0)."""
+    borrados, error = _borrar_storage(ruta)
+    if error is None:
+        return borrados, 0
+    _encolar_limpieza_storage(db, ruta)
+    return borrados, 1
 
 
 def _purgar_usuario(db, uid: str) -> dict:
     """Borra en cascada TODOS los datos de un usuario: Firestore (colecciones,
     chats y subcolecciones), archivos de Storage (foto de perfil y adjuntos de
     sus chats) y su cuenta de Auth. Compartido por el borrado de admin y por
-    el borrado self-service (RGPD / política de Google Play). Irreversible."""
+    el borrado self-service (RGPD / política de Google Play). Irreversible.
+    Si Storage falla, la cuenta se borra igual: las carpetas que queden se
+    encargan a /limpieza_storage (stats.storagePendientes) y se borran después."""
     stats: dict = {}
 
     # Perfiles profesionales: el de id = uid y los antiguos reclamados con otro
@@ -238,17 +328,30 @@ def _purgar_usuario(db, uid: str) -> dict:
     chats_borrados = 0
     mensajes_borrados = 0
     archivos_borrados = 0
+    storage_pendientes = 0     # carpetas que Storage no ha dejado borrar (van a la cola)
     chats = db.collection("chats").where(
         filter=FieldFilter("participantes", "array_contains", uid)
     ).stream()
     for chat in chats:
+        # Los archivos, antes que los mensajes y que el chat: si Storage falla,
+        # la carpeta queda en /limpieza_storage antes de perder el chat (sin él
+        # nadie sabría que existe), y on_mensaje_borrado, que se dispara por
+        # cada mensaje, ya la encuentra ahí y no encola archivo por archivo
+        borrados, pendiente = _borrar_o_encolar_storage(db, f"chats/{chat.id}/")
+        archivos_borrados += borrados
+        storage_pendientes += pendiente
         mensajes_borrados += _borrar_subcoleccion(db, chat.reference, "mensajes")
-        archivos_borrados += _borrar_storage(f"chats/{chat.id}/")
         chat.reference.delete()
         chats_borrados += 1
+    # Las fotos, antes de borrar los perfiles (igual que los chats)
+    for perfil_id in perfiles:
+        borrados, pendiente = _borrar_o_encolar_storage(db, f"perfiles/{perfil_id}/")
+        archivos_borrados += borrados
+        storage_pendientes += pendiente
     stats["chats"] = chats_borrados
     stats["mensajes"] = mensajes_borrados
-    stats["archivos"] = archivos_borrados + sum(_borrar_storage(f"perfiles/{p}/") for p in perfiles)
+    stats["archivos"] = archivos_borrados
+    stats["storagePendientes"] = storage_pendientes
 
     eventos = 0
     for perfil_id in perfiles:
@@ -457,6 +560,123 @@ def eliminar_mi_cuenta(req: https_fn.CallableRequest) -> dict:
         )
 
     return _borrar_cuenta(firestore.client(), req.auth.uid)
+
+
+# ── Cola /limpieza_storage: como /limpieza_stripe (pagos.py) ──
+# La crean la purga de una cuenta y on_mensaje_borrado cuando Storage falla.
+# La intenta on_limpieza_storage_creada al crearse y, si falla, la reintenta la
+# tarea diaria. Dos a la vez no la hacen: la reserva va en una transacción.
+
+def _reclamar_limpieza_storage(db, ref):
+    """La reserva para procesarla. Sus datos, o None si no existe, la tiene
+    otro (procesandoHasta) o ya no se reintenta (requiereAdmin)."""
+    ahora = _ahora_ms()
+
+    @firestore.transactional
+    def _reclamar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return None
+        datos = snap.to_dict() or {}
+        if datos.get("requiereAdmin") is True or int(datos.get("procesandoHasta") or 0) > ahora:
+            return None
+        txn.update(ref, {"procesandoHasta": ahora + LIMPIEZA_STORAGE_RECLAMO_MS})
+        return datos
+
+    return _reclamar(db.transaction())
+
+
+def _procesar_limpieza_storage(db, ref) -> bool:
+    """Borra lo que quedó encargado. Se puede repetir (lo que ya no existe no
+    cuenta como fallo). True si ha terminado, y entonces borra el documento; si
+    falla, lo apunta para reintentarlo más tarde."""
+    datos = _reclamar_limpieza_storage(db, ref)
+    if datos is None:
+        return False
+    _, error = _borrar_storage(datos.get("prefijo"))
+    if error is not None:
+        _apuntar_fallo_limpieza_storage(db, ref, error)
+        return False
+    ref.delete()
+    print(f"[STORAGE] Limpieza {ref.id} terminada")
+    return True
+
+
+def _apuntar_fallo_limpieza_storage(db, ref, error: str) -> None:
+    """Un fallo más: espera creciente y, al quinto, requiereAdmin y aviso (una
+    sola vez: solo la transacción que lo marca avisa)."""
+    ahora = _ahora_ms()
+
+    @firestore.transactional
+    def _apuntar(txn):
+        snap = ref.get(transaction=txn)
+        if not snap.exists:
+            return False
+        datos = snap.to_dict() or {}
+        fallos = int(datos.get("fallos") or 0) + 1
+        cambios = {"fallos": fallos, "ultimoError": error, "procesandoHasta": 0,
+                   "proximoIntento": ahora + LIMPIEZA_STORAGE_ESPERA_MS * 2 ** (fallos - 1)}
+        al_admin = fallos >= LIMPIEZA_STORAGE_FALLOS_MAX and datos.get("requiereAdmin") is not True
+        if fallos >= LIMPIEZA_STORAGE_FALLOS_MAX:
+            cambios.update(requiereAdmin=True, proximoIntento=_NUNCA_MS)
+        txn.update(ref, cambios)
+        return al_admin
+
+    try:
+        if _apuntar(db.transaction()):
+            _avisar_admin_storage(db, ref.id, error)
+    except Exception as e:
+        print(f"[STORAGE] No se pudo apuntar el fallo de la limpieza {ref.id}: {e}")
+
+
+def _avisar_admin_storage(db, limpieza_id: str, error: str) -> None:
+    """Correo al buzón de ZeroHaus, como los avisos de pagos. Solo el id del
+    encargo: la ruta de un perfil lleva el uid. Gasta del cupo común de avisos;
+    sin cupo, queda en el registro y en el documento (requiereAdmin). Nunca lanza."""
+    texto = (f"Tras {LIMPIEZA_STORAGE_FALLOS_MAX} intentos no se han podido borrar unos archivos de Cloud "
+             f"Storage de una cuenta o un mensaje borrados (/limpieza_storage/{limpieza_id}; último error: "
+             f"{error}). Bórralos a mano en la consola (la ruta está en el campo «prefijo») y después "
+             "borra el documento.")
+    print(f"[STORAGE] AVISO AL ADMINISTRADOR: {texto}")
+    try:
+        if not _reservar_cupo_correo(db, aviso=True):
+            print(f"[STORAGE] Tope diario de correos alcanzado: sin correo del aviso de {limpieza_id}")
+            return
+        _enviar_email(SMTP_USUARIO.value, "Storage: limpieza fallida", texto,
+                      "Aviso automático de ZeroHaus.", "Español")
+    except Exception as e:
+        print(f"[STORAGE] No se pudo enviar el aviso de la limpieza {limpieza_id}: {e}")
+
+
+def _procesar_limpiezas_storage(db) -> int:
+    """Paso de la tarea diaria: las limpiezas a las que ya les toca
+    reintentarse. Devuelve cuántas ha terminado."""
+    consulta = (db.collection("limpieza_storage")
+                .where(filter=FieldFilter("proximoIntento", "<=", _ahora_ms()))
+                .order_by("proximoIntento")
+                .limit(LIMPIEZA_STORAGE_LOTE))
+    hechas = 0
+    for snap in consulta.stream():
+        try:
+            if _procesar_limpieza_storage(db, snap.reference):
+                hechas += 1
+        except Exception as e:
+            print(f"[STORAGE] No se pudo procesar la limpieza {snap.id}: {e}")
+    return hechas
+
+
+@firestore_fn.on_document_created(
+    document="limpieza_storage/{limpiezaId}",
+    region=REGION,
+    max_instances=MAX_INSTANCIAS_STORAGE,
+    timeout_sec=300,       # una carpeta de chat puede tener muchos archivos
+)
+def on_limpieza_storage_creada(event) -> None:
+    """Intenta enseguida lo que se acaba de encargar. Si falla, lo reintenta la
+    tarea diaria. Sin secretos: el aviso al administrador solo llega al quinto
+    fallo, y ese siempre es de la tarea diaria."""
+    db = firestore.client()
+    _procesar_limpieza_storage(db, db.collection("limpieza_storage").document(event.params["limpiezaId"]))
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -807,6 +1027,67 @@ def _resumen_mensaje(msg: dict, idioma: str) -> str:
     if tipo == "archivo":
         return f"📎 {str(msg.get('mediaNombre') or '').strip() or archivo}"
     return texto or "…"
+
+
+# ════════════════════════════════════════════════════════════════════════
+# Trigger: mensaje borrado → borrar su adjunto de Storage
+# ════════════════════════════════════════════════════════════════════════
+
+_ID_CHAT = re.compile(r"[A-Za-z0-9_-]{1,128}")     # idChatValido en firestore.rules
+
+
+def _ruta_adjunto(media_url, chat_id: str):
+    """Nombre en Storage del adjunto de un mensaje de `chat_id`, o None si su
+    mediaUrl no es un archivo del bucket del proyecto bajo chats/{chat_id}/.
+    Mismo patrón que mensajeValido (firestore.rules): el administrador se salta
+    las reglas, así que aquí se vuelve a comprobar antes de borrar nada."""
+    if not isinstance(media_url, str) or not isinstance(chat_id, str) or not _ID_CHAT.fullmatch(chat_id):
+        return None
+    patron = (r"https://firebasestorage[.]googleapis[.]com/v0/b/" + re.escape(BUCKET_STORAGE)
+              + r"/o/chats%2F" + re.escape(chat_id) + r"%2F[^/]+")
+    if not re.fullmatch(patron, media_url):
+        return None
+    ruta = urllib.parse.unquote(urllib.parse.urlsplit(media_url).path.split("/o/", 1)[1])
+    # Un archivo de esa carpeta: ni la carpeta entera (con «?» detrás de «%2F»)
+    # ni una ruta con «..»
+    if not ruta.startswith(f"chats/{chat_id}/") or ruta.endswith("/") or not _ruta_limpiable(ruta):
+        return None
+    return ruta
+
+
+@firestore_fn.on_document_deleted(
+    document="chats/{chatId}/mensajes/{mensajeId}",
+    region=REGION,
+    max_instances=MAX_INSTANCIAS_STORAGE,
+)
+def on_mensaje_borrado(event) -> None:
+    """Mensaje borrado (por su autor, el administrador o la purga de una
+    cuenta): borra su adjunto. Las reglas de Storage no dejan borrar desde la
+    app (un participante quitaría lo que envió el otro), así que lo hace el
+    servidor. Se puede repetir: si el archivo ya no existe, no pasa nada."""
+    if event.data is None:
+        return
+    media = (event.data.to_dict() or {}).get("mediaUrl")
+    if not media:
+        return
+    chat_id, mensaje_id = event.params["chatId"], event.params["mensajeId"]
+    ruta = _ruta_adjunto(media, chat_id)
+    if ruta is None:
+        # Sin la URL en el registro: lleva el token de descarga del archivo
+        print(f"[CHAT] El adjunto del mensaje {mensaje_id} no es un archivo de su chat {chat_id}: no se borra nada")
+        return
+    _, error = _borrar_storage(ruta)
+    if error is None:
+        return
+    db = firestore.client()
+    try:
+        # Al purgar una cuenta, la carpeta entera ya está en la cola (se guarda
+        # antes de borrar los mensajes): no se encarga archivo por archivo
+        carpeta = db.collection("limpieza_storage").document(_id_limpieza_storage(f"chats/{chat_id}/"))
+        if not carpeta.get().exists:
+            _encolar_limpieza_storage(db, ruta)
+    except Exception as e:
+        print(f"[CHAT] No se pudo encargar la limpieza del adjunto del mensaje {mensaje_id} de {chat_id}: {e}")
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -2579,19 +2860,24 @@ def _revisar_suscripciones(db) -> int:
     # Con los 60 s por defecto, al crecer los datos se cortaba antes de llegar
     # a los últimos pasos. 540 s bastan (en 2.ª generación se admiten hasta 1800)
     timeout_sec=540,
+    # Correo al administrador si una limpieza de Storage falla cinco veces
+    secrets=[SMTP_USUARIO, SMTP_CLAVE],
 )
 def revisar_suscripciones_diario(event: scheduler_fn.ScheduledEvent) -> None:
     """Revisión diaria. Primero lo que afecta a la seguridad y a los pagos:
     cuentas bloqueadas desactivadas en Auth, suscripciones (red de seguridad
     por si falla o no está configurado RTDN) y perfiles profesionales ocultos
-    de cuentas ya verificadas; después, la limpieza (eventos de estadísticas y
-    notificaciones antiguas). Cada paso va aparte: un fallo no detiene los demás."""
+    de cuentas ya verificadas; después, la limpieza (archivos de Storage
+    pendientes, eventos de estadísticas y notificaciones antiguas). Cada paso
+    va aparte: un fallo no detiene los demás."""
     db = firestore.client()
     pasos = (
         ("[ADMIN] Cuentas bloqueadas desactivadas en Auth", _sincronizar_bloqueados),
         ("[SEGURIDAD] Marcas de deshacer verificación resueltas", _reintentar_deshacer_pendientes),
         ("[SUSCRIPCION] Suscripciones revisadas con Play", _revisar_suscripciones),
         ("[TECNICOS] Perfiles ocultos ya verificados", _mostrar_perfiles_verificados),
+        # RGPD: archivos de cuentas y mensajes borrados que Storage no dejó borrar
+        ("[STORAGE] Limpiezas de Storage terminadas", _procesar_limpiezas_storage),
         # Privacidad: eventos individuales de estadísticas de más de 48 h
         ("[ESTADISTICAS] Eventos antiguos borrados", _purgar_eventos_antiguos),
         # El historial de la app muestra las últimas
