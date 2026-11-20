@@ -207,13 +207,15 @@ class TareaDiariaTest(unittest.TestCase):
                 mock.patch.object(main, "_reintentar_deshacer_pendientes", paso("deshacer", falla=True)), \
                 mock.patch.object(main, "_revisar_suscripciones", paso("suscripciones", falla=True)), \
                 mock.patch.object(main, "_mostrar_perfiles_verificados", paso("perfiles", falla=True)), \
-                mock.patch.object(main, "_procesar_limpiezas_storage", paso("storage", falla=True)), \
                 mock.patch.object(main, "_purgar_eventos_antiguos", paso("eventos", falla=True)), \
-                mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones")), \
+                mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones", falla=True)), \
+                mock.patch.object(main, "_caducar_limpiezas_storage", paso("caducados", falla=True)), \
+                mock.patch.object(main, "_procesar_limpiezas_storage", paso("storage")), \
                 mock.patch("builtins.print"):
             inspect.unwrap(main.revisar_suscripciones_diario)(None)
-        self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "storage", "eventos",
-                                 "notificaciones"])
+        # Las purgas de privacidad, antes que la limpieza de Storage (que puede tardar)
+        self.assertEqual(orden, ["bloqueos", "deshacer", "suscripciones", "perfiles", "eventos", "notificaciones",
+                                 "caducados", "storage"])
 
     def test_tiene_540_segundos_de_tiempo_limite(self):
         self.assertEqual(main.revisar_suscripciones_diario.__firebase_endpoint__.timeoutSeconds, 540)
@@ -482,17 +484,19 @@ _OPERADORES = {
 
 class _ConsultaMem:
     """Colección (o subcolección) con filtros where(filter=FieldFilter(...)),
-    order_by y limit."""
-    def __init__(self, db, nombre, filtros=(), limite=None, orden=None):
+    order_by, limit y start_after."""
+    def __init__(self, db, nombre, filtros=(), limite=None, orden=None, despues=None):
         self._db, self._nombre, self._filtros, self._limite = db, nombre, list(filtros), limite
         self._orden = orden   # (campo, dirección) o None
+        self._despues = despues
     def _con(self, **cambios):
-        actual = dict(filtros=self._filtros, limite=self._limite, orden=self._orden)
+        actual = dict(filtros=self._filtros, limite=self._limite, orden=self._orden, despues=self._despues)
         return _ConsultaMem(self._db, self._nombre, **{**actual, **cambios})
     def document(self, doc_id): return _RefMem(self._db, f"{self._nombre}/{doc_id}")
     def where(self, filter): return self._con(filtros=self._filtros + [filter])
     def limit(self, n): return self._con(limite=n)
     def order_by(self, campo, direction="ASCENDING"): return self._con(orden=(campo, direction))
+    def start_after(self, snap): return self._con(despues=snap)
     def stream(self):
         prefijo = f"{self._nombre}/"
         encontrados = [
@@ -503,9 +507,15 @@ class _ConsultaMem:
         ]
         if self._orden:
             campo, direccion = self._orden
-            # Como Firestore: los documentos sin el campo no salen al ordenar por él
+            # Como Firestore: los documentos sin el campo no salen al ordenar
+            # por él, y a igual valor se ordena por el id
+            clave = lambda s: (s.to_dict()[campo], s.id)  # noqa: E731
             encontrados = sorted((s for s in encontrados if campo in s.to_dict()),
-                                 key=lambda s: s.to_dict()[campo], reverse=direccion == "DESCENDING")
+                                 key=clave, reverse=direccion == "DESCENDING")
+            if self._despues is not None:
+                cursor = (self._despues.to_dict()[campo], self._despues.id)
+                encontrados = [s for s in encontrados
+                               if (clave(s) < cursor if direccion == "DESCENDING" else clave(s) > cursor)]
         return iter(encontrados if self._limite is None else encontrados[:self._limite])
 
 
@@ -1720,11 +1730,17 @@ class _BlobFalso:
 
     def delete(self):
         self._storage.llamadas.append(("delete", self.name))
-        if self._storage.caido:
+        if self._storage.caido or self.name in self._storage.fallan:
             raise ServiceUnavailable("Storage no responde")
         if self.name not in self._storage.objetos:
             raise NotFound(f"No existe {self.name}")
         self._storage.objetos.discard(self.name)
+
+    def exists(self):
+        self._storage.llamadas.append(("exists", self.name))
+        if self._storage.caido:
+            raise ServiceUnavailable("Storage no responde")
+        return self.name in self._storage.objetos
 
 
 class _StorageFalso:
@@ -1733,6 +1749,7 @@ class _StorageFalso:
     def __init__(self):
         self.objetos = set()
         self.caido = False
+        self.fallan = set()       # objetos cuyo borrado falla aunque Storage responda
         self.llamadas = []        # (operación, prefijo o nombre)
         self.al_listar = None     # se ejecuta una vez justo después de listar
 
@@ -1888,6 +1905,23 @@ class BorradoCuentaConStorageTest(_ConStorage):
         self.assertEqual(len(self.avisos), 2)
         for _, asunto, texto in self.avisos:
             self.assertNotIn("uid_borrado", asunto + texto)
+        # Ni en el registro: solo el id del encargo, no la ruta del perfil
+        self.assertNotIn("perfiles/uid_borrado", str(self.log.call_args_list))
+
+    def test_si_solo_falla_un_archivo_se_borran_los_demas_y_la_carpeta_queda_encargada(self):
+        self.mensaje("c1", "m2", archivo="m2.jpg")
+        self.mensaje("c1", "m3", archivo="m3.jpg")
+        self.storage.fallan.add("chats/c1/m2.jpg")
+        self.assertEqual(main._borrar_storage("chats/c1/"), (2, "ServiceUnavailable"))
+        self.assertEqual({o for o in self.storage.objetos if o.startswith("chats/c1/")}, {"chats/c1/m2.jpg"})
+        respuesta = self.borrar_cuenta()
+        self.assertEqual(respuesta["stats"]["storagePendientes"], 1)
+        self.assertEqual(self.prefijos(), ["chats/c1/"])
+        self.storage.fallan.clear()
+        limpieza_id, = self.limpiezas()
+        self.disparar_cola(limpieza_id)
+        self.assertEqual(self.limpiezas(), {})
+        self.assertFalse([o for o in self.storage.objetos if o.startswith("chats/c1/")])
 
     def test_un_archivo_que_desaparece_mientras_se_borra_no_es_un_fallo(self):
         # Entre listar la carpeta y borrar sus archivos, otro (el trigger de un
@@ -1936,6 +1970,7 @@ class ColaLimpiezaStorageTest(_ConStorage):
                 self.assertEqual(self.limpieza()["proximoIntento"],
                                  espera + main.LIMPIEZA_STORAGE_ESPERA_MS * 2 ** (fallos - 1))
         self.assertIs(self.limpieza()["requiereAdmin"], True)
+        self.assertEqual(self.limpieza()["caduca"], self.reloj[0] + main.LIMPIEZA_STORAGE_CADUCA_MS)
         (destino, asunto, texto), = self.avisos
         self.assertEqual(destino, os.environ["SMTP_USUARIO"])        # el buzón de ZeroHaus
         self.assertIn("Storage", asunto)
@@ -1950,6 +1985,24 @@ class ColaLimpiezaStorageTest(_ConStorage):
         self.assertEqual(len(self.avisos), 1)
         self.assertIsNotNone(self.limpieza())
 
+    def test_el_encargo_del_administrador_caduca_a_los_90_dias(self):
+        self.disparar_cola(self.id)
+        while not self.limpieza().get("requiereAdmin"):
+            self.reloj[0] = self.limpieza()["proximoIntento"]
+            main._procesar_limpiezas_storage(self.db)
+        caduca = self.limpieza()["caduca"]
+        self.reloj[0] = caduca - 1
+        self.assertEqual(main._caducar_limpiezas_storage(self.db), 0)
+        self.assertIsNotNone(self.limpieza())
+        self.reloj[0] = caduca
+        self.assertEqual(main._caducar_limpiezas_storage(self.db), 1)
+        self.assertIsNone(self.limpieza())
+
+    def test_los_que_no_pasaron_al_administrador_no_caducan(self):
+        self.reloj[0] += 365 * main.DIA_MS
+        self.assertEqual(main._caducar_limpiezas_storage(self.db), 0)
+        self.assertIsNotNone(self.limpieza())
+
     def test_reclamada_por_otro_no_se_toca(self):
         self.db.docs[f"limpieza_storage/{self.id}"]["procesandoHasta"] = AHORA_MS + 1
         self.storage.caido = False
@@ -1957,6 +2010,56 @@ class ColaLimpiezaStorageTest(_ConStorage):
         self.assertEqual(self.storage.llamadas, [])
         self.reloj[0] += 1
         self.assertEqual(main._procesar_limpiezas_storage(self.db), 1)
+
+    def test_un_reclamo_vencido_se_vuelve_a_tomar(self):
+        # Quien la reclamó se cortó sin terminar ni apuntar el fallo
+        self.db.docs[f"limpieza_storage/{self.id}"]["procesandoHasta"] = AHORA_MS - 1
+        self.storage.caido = False
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 1)
+        self.assertIsNone(self.limpieza())
+        self.assertEqual(self.storage.objetos, {"chats/c10/x.jpg"})
+
+    def test_mas_encargos_que_un_lote_se_hacen_todos(self):
+        self.storage.caido = False
+        n = main.LIMPIEZA_STORAGE_LOTE + 5
+        for i in range(n):
+            self.storage.objetos.add(f"chats/lote{i}/a.jpg")
+            main._encolar_limpieza_storage(self.db, f"chats/lote{i}/")
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), n + 1)     # con la de setUp
+        self.assertEqual(self.limpiezas(), {})
+        self.assertEqual(self.storage.objetos, {"chats/c10/x.jpg"})
+
+    def test_con_el_tiempo_agotado_deja_el_resto_para_el_dia_siguiente(self):
+        self.storage.caido = False
+        for i in range(4):
+            main._encolar_limpieza_storage(self.db, f"chats/tarde{i}/")
+        relojes = iter([0, 0, 0, main.LIMPIEZA_STORAGE_PRESUPUESTO_S])   # inicio y una consulta por encargo
+        with mock.patch.object(main.time, "monotonic", lambda: next(relojes, 10_000)):
+            self.assertEqual(main._procesar_limpiezas_storage(self.db), 2)
+        self.assertEqual(len(self.limpiezas()), 3)
+        self.assertIn("Sin tiempo", str(self.log.call_args_list))
+
+    def test_si_la_limpieza_falla_la_tarea_diaria_no_se_corta(self):
+        hechos = []
+        coleccion = self.db.collection
+
+        def sin_cola(nombre):
+            if nombre == "limpieza_storage":
+                raise RuntimeError("Firestore no responde")
+            return coleccion(nombre)
+
+        def paso(nombre):
+            return lambda db: hechos.append(nombre)
+        with mock.patch.object(self.db, "collection", sin_cola), \
+                mock.patch.object(main, "_sincronizar_bloqueados", paso("bloqueos")), \
+                mock.patch.object(main, "_reintentar_deshacer_pendientes", paso("deshacer")), \
+                mock.patch.object(main, "_revisar_suscripciones", paso("suscripciones")), \
+                mock.patch.object(main, "_mostrar_perfiles_verificados", paso("perfiles")), \
+                mock.patch.object(main, "_purgar_eventos_antiguos", paso("eventos")), \
+                mock.patch.object(main, "_purgar_notificaciones_antiguas", paso("notificaciones")):
+            inspect.unwrap(main.revisar_suscripciones_diario)(None)      # no lanza
+        self.assertEqual(hechos, ["bloqueos", "deshacer", "suscripciones", "perfiles", "eventos", "notificaciones"])
+        self.assertIn("[STORAGE] Limpiezas de Storage terminadas: no se pudo completar", str(self.log.call_args_list))
 
     def test_solo_borra_su_carpeta(self):
         self.storage.caido = False
@@ -2028,6 +2131,40 @@ class AdjuntoBorradoTest(_ConStorage):
         self.assertEqual(self.storage.objetos, antes)
         self.assertEqual(self.limpiezas(), {})
 
+    def test_el_adjunto_de_otro_mensaje_del_mismo_chat_no_se_borra(self):
+        # «otro» crea un mensaje con la mediaUrl del adjunto de m9 y lo borra
+        trampa = self.mensaje("c1", "trampa", tipo="imagen", mediaUrl=url_adjunto("chats/c1/m9.jpg"))
+        self.borrar_mensaje("c1", "trampa", trampa)
+        self.assertIn("chats/c1/m9.jpg", self.storage.objetos)
+        self.assertEqual(self.storage.llamadas, [])
+        self.assertIn("no se borra nada", str(self.log.call_args_list))
+
+    def test_dos_mensajes_con_el_mismo_archivo_solo_lo_borra_el_suyo(self):
+        propio = self.mensaje("c1", "mB", archivo="mB_presupuesto.pdf")
+        copia = self.mensaje("c1", "mA", tipo="archivo", mediaUrl=propio["mediaUrl"])
+        self.borrar_mensaje("c1", "mA", copia)
+        self.assertIn("chats/c1/mB_presupuesto.pdf", self.storage.objetos)
+        self.borrar_mensaje("c1", "mB", propio)
+        self.assertNotIn("chats/c1/mB_presupuesto.pdf", self.storage.objetos)
+
+    def test_un_id_de_mensaje_hecho_a_medida_no_alcanza_el_archivo_de_otro(self):
+        # El id «mB_presupuesto» empezaría el nombre «mB_presupuesto.pdf» del adjunto de mB
+        propio = self.mensaje("c1", "mB", archivo="mB_presupuesto.pdf")
+        for id_falso in ("mB_presupuesto", "mB_presupuesto.pdf"):
+            with self.subTest(id_falso=id_falso):
+                trampa = self.mensaje("c1", id_falso, tipo="archivo", mediaUrl=propio["mediaUrl"])
+                self.borrar_mensaje("c1", id_falso, trampa)
+                self.assertIn("chats/c1/mB_presupuesto.pdf", self.storage.objetos)
+        self.assertEqual(self.storage.llamadas, [])
+
+    def test_si_el_chat_ya_no_existe_no_hace_nada(self):
+        # Purga de una cuenta: la carpeta entera ya está borrada o encargada
+        datos = self.mensaje("c1", "m1", archivo="m1.jpg")
+        del self.db.docs["chats/c1"]
+        self.borrar_mensaje("c1", "m1", datos)
+        self.assertEqual(self.storage.llamadas, [])
+        self.assertEqual(self.limpiezas(), {})
+
     def test_si_el_archivo_ya_no_existe_no_pasa_nada(self):
         datos = self.mensaje("c1", "m1", archivo="m1.jpg")
         self.storage.objetos.discard("chats/c1/m1.jpg")
@@ -2081,6 +2218,83 @@ class AdjuntoBorradoTest(_ConStorage):
         self.assertEqual(main._procesar_limpiezas_storage(self.db), 2)
         self.assertFalse([o for o in self.storage.objetos if o.startswith("chats/c1/")])
         self.assertEqual(self.storage.objetos, {"chats/c2/m5.jpg", "perfiles/otro/foto_perfil"})
+
+
+class EvidenciaDenunciaTest(_ConStorage):
+    """Con una denuncia pendiente sobre el chat, el adjunto de un mensaje
+    borrado se guarda 30 días para que el administrador lo vea; en la purga de
+    una cuenta, no: allí se borra todo."""
+
+    DENUNCIA = {"autor": "otro", "objetivo": "uid_borrado", "contexto": "chat", "referencia": "c1",
+                "motivo": "acoso", "fecha": 1, "estado": "pendiente"}
+
+    def setUp(self):
+        super().setUp()
+        self.datos = self.mensaje("c1", "m1", archivo="m1.jpg")
+
+    def denunciar(self, **cambios):
+        self.db.docs["denuncias/otro_uid_borrado"] = {**self.DENUNCIA, **cambios}
+
+    def test_con_una_denuncia_pendiente_el_adjunto_se_borra_a_los_30_dias(self):
+        self.denunciar()
+        self.borrar_mensaje("c1", "m1", self.datos)
+        self.assertIn("chats/c1/m1.jpg", self.storage.objetos)
+        (limpieza_id, limpieza), = self.limpiezas().items()
+        self.assertEqual(limpieza["prefijo"], "chats/c1/m1.jpg")
+        self.assertEqual(limpieza["proximoIntento"], AHORA_MS + 30 * main.DIA_MS)
+        # Ni el trigger al crearse ni la tarea diaria lo borran antes de tiempo
+        self.disparar_cola(limpieza_id)
+        self.reloj[0] = AHORA_MS + 30 * main.DIA_MS - 1
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 0)
+        self.assertIn("chats/c1/m1.jpg", self.storage.objetos)
+        self.reloj[0] += 1
+        self.assertEqual(main._procesar_limpiezas_storage(self.db), 1)
+        self.assertNotIn("chats/c1/m1.jpg", self.storage.objetos)
+        self.assertEqual(self.limpiezas(), {})
+
+    def test_una_denuncia_recien_creada_aun_sin_estado_tambien_cuenta(self):
+        denuncia = dict(self.DENUNCIA)
+        del denuncia["estado"]                      # on_denuncia_creada aún no ha pasado
+        self.db.docs["denuncias/otro_uid_borrado"] = denuncia
+        self.borrar_mensaje("c1", "m1", self.datos)
+        self.assertIn("chats/c1/m1.jpg", self.storage.objetos)
+        self.assertEqual(len(self.limpiezas()), 1)
+
+    def test_sin_denuncia_pendiente_de_ese_chat_se_borra_en_el_acto(self):
+        casos = {
+            "revisada": dict(estado="revisada"),
+            "descartada": dict(estado="descartada"),
+            "de otro chat": dict(referencia="c2"),
+            "de un perfil con el mismo id": dict(contexto="perfil"),
+        }
+        for caso, cambios in casos.items():
+            with self.subTest(caso=caso):
+                datos = self.mensaje("c1", "m1", archivo="m1.jpg")
+                self.denunciar(**cambios)
+                self.borrar_mensaje("c1", "m1", datos)
+                self.assertNotIn("chats/c1/m1.jpg", self.storage.objetos)
+                self.assertEqual(self.limpiezas(), {})
+
+    def test_en_la_purga_de_una_cuenta_se_borra_todo_aunque_haya_denuncia(self):
+        mensajes = {"m1": self.datos, "m2": self.mensaje("c1", "m2", archivo="m2_factura.pdf")}
+        borrar_mensajes = main._borrar_subcoleccion
+
+        def borrar_y_disparar(db, padre, nombre, *args, **kwargs):
+            n = borrar_mensajes(db, padre, nombre, *args, **kwargs)
+            if nombre == "mensajes":
+                # La purga ya borró las denuncias de la cuenta; la otra parte
+                # denuncia justo ahora y los eventos llegan con el chat aún vivo
+                self.denunciar()
+                for mensaje_id, datos in mensajes.items():
+                    self.borrar_mensaje("c1", mensaje_id, datos)
+            return n
+        with mock.patch.object(main, "_borrar_subcoleccion", borrar_y_disparar):
+            self.borrar_cuenta()
+        # Y los que llegan con el chat ya borrado
+        for mensaje_id, datos in mensajes.items():
+            self.borrar_mensaje("c1", mensaje_id, datos)
+        self.assertFalse([o for o in self.storage.objetos if o.startswith("chats/c1/")])
+        self.assertEqual(self.limpiezas(), {})
 
 
 if __name__ == "__main__":
