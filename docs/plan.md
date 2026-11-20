@@ -107,6 +107,16 @@ Motor: Gemini en Vertex, el mismo que ya lee facturas (sin API nueva ni paso man
 | T-G2 | IM | `firebase.json`, `remoteconfig.template.json`, `README.md` | Un despliegue completo no pisa `precio_electricidad`; test de `actualizar_precio_luz_diario` presente | — |
 | T-G3 | — | consola | Pasos manuales B2 y B3 | — |
 
+### Bloque I — Revisión externa (`fix/revision-externa`)
+Revisión de ChatGPT del 2026-11-19 sobre `fc58110`, verificada contra `400d441`: 8 hallazgos confirmados y 1 plausible (I-7).
+| ID | Ag. | Archivos | Hecho cuando | Dep. |
+|----|-----|----------|--------------|------|
+| T-I1 | CI | `functions/main.py`, `functions-tests/` | (1) Si Storage falla al borrar una cuenta, las carpetas pendientes van a una cola `/limpieza_storage` con reintentos y aviso al administrador, y se guardan antes de borrar el chat. (6) Al borrar un mensaje con adjunto, el servidor borra el archivo | Bloque E |
+| T-I2 | IM | `Util/BillingManager.kt`, `ViewModel/SuscripcionViewModel.kt` | (2) «Restaurar compras» cuenta solo las compras enviadas al servidor; si ninguna es de esta cuenta, avisa y no se queda cargando | — |
+| T-I3 | IM | `UserInterface/GraficasConsumoScreen.kt`, `ViewModel/GraficasViewModel.kt`, `ViewModel/PreestudioViewModel.kt`, repositorios | (3) Gráficas por vivienda, con selector; con un solo informe no hay evolución. (4) Vivienda e informe en un lote atómico, con ids reservados; reintentar no crea otra vivienda | — |
+| T-I4 | IM | `RepositorioChat.kt`, `InformeViewModel.kt`, `FirestoreExt.kt`, `RepositorioInformes.kt` | (5) Mensaje, último mensaje y no leídos en un mismo lote. (7) Las respuestas de IA se aplican solo si siguen siendo del informe y del idioma abiertos. (8) Distinguir «sin informes», «datos guardados» y «no se ha podido cargar». (9) Último informe con `orderBy` y `limit(1)` | — |
+Prueba final: dos viviendas, con dos informes del piso y uno del chalet. El piso muestra su evolución; el chalet, solo su consumo. Un reintento del preestudio deja una sola vivienda y un solo informe nuevo.
+
 ### Bloque H — Publicación (`release/2.4.0`), F4
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
@@ -115,7 +125,7 @@ Motor: Gemini en Vertex, el mismo que ya lee facturas (sin API nueva ni paso man
 | T-H2 | IM | `app/build.gradle.kts`, `CHANGELOG.md`, notas de la versión | Versión 2.4.0, `bundleRelease` correcto | T-H1 |
 
 ### Orden y paralelismo
-0 → (A ∥ B ∥ C ∥ G) → D → E → F → H. A, B, C y G no comparten archivos; para ejecutarlos a la vez cada agente necesita su propio worktree. E y F tocan los mismos archivos que A y B: van después y en serie.
+0 → (A ∥ B ∥ C ∥ G) → D → E → I → F → H. A, B, C y G no comparten archivos; para ejecutarlos a la vez cada agente necesita su propio worktree. E y F tocan los mismos archivos que A y B: van después y en serie.
 
 ## 4. Datos que hay que confirmar en fuente oficial
 

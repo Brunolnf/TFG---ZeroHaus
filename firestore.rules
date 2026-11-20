@@ -98,6 +98,12 @@ service cloud.firestore {
     function idChatValido(chatId) {
       return chatId.matches('[A-Za-z0-9_-]{1,128}');
     }
+    // Ids de mensaje de la app (document() de Firestore: letras y números). Va
+    // dentro de la expresión de mediaUrl, y con «_» o «.» un id hecho a mano
+    // («{idAjeno}_factura») casaría con el adjunto de otro mensaje
+    function idMensajeValido(mensajeId) {
+      return mensajeId.matches('[A-Za-z0-9]{1,128}');
+    }
     // Campos del modelo Usuario de la app (lo que escribe al registrarse)
     function camposModeloUsuario() {
       return ['uid', 'nombre', 'email', 'tipoUsuario', 'fotoPerfil', 'fechaRegistro',
@@ -428,15 +434,22 @@ service cloud.firestore {
           && d.get('ultimoMensaje', '').size() <= 2100
           && d.get('fechaUltimoMensaje', 0) is int
           && d.get('fechaUltimoMensaje', 0) <= request.time.toMillis() + 86400000
-          && d.get('noLeidosPor', {}).keys().hasOnly(resource.data.participantes);
+          && d.get('noLeidosPor', {}).keys().hasOnly(resource.data.participantes)
+          // Los no leídos propios solo se quedan igual o se ponen a 0
+          // (marcarLeidos); los del otro sí cambian (el increment del envío).
+          // Antes uno podía sumarse no leídos a sí mismo. En los chats antiguos
+          // sin noLeidosPor o sin la clave propia cuentan como 0.
+          && (d.get('noLeidosPor', {}).get(uid(), 0) == 0
+              || d.get('noLeidosPor', {}).get(uid(), 0) == resource.data.get('noLeidosPor', {}).get(uid(), 0));
     }
     // Mensaje bien formado. Los adjuntos solo pueden apuntar al Storage de
     // este mismo chat: antes se podía mandar como «foto» o «archivo» un
     // enlace a cualquier web, que el otro abría.
-    function mensajeValido(chatId) {
+    function mensajeValido(chatId, mensajeId) {
       let d = request.resource.data;
       return d.keys().hasOnly(['id', 'chatId', 'emisorUid', 'emisorNombre', 'texto', 'fecha',
                                'leido', 'tipo', 'mediaUrl', 'mediaNombre', 'mediaBytes'])
+          && idMensajeValido(mensajeId)
           && d.emisorUid == uid()
           // Sin límite inferior: los mensajes escritos sin conexión llegan tarde
           && 'fecha' in d
@@ -452,8 +465,11 @@ service cloud.firestore {
               || (d.get('tipo', 'texto') != 'texto'
                   && idChatValido(chatId)
                   && d.mediaUrl is string
+                  // El archivo de ESTE mensaje: la app sube {mensajeId}.jpg y
+                  // {mensajeId}_{nombre}.pdf. Antes valía el de otro mensaje del
+                  // chat, y al borrar el mensaje el servidor borraba el ajeno
                   && d.mediaUrl.matches('https://firebasestorage[.]googleapis[.]com/v0/b/zerohaus-2a865[.]firebasestorage[.]app/o/chats%2F'
-                                        + chatId + '%2F[^/]+')));
+                                        + chatId + '%2F' + mensajeId + '[._][^/]+')));
     }
 
     match /chats/{chatId} {
@@ -474,7 +490,7 @@ service cloud.firestore {
         // Con un bloqueo en cualquier sentido nadie escribe (el administrador sí)
         allow create: if (logueado()
           && uid() in get(/databases/$(database)/documents/chats/$(chatId)).data.participantes
-          && mensajeValido(chatId)
+          && mensajeValido(chatId, mensajeId)
           && !hayBloqueo(get(/databases/$(database)/documents/chats/$(chatId)).data.participantes))
           || esAdmin();
         // Sin edición: permitía cambiar emisorUid y atribuir el mensaje al otro

@@ -10,6 +10,8 @@ import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.*
 import com.example.zerohaus.Repositorios.*
 import com.example.zerohaus.Util.AppEstado
+import com.example.zerohaus.Util.ReservaIds
+import com.example.zerohaus.Util.reservarIds
 import com.example.zerohaus.Util.getCadenas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,7 +50,11 @@ data class PreestudioEstado(
     val factura: DatosFactura? = null,
     val fechaFactura: Long = 0L,
     val leyendoFactura: Boolean = false,
-    val errorFactura: ErrorFactura? = null
+    val errorFactura: ErrorFactura? = null,
+    // Ids reservados al guardar: un reintento tras un fallo reutiliza los mismos
+    val reservaIds: ReservaIds? = null,
+    // El informe se generó sin confirmación del servidor (sin conexión): se sincroniza al reconectar
+    val guardadoPendiente: Boolean = false
 )
 
 /**
@@ -92,6 +98,7 @@ class PreestudioViewModel : ViewModel() {
 
         val error = when {
             estado.nombreVivienda.isBlank() -> c.errNombreVivienda
+            estado.nombreVivienda.length > Vivienda.MAX_NOMBRE -> c.errNombreViviendaLargo
             superficie == null || superficie <= 0 || superficie > 5000 -> c.errSuperficie
             anio == null || anio < 1900 || anio > anioActual -> "${c.errAnio} (1900–$anioActual)"
             estado.provincia !in algo.provinciasOrdenadas -> "${c.errSeleccionaCampo}: ${c.preProvincia}"
@@ -131,42 +138,70 @@ class PreestudioViewModel : ViewModel() {
         )
 
         viewModelScope.launch {
-            // Si el usuario eligió una vivienda existente, la reutilizamos sin crear una nueva
-            val viviendaConId: Vivienda
-            val anterior = estado.viviendaSeleccionada
+            // Ids reservados una sola vez y guardados en el estado: si el guardado
+            // falla, reintentar escribe los mismos documentos (no crea otra vivienda)
+            val anterior = estado.viviendaSeleccionada?.takeIf { it.id.isNotEmpty() }
+            val reserva = reservarIds(
+                actual = estado.reservaIds,
+                viviendaExistenteId = anterior?.id,
+                nuevoIdVivienda = { repoViviendas.reservarId() },
+                nuevoIdInforme = { repoInformes.reservarId() }
+            )
+            estado = estado.copy(reservaIds = reserva)
 
-            if (anterior != null && anterior.id.isNotEmpty()) {
-                viviendaConId = viviendaBase.copy(id = anterior.id, uid = anterior.uid, fechaCreacion = anterior.fechaCreacion)
-                // Si ha cambiado algún dato (o la factura), se guarda: el
-                // simulador, «Recalcular» y los consejos de IA leen la vivienda
-                // guardada y si no usarían los datos viejos. Firestore lo aplica
-                // al momento en local, así que no hace falta esperar al servidor.
-                if (viviendaConId != anterior) {
-                    repoViviendas.guardarVivienda(viviendaConId) { }
+            // Si el usuario eligió una vivienda existente, la reutilizamos sin crear una nueva
+            val viviendaConId = if (anterior != null) {
+                viviendaBase.copy(id = anterior.id, uid = anterior.uid, fechaCreacion = anterior.fechaCreacion)
+            } else {
+                viviendaBase.copy(id = reserva.viviendaId)
+            }
+            // Vivienda nueva, o con algún dato (o la factura) cambiado: se guarda. El
+            // simulador, «Recalcular» y los consejos de IA leen la vivienda guardada
+            // y si no usarían los datos viejos. Vivienda e informe van en un mismo
+            // lote: o se guardan los dos o ninguno.
+            val guardarVivienda = anterior == null || viviendaConId != anterior
+
+            val resultado = suspendCancellableCoroutine { cont ->
+                repoInformes.guardarViviendaEInforme(
+                    viviendaConId, guardarVivienda, reserva.informeId,
+                    alFalloTardio = { alFalloTardio(viviendaConId.id, esNueva = anterior == null) }
+                ) { cont.resume(it) }
+            }
+            resultado
+                .onSuccess { guardado ->
+                    // Tras guardar, la vivienda ya existe: otro informe desde este formulario
+                    // la edita en vez de crear una nueva, y lleva ids de informe nuevos
+                    val viviendaGuardada = viviendaConId.copy(uid = guardado.informe.uid)
                     estado = estado.copy(
-                        viviendaSeleccionada = viviendaConId,
-                        viviendas = estado.viviendas.map { if (it.id == viviendaConId.id) viviendaConId else it }
+                        informeGenerado = guardado.informe,
+                        guardadoPendiente = guardado.pendienteSync,
+                        cargando = false,
+                        reservaIds = null,
+                        viviendaSeleccionada = viviendaGuardada,
+                        viviendas = if (estado.viviendas.any { it.id == viviendaGuardada.id })
+                            estado.viviendas.map { if (it.id == viviendaGuardada.id) viviendaGuardada else it }
+                        else estado.viviendas + viviendaGuardada
                     )
                 }
-            } else {
-                // Vivienda nueva → guardar en Firestore
-                val resultVivienda = suspendCancellableCoroutine { cont ->
-                    repoViviendas.guardarVivienda(viviendaBase) { cont.resume(it) }
-                }
-                val viviendaId = resultVivienda.getOrElse { e ->
-                    estado = estado.copy(error = e.message, cargando = false)
-                    return@launch
-                }
-                viviendaConId = viviendaBase.copy(id = viviendaId)
-            }
-
-            val resultInforme = suspendCancellableCoroutine { cont ->
-                repoInformes.generarInforme(viviendaConId) { cont.resume(it) }
-            }
-            resultInforme
-                .onSuccess { informe -> estado = estado.copy(informeGenerado = informe, cargando = false) }
                 .onFailure { e -> estado = estado.copy(error = e.message, cargando = false) }
         }
+    }
+
+    /**
+     * El servidor rechazó, pasado el tope, un guardado que se mostró como pendiente:
+     * Firestore ya ha revertido vivienda e informe. Se avisa con un error que se ve
+     * al volver a la pantalla, y si la vivienda era nueva se deja de darla por guardada.
+     */
+    private fun alFalloTardio(viviendaId: String, esNueva: Boolean) {
+        val c = getCadenas(AppEstado.idioma)
+        estado = estado.copy(
+            error = c.preGuardadoFallo,
+            informeGenerado = null,
+            guardadoPendiente = false,
+            viviendaSeleccionada = if (esNueva && estado.viviendaSeleccionada?.id == viviendaId) null else estado.viviendaSeleccionada,
+            viviendas = if (esNueva) estado.viviendas.filter { it.id != viviendaId } else estado.viviendas,
+            reservaIds = null
+        )
     }
 
     /**
@@ -210,7 +245,7 @@ class PreestudioViewModel : ViewModel() {
     fun quitarFactura() { estado = estado.copy(factura = null, fechaFactura = 0L, errorFactura = null) }
 
     fun limpiarInforme() {
-        estado = estado.copy(informeGenerado = null)
+        estado = estado.copy(informeGenerado = null, guardadoPendiente = false)
     }
 
     /** Carga las viviendas guardadas del usuario para el selector. */
@@ -242,6 +277,7 @@ class PreestudioViewModel : ViewModel() {
             ocupantes        = if (vivienda.ocupantes > 0) vivienda.ocupantes.toString() else "3",
             electrodomesticos = vivienda.electrodomesticos.ifBlank { "Clase B-C" },
             error            = null,
+            reservaIds       = null,
             // Su última factura (solo quedan los datos anuales, no los del periodo)
             factura          = if (vivienda.consumoLuzFacturaKwh > 0 && vivienda.precioLuzFactura > 0) DatosFactura(
                 consumoKwh = 0.0, dias = 0, importeTotal = 0.0,

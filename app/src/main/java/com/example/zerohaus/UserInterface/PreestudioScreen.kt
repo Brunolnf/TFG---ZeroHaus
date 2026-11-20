@@ -54,8 +54,15 @@ fun PreestudioScreen(
     LaunchedEffect(Unit) { viewModel.cargarViviendas() }
 
     // Cuando se genera el informe, navegar automáticamente
+    val contextoAviso = LocalContext.current
     LaunchedEffect(estado.informeGenerado) {
-        if (estado.informeGenerado != null) onInformeGenerado()
+        if (estado.informeGenerado != null) {
+            // Sin conexión: el informe se ve, pero el servidor aún no lo ha confirmado
+            if (estado.guardadoPendiente) {
+                android.widget.Toast.makeText(contextoAviso, c.preGuardadoPendiente, android.widget.Toast.LENGTH_LONG).show()
+            }
+            onInformeGenerado()
+        }
     }
 
     Scaffold(

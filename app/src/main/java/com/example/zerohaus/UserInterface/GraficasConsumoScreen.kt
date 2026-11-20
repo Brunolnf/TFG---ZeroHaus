@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.example.zerohaus.Util.AppEstado
 import com.example.zerohaus.Util.Formato
 import com.example.zerohaus.Util.LocalCadenas
+import com.example.zerohaus.Util.datosGrafica
 import com.example.zerohaus.ViewModel.GraficasViewModel
 import java.util.*
 
@@ -63,11 +65,12 @@ fun GraficasConsumoScreen(
                 title = {
                     Column {
                         Text(c.grafTitulo, fontWeight = FontWeight.SemiBold)
-                        if (estado.informes.isNotEmpty()) {
-                            val subtitulo = if (estado.informes.size > 5)
-                                "${c.grafUltimos5De} ${estado.informes.size} ${c.grafInformes}"
+                        val totalVivienda = estado.grupoActual?.informes?.size ?: 0
+                        if (totalVivienda > 0) {
+                            val subtitulo = if (totalVivienda > 5)
+                                "${c.grafUltimos5De} $totalVivienda ${c.grafInformes}"
                             else
-                                "${estado.informes.size} ${c.histSubtitulo}"
+                                "$totalVivienda ${c.histSubtitulo}"
                             Text(subtitulo, color = gris, fontSize = 12.sp)
                         }
                     }
@@ -88,7 +91,36 @@ fun GraficasConsumoScreen(
             return@Scaffold
         }
 
-        if (estado.informes.isEmpty()) {
+        if (estado.errorCarga && estado.informes.isEmpty()) {
+            Box(
+                Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                ) {
+                    Icon(Icons.Default.BarChart, null, tint = gris.copy(0.4f), modifier = Modifier.size(56.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(c.histError, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color(0xFFDC2626))
+                    Spacer(Modifier.height(4.dp))
+                    Text(c.comErrorCargaInformes, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(14.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.cargarDatos(forzar = true) },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(c.comReintentar)
+                    }
+                }
+            }
+            return@Scaffold
+        }
+
+        val grupoActual = estado.grupoActual
+        if (grupoActual == null) {
             Box(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
@@ -119,12 +151,10 @@ fun GraficasConsumoScreen(
             return@Scaffold
         }
 
-        // No se mezclan informes del método de cálculo anterior con los del
-        // actual: la diferencia parecería una mejora de la vivienda que no es real
-        val metodoActual = estado.informes.last().energiaPrimariaM2 > 0
-        val comparables = if (metodoActual) estado.informes.filter { it.energiaPrimariaM2 > 0 } else estado.informes
-        val excluidos = estado.informes.size - comparables.size
-        val datos = comparables.takeLast(5)
+        // Dentro de la vivienda, sin mezclar informes del método de cálculo anterior
+        val grafica = datosGrafica(grupoActual.informes)
+        val datos = grafica.datos
+        val excluidos = grafica.excluidos
 
         Column(
             modifier = Modifier
@@ -134,6 +164,36 @@ fun GraficasConsumoScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (estado.errorCarga) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(c.comErrorCargaInformes, color = Color(0xFFDC2626), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { viewModel.cargarDatos(forzar = true) }) { Text(c.comReintentar) }
+                }
+            } else if (estado.datosGuardados) {
+                Text(c.comDatosGuardados, color = gris, fontSize = 12.sp)
+            }
+
+            // SELECTOR DE VIVIENDA (solo si hay más de una)
+            if (estado.grupos.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    estado.grupos.forEach { g ->
+                        FilterChip(
+                            selected = g.viviendaId == grupoActual.viviendaId,
+                            onClick = { viewModel.elegirVivienda(g.viviendaId) },
+                            label = { Text(if (g.sinVivienda) c.grafSinVivienda else g.nombre.ifBlank { c.grafVivienda }) }
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    if (grupoActual.sinVivienda) c.grafSinVivienda else grupoActual.nombre.ifBlank { c.grafVivienda },
+                    color = gris, fontSize = 13.sp, fontWeight = FontWeight.SemiBold
+                )
+            }
+
             // RESUMEN
             val ultimo = datos.last()
             val primero = datos.first()
@@ -148,11 +208,15 @@ fun GraficasConsumoScreen(
                     Text(c.grafResumen, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        ResumenStat(c.grafInformesLbl, "${estado.informes.size}", gris)
+                        ResumenStat(c.grafInformesLbl, "${grupoActual.informes.size}", gris)
                         ResumenStat(c.grafConsumoActual, Formato.formatEnergia(ultimo.consumoEstimado), gris)
                         ResumenStat(c.histEtiqueta, ultimo.etiqueta, etiquetaColor(ultimo.etiqueta))
                     }
-                    if (datos.size >= 2) {
+                    if (!grafica.hayEvolucion) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(c.grafUnSoloInforme, color = gris, fontSize = 12.sp)
+                    }
+                    if (grafica.hayEvolucion) {
                         Spacer(Modifier.height(10.dp))
                         val mejoraColor = if (mejora >= 0) verde else Color(0xFFDC2626)
                         val mejoraTexto = if (mejora >= 0)
@@ -169,7 +233,7 @@ fun GraficasConsumoScreen(
             }
 
             // EVOLUCIÓN ETIQUETA ENERGÉTICA
-            if (datos.size >= 2) {
+            if (grafica.hayEvolucion) {
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -265,8 +329,8 @@ fun GraficasConsumoScreen(
                 }
             }
 
-            // GRÁFICA EMISIONES CO2 (línea)
-            Card(
+            // GRÁFICA EMISIONES CO2 (línea): una línea necesita al menos dos puntos
+            if (grafica.hayEvolucion) Card(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(1.dp, borde)

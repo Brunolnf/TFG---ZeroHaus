@@ -155,10 +155,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         // Nombre del otro participante
         val chatCacheado = listaEstado.chats.firstOrNull { it.id == chatId }
         if (chatCacheado != null) {
-            val entry = chatCacheado.nombresParticipantes.entries
-                .firstOrNull { it.key != miUid }
-            val nombreOtro = entry?.value ?: ""
-            val otroUid = entry?.key ?: ""
+            val otroUid = chatCacheado.participantes.firstOrNull { it != miUid } ?: ""
+            val nombreOtro = chatCacheado.nombresParticipantes[otroUid] ?: ""
             chatEstado = chatEstado.copy(nombreOtroUsuario = nombreOtro, otroUid = otroUid)
             if (otroUid.isNotEmpty()) buscarTecnicoDocId(otroUid)
         } else {
@@ -166,10 +164,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 .get()
                 .addOnSuccessListener { doc ->
                     val chat = doc.toObject(Chat::class.java)
-                    val entry = chat?.nombresParticipantes?.entries
-                        ?.firstOrNull { it.key != miUid }
-                    val nombreOtro = entry?.value ?: ""
-                    val otroUid = entry?.key ?: ""
+                    val otroUid = chat?.participantes?.firstOrNull { it != miUid } ?: ""
+                    val nombreOtro = chat?.nombresParticipantes?.get(otroUid) ?: ""
                     chatEstado = chatEstado.copy(nombreOtroUsuario = nombreOtro, otroUid = otroUid)
                     if (otroUid.isNotEmpty()) buscarTecnicoDocId(otroUid)
                 }
@@ -230,7 +226,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         chatEstado = chatEstado.copy(enviando = true, texto = "")
 
         var denegado = false
-        repo.enviarMensaje(chatId, texto, alDenegar = { denegado = true }) { ok ->
+        repo.enviarMensaje(chatId, texto, otroUid = chatEstado.otroUid, alDenegar = { denegado = true }) { ok ->
             chatEstado = if (ok) chatEstado.copy(enviando = false, error = null)
             else chatEstado.copy(
                 enviando = false,
@@ -277,7 +273,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
             var denegado = false
-            repo.enviarImagen(chatId, jpeg, caption, alDenegar = { denegado = true }) { ok ->
+            repo.enviarImagen(chatId, jpeg, caption, otroUid = chatEstado.otroUid, alDenegar = { denegado = true }) { ok ->
                 chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) textoErrorEnvio(denegado, errorImagen) else null)
             }
         }
@@ -286,7 +282,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun enviarArchivo(chatId: String, uri: android.net.Uri, nombre: String, bytes: Long) {
         chatEstado = chatEstado.copy(subiendoMedia = true)
         var denegado = false
-        repo.enviarArchivo(chatId, uri, nombre, bytes, alDenegar = { denegado = true }) { ok ->
+        repo.enviarArchivo(chatId, uri, nombre, bytes, otroUid = chatEstado.otroUid, alDenegar = { denegado = true }) { ok ->
             chatEstado = chatEstado.copy(subiendoMedia = false, error = if (!ok) textoErrorEnvio(denegado, getCadenas(AppEstado.idioma).chatErrorArchivo) else null)
         }
     }
