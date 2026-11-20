@@ -76,7 +76,7 @@ B-11 confirmado: hoy solo el administrador puede bloquear (`AdminScreen.kt:282`)
 | T-D1 | CI | `firestore.rules`, `rules-tests/`, `functions/main.py` | `/denuncias` (solo crear, una por autor y objetivo) y `/bloqueos`; un bloqueado no puede escribir al otro; aviso al administrador | Bloque B |
 | T-D2 | IM | `UserInterface/ChatScreen.kt`, `PerfilTecnicoScreen.kt`, `AdminScreen.kt`, `i18n.py` | Botones de denunciar y bloquear en chat, perfil y reseña; lista en el panel de administrador | T-D1 |
 
-### Bloque E — Pago con retención (`feat/pagos-stripe`)
+### Bloque E — Pago con retención (`feat/pagos-stripe`, PR #59 ✅ salvo T-E9 y despliegue)
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
 | T-E1 | CI | `functions/pagos.py` (nuevo), `functions/main.py`, `remoteconfig.template.json` | El servidor lee los 4 parámetros de Remote Config con caché y valores seguros si falla; test | Bloque A |
