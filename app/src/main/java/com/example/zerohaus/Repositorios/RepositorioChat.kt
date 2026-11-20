@@ -15,6 +15,17 @@ import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 
 /**
+ * Campos del chat que cambian al enviar un mensaje: último mensaje, su fecha y
+ * un no leído más para el receptor. Son los únicos que las reglas dejan tocar
+ * (`cambioDeChatValido`).
+ */
+internal fun cambiosDeChat(ultimoMensaje: String, receptorUid: String, ahora: Long): Map<String, Any> = mapOf(
+    "ultimoMensaje" to ultimoMensaje,
+    "fechaUltimoMensaje" to ahora,
+    "noLeidosPor.$receptorUid" to FieldValue.increment(1)
+)
+
+/**
  * Chat entre clientes y profesionales: crear o recuperar conversaciones,
  * escuchar mensajes en tiempo real (paginados), enviar texto, imágenes y
  * archivos (Cloud Storage) y marcar como leídos.
@@ -54,17 +65,6 @@ class RepositorioChat {
             }
             .addOnFailureListener { callback("Usuario") }
     }
-
-    /**
-     * Campos del chat que cambian al enviar un mensaje: último mensaje, su fecha y
-     * un no leído más para el receptor. Son los únicos que las reglas dejan tocar
-     * (`cambioDeChatValido`).
-     */
-    internal fun cambiosDeChat(ultimoMensaje: String, receptorUid: String, ahora: Long): Map<String, Any> = mapOf(
-        "ultimoMensaje" to ultimoMensaje,
-        "fechaUltimoMensaje" to ahora,
-        "noLeidosPor.$receptorUid" to FieldValue.increment(1)
-    )
 
     /** El receptor es el otro participante: lo que ya sabe el ViewModel, o si no, una lectura del chat. */
     private fun resolverReceptor(chatId: String, otroUid: String?, callback: (String?) -> Unit) {

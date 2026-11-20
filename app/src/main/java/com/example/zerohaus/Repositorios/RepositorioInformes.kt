@@ -1,13 +1,14 @@
 package com.example.zerohaus.Repositorios
 
-import android.os.Handler
-import android.os.Looper
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Modelos.Vivienda
+import com.example.zerohaus.Util.EstadoGuardado
 import com.example.zerohaus.Util.Lectura
 import com.example.zerohaus.Util.getConOrigen
 import com.example.zerohaus.Util.getOrTimeout
+import com.example.zerohaus.Util.guardarConTope
 import com.example.zerohaus.Util.mapear
+import com.example.zerohaus.Util.programadorPrincipal
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -79,14 +80,16 @@ class RepositorioInformes {
      * [TOPE_GUARDADO_MS]; si no hay respuesta, Firestore ya lo tiene en su cola
      * local (se aplica en la caché al momento y se envía entero, en orden, al
      * reconectar, incluso si la app se reinicia), así que se devuelve el informe
-     * con `pendienteSync = true` y la UI avisa «guardado pendiente de sincronizar».
-     * Si el servidor lo rechazase luego, ambos cambios se revierten juntos.
+     * con `pendienteSync = true` y la UI avisa «guardado pendiente de confirmar».
+     * Si el servidor lo rechazase luego, ambos cambios se revierten juntos y
+     * [alFalloTardio] avisa para que la UI lo diga.
      */
     fun guardarViviendaEInforme(
         vivienda: Vivienda,
         guardarVivienda: Boolean,
         informeId: String,
         topeMs: Long = TOPE_GUARDADO_MS,
+        alFalloTardio: (Throwable) -> Unit = {},
         callback: (Result<InformeGuardado>) -> Unit
     ) {
         val v = vivienda.copy(uid = uid())
@@ -95,18 +98,22 @@ class RepositorioInformes {
         if (guardarVivienda) batch.set(db.collection("viviendas").document(v.id), v)
         batch.set(db.collection("informes").document(informeId), informe)
 
-        val handler = Handler(Looper.getMainLooper())
-        var hecho = false
-        fun terminar(r: Result<InformeGuardado>) {
-            if (hecho) return
-            hecho = true
-            handler.removeCallbacksAndMessages(null)
-            callback(r)
-        }
-        handler.postDelayed({ terminar(Result.success(InformeGuardado(informe, pendienteSync = true))) }, topeMs)
-        batch.commit()
-            .addOnSuccessListener { terminar(Result.success(InformeGuardado(informe, pendienteSync = false))) }
-            .addOnFailureListener { e -> terminar(Result.failure(Exception(e.message ?: "Error guardando"))) }
+        guardarConTope(
+            topeMs, programadorPrincipal(),
+            commit = { fin ->
+                batch.commit()
+                    .addOnSuccessListener { fin(Result.success(Unit)) }
+                    .addOnFailureListener { e -> fin(Result.failure(Exception(e.message ?: "Error guardando"))) }
+            },
+            alResultado = { estado ->
+                callback(when (estado) {
+                    EstadoGuardado.Confirmado -> Result.success(InformeGuardado(informe, pendienteSync = false))
+                    EstadoGuardado.PendienteDeConfirmar -> Result.success(InformeGuardado(informe, pendienteSync = true))
+                    is EstadoGuardado.Fallo -> Result.failure(estado.causa)
+                })
+            },
+            alFalloTardio = alFalloTardio
+        )
     }
 
     /**

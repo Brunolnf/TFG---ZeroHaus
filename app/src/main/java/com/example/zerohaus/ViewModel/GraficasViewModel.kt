@@ -10,6 +10,7 @@ import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Repositorios.RepositorioInformes
 import com.example.zerohaus.Util.GrupoVivienda
 import com.example.zerohaus.Util.agruparPorVivienda
+import com.example.zerohaus.Util.conservandoAnterior
 import com.example.zerohaus.Util.listadoDe
 import com.example.zerohaus.Util.grupoElegido
 import kotlinx.coroutines.launch
@@ -27,11 +28,11 @@ data class GraficasEstado(
     /** No se han podido leer los informes (distinto de «todavía no tienes informes»). */
     val errorCarga: Boolean = false,
     /** Vivienda elegida en el selector (null = la del informe más reciente). */
-    val viviendaElegida: String? = null
-) {
-    val grupos: List<GrupoVivienda> get() = agruparPorVivienda(informes)
-    val grupoActual: GrupoVivienda? get() = grupoElegido(grupos, viviendaElegida)
-}
+    val viviendaElegida: String? = null,
+    // Calculados solo cuando cambian los informes o la vivienda elegida (no en cada recomposición)
+    val grupos: List<GrupoVivienda> = emptyList(),
+    val grupoActual: GrupoVivienda? = null
+)
 
 /**
  * Carga los informes del usuario para las gráficas de evolución.
@@ -52,9 +53,13 @@ class GraficasViewModel : ViewModel() {
             val lectura = suspendCancellableCoroutine { cont ->
                 repo.obtenerInformesConOrigen { cont.resume(it) }
             }
-            val listado = listadoDe(lectura)
+            val listado = conservandoAnterior(estado.informes, listadoDe(lectura))
+            val informes = listado.informes.sortedBy { it.fechaGeneracion }
+            val grupos = agruparPorVivienda(informes)
             estado = estado.copy(
-                informes = listado.informes.sortedBy { it.fechaGeneracion },
+                informes = informes,
+                grupos = grupos,
+                grupoActual = grupoElegido(grupos, estado.viviendaElegida),
                 cargando = false,
                 datosGuardados = listado.datosGuardados,
                 errorCarga = listado.errorCarga
@@ -63,6 +68,6 @@ class GraficasViewModel : ViewModel() {
     }
 
     fun elegirVivienda(viviendaId: String) {
-        estado = estado.copy(viviendaElegida = viviendaId)
+        estado = estado.copy(viviendaElegida = viviendaId, grupoActual = grupoElegido(estado.grupos, viviendaId))
     }
 }

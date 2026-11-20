@@ -93,6 +93,11 @@ class ViviendasViewModel : ViewModel() {
     }
 
     fun guardarVivienda(vivienda: Vivienda) {
+        // Mismo límite que las reglas de Firestore: si no, el servidor lo rechazaría
+        if (vivienda.nombre.length > Vivienda.MAX_NOMBRE) {
+            estado = estado.copy(error = getCadenas(AppEstado.idioma).errNombreViviendaLargo)
+            return
+        }
         estado = estado.copy(cargando = true)
         repo.guardarVivienda(vivienda) { result ->
             result.onSuccess {

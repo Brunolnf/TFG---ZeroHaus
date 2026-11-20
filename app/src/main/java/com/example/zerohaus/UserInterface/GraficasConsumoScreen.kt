@@ -91,7 +91,7 @@ fun GraficasConsumoScreen(
             return@Scaffold
         }
 
-        if (estado.errorCarga) {
+        if (estado.errorCarga && estado.informes.isEmpty()) {
             Box(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
@@ -164,7 +164,12 @@ fun GraficasConsumoScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (estado.datosGuardados) {
+            if (estado.errorCarga) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(c.comErrorCargaInformes, color = Color(0xFFDC2626), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { viewModel.cargarDatos(forzar = true) }) { Text(c.comReintentar) }
+                }
+            } else if (estado.datosGuardados) {
                 Text(c.comDatosGuardados, color = gris, fontSize = 12.sp)
             }
 

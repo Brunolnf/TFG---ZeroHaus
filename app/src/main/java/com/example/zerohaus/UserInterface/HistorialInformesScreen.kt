@@ -98,7 +98,7 @@ fun HistorialInformesScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = verde)
             }
-        } else if (estado.errorCarga) {
+        } else if (estado.errorCarga && estado.informes.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFDC2626), modifier = Modifier.size(48.dp))
@@ -128,7 +128,14 @@ fun HistorialInformesScreen(
                 modifier = Modifier.padding(pv).fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (estado.datosGuardados) {
+                if (estado.errorCarga) {
+                    item {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.comErrorCargaInformes, color = Color(0xFFDC2626), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { viewModel.cargarInformes(forzar = true) }) { Text(c.comReintentar) }
+                        }
+                    }
+                } else if (estado.datosGuardados) {
                     item { Text(c.comDatosGuardados, color = gris, fontSize = 12.sp) }
                 }
 

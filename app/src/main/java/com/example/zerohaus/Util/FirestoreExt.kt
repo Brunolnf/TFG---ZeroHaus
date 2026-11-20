@@ -104,21 +104,18 @@ fun <T, R> Lectura<T>.mapear(f: (T) -> R): Lectura<R> = when (this) {
  * indicando el origen de los datos o el error en vez de convertirlo en `null`.
  */
 fun Query.getConOrigen(timeoutMs: Long = DEFAULT_TIMEOUT_MS, callback: (Lectura<QuerySnapshot>) -> Unit) {
-    val handler = Handler(Looper.getMainLooper())
-    var done = false
-    fun finish(result: Lectura<QuerySnapshot>) {
-        if (done) return
-        done = true
-        handler.removeCallbacksAndMessages(null)
-        callback(result)
-    }
-    fun clasificar(snap: QuerySnapshot) = clasificarLectura(snap, snap.isEmpty, snap.metadata.isFromCache)
-    handler.postDelayed({
-        get(Source.CACHE)
-            .addOnSuccessListener { finish(clasificarLectura(it, it.isEmpty, deCache = true)) }
-            .addOnFailureListener { finish(Lectura.Fallo(it)) }
-    }, timeoutMs)
-    get()
-        .addOnSuccessListener { finish(clasificar(it)) }
-        .addOnFailureListener { finish(Lectura.Fallo(it)) }
+    leerConTope<QuerySnapshot>(
+        timeoutMs, programadorPrincipal(),
+        servidor = { cb ->
+            get()
+                .addOnSuccessListener { cb(clasificarLectura(it, it.isEmpty, it.metadata.isFromCache)) }
+                .addOnFailureListener { cb(Lectura.Fallo(it)) }
+        },
+        cache = { cb ->
+            get(Source.CACHE)
+                .addOnSuccessListener { cb(clasificarLectura(it, it.isEmpty, deCache = true)) }
+                .addOnFailureListener { cb(Lectura.Fallo(it)) }
+        },
+        callback = callback
+    )
 }

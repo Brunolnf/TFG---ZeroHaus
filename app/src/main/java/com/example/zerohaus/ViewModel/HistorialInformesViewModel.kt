@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.zerohaus.Modelos.InformeEnergetico
 import com.example.zerohaus.Repositorios.RepositorioInformes
+import com.example.zerohaus.Util.conservandoAnterior
 import com.example.zerohaus.Util.listadoDe
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -46,7 +47,7 @@ class HistorialInformesViewModel : ViewModel() {
             val lectura = suspendCancellableCoroutine { cont ->
                 repo.obtenerInformesConOrigen { cont.resume(it) }
             }
-            val listado = listadoDe(lectura)
+            val listado = conservandoAnterior(estado.informes, listadoDe(lectura))
             estado = estado.copy(
                 informes = listado.informes,
                 cargando = false,

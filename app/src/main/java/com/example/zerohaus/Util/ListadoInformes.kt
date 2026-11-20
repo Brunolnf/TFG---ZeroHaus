@@ -14,6 +14,13 @@ data class ListadoInformes(
     val errorCarga: Boolean = false
 )
 
+/**
+ * Si una recarga falla pero ya había informes, se conserva la lista anterior y se
+ * marca el error (en vez de vaciar la pantalla).
+ */
+fun conservandoAnterior(anterior: List<InformeEnergetico>, nuevo: ListadoInformes): ListadoInformes =
+    if (nuevo.errorCarga && anterior.isNotEmpty()) nuevo.copy(informes = anterior) else nuevo
+
 fun listadoDe(lectura: Lectura<List<InformeEnergetico>>): ListadoInformes = when (lectura) {
     is Lectura.Servidor -> ListadoInformes(lectura.datos)
     is Lectura.Guardada -> ListadoInformes(lectura.datos, datosGuardados = true)

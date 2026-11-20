@@ -48,6 +48,21 @@ data class SuscripcionEstado(
         }
 }
 
+/** El tope de espera salta: sale de «activando» con un aviso (si seguía activando). */
+fun alTopeActivacion(e: SuscripcionEstado, aviso: String): SuscripcionEstado =
+    if (e.activando) e.copy(activando = false, error = aviso) else e
+
+/**
+ * La activación llega (puede ser tras el tope): limpia el aviso de «tarda» y
+ * deja solo la confirmación.
+ */
+fun alExitoActivacion(e: SuscripcionEstado, avisar: Boolean, mensajeExito: String): SuscripcionEstado =
+    e.copy(activando = false, error = null, exitoMensaje = if (avisar) mensajeExito else e.exitoMensaje)
+
+/** Un fallo después de un éxito no lo machaca: solo deja de «activar». */
+fun alFalloActivacion(e: SuscripcionEstado, mensaje: String?): SuscripcionEstado =
+    if (e.exitoMensaje != null) e.copy(activando = false) else e.copy(activando = false, error = mensaje)
+
 /**
  * Compra de suscripciones con Google Play Billing y activación en el
  * servidor (Cloud Function `activar_suscripcion`).
@@ -76,10 +91,8 @@ class SuscripcionViewModel : ViewModel() {
         topeActivacion?.cancel()
         topeActivacion = viewModelScope.launch {
             delay(TOPE_ACTIVACION_MS)
-            if (estado.activando) {
-                avisarActivacion = false
-                estado = estado.copy(activando = false, error = getCadenas(AppEstado.idioma).subActivacionTarda)
-            }
+            if (estado.activando) avisarActivacion = false
+            estado = alTopeActivacion(estado, getCadenas(AppEstado.idioma).subActivacionTarda)
         }
     }
 
@@ -103,15 +116,12 @@ class SuscripcionViewModel : ViewModel() {
                         val avisar = avisarActivacion || resultado != "ya_activada"
                         avisarActivacion = false
                         dejarDeActivar()
-                        estado = estado.copy(
-                            activando = false,
-                            exitoMensaje = if (avisar) getCadenas(AppEstado.idioma).subActivada else estado.exitoMensaje
-                        )
+                        estado = alExitoActivacion(estado, avisar, getCadenas(AppEstado.idioma).subActivada)
                     }
                     .onFailure {
                         avisarActivacion = false
                         dejarDeActivar()
-                        estado = estado.copy(activando = false, error = it.message)
+                        estado = alFalloActivacion(estado, it.message)
                     }
             }
         }

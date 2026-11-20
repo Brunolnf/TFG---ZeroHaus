@@ -98,6 +98,7 @@ class PreestudioViewModel : ViewModel() {
 
         val error = when {
             estado.nombreVivienda.isBlank() -> c.errNombreVivienda
+            estado.nombreVivienda.length > Vivienda.MAX_NOMBRE -> c.errNombreViviendaLargo
             superficie == null || superficie <= 0 || superficie > 5000 -> c.errSuperficie
             anio == null || anio < 1900 || anio > anioActual -> "${c.errAnio} (1900–$anioActual)"
             estado.provincia !in algo.provinciasOrdenadas -> "${c.errSeleccionaCampo}: ${c.preProvincia}"
@@ -161,7 +162,10 @@ class PreestudioViewModel : ViewModel() {
             val guardarVivienda = anterior == null || viviendaConId != anterior
 
             val resultado = suspendCancellableCoroutine { cont ->
-                repoInformes.guardarViviendaEInforme(viviendaConId, guardarVivienda, reserva.informeId) { cont.resume(it) }
+                repoInformes.guardarViviendaEInforme(
+                    viviendaConId, guardarVivienda, reserva.informeId,
+                    alFalloTardio = { alFalloTardio(viviendaConId.id, esNueva = anterior == null) }
+                ) { cont.resume(it) }
             }
             resultado
                 .onSuccess { guardado ->
@@ -181,6 +185,23 @@ class PreestudioViewModel : ViewModel() {
                 }
                 .onFailure { e -> estado = estado.copy(error = e.message, cargando = false) }
         }
+    }
+
+    /**
+     * El servidor rechazó, pasado el tope, un guardado que se mostró como pendiente:
+     * Firestore ya ha revertido vivienda e informe. Se avisa con un error que se ve
+     * al volver a la pantalla, y si la vivienda era nueva se deja de darla por guardada.
+     */
+    private fun alFalloTardio(viviendaId: String, esNueva: Boolean) {
+        val c = getCadenas(AppEstado.idioma)
+        estado = estado.copy(
+            error = c.preGuardadoFallo,
+            informeGenerado = null,
+            guardadoPendiente = false,
+            viviendaSeleccionada = if (esNueva && estado.viviendaSeleccionada?.id == viviendaId) null else estado.viviendaSeleccionada,
+            viviendas = if (esNueva) estado.viviendas.filter { it.id != viviendaId } else estado.viviendas,
+            reservaIds = null
+        )
     }
 
     /**

@@ -877,6 +877,8 @@ class AppCadenas internal constructor(
     val grafUnSoloInforme: String get() = t("grafUnSoloInforme")
     val comDatosGuardados: String get() = t("comDatosGuardados")
     val comErrorCargaInformes: String get() = t("comErrorCargaInformes")
+    val preGuardadoFallo: String get() = t("preGuardadoFallo")
+    val errNombreViviendaLargo: String get() = t("errNombreViviendaLargo")
 }
 
 val LocalCadenas = compositionLocalOf<AppCadenas> { error("LocalCadenas not provided") }
