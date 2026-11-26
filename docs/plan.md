@@ -107,7 +107,7 @@ Motor: Gemini en Vertex, el mismo que ya lee facturas (sin API nueva ni paso man
 | T-G2 | IM | `firebase.json`, `remoteconfig.template.json`, `README.md` | Un despliegue completo no pisa `precio_electricidad`; test de `actualizar_precio_luz_diario` presente | — |
 | T-G3 | — | consola | Pasos manuales B2 y B3 | — |
 
-### Bloque I — Revisión externa (`fix/revision-externa`)
+### Bloque I — Revisión externa (`fix/revision-externa`, PR #61 ✅ salvo despliegue)
 Revisión de ChatGPT del 2026-11-19 sobre `fc58110`, verificada contra `400d441`: 8 hallazgos confirmados y 1 plausible (I-7).
 | ID | Ag. | Archivos | Hecho cuando | Dep. |
 |----|-----|----------|--------------|------|
