@@ -98,14 +98,14 @@ fun HistorialInformesScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = verde)
             }
-        } else if (estado.error != null) {
+        } else if (estado.errorCarga && estado.informes.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pv), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
                     Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFDC2626), modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(c.histError, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
-                    Text(estado.error, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    Text(c.comErrorCargaInformes, color = gris, fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { viewModel.cargarInformes(forzar = true) },
@@ -128,6 +128,17 @@ fun HistorialInformesScreen(
                 modifier = Modifier.padding(pv).fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (estado.errorCarga) {
+                    item {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.comErrorCargaInformes, color = Color(0xFFDC2626), fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { viewModel.cargarInformes(forzar = true) }) { Text(c.comReintentar) }
+                        }
+                    }
+                } else if (estado.datosGuardados) {
+                    item { Text(c.comDatosGuardados, color = gris, fontSize = 12.sp) }
+                }
+
                 // Botón entrar modo comparar
                 if (!estado.modoComparar && estado.informes.size >= 2) {
                     item {
@@ -364,7 +375,7 @@ fun HistorialInformesScreen(
                                     if (!enviandoAChat) {
                                         enviandoAChat = true
                                         informeACompartir = null
-                                        enviarInformeAChat(ctx, informe, chat.id, otroNombre) { ok ->
+                                        enviarInformeAChat(ctx, informe, chat.id, otroNombre, chat.participantes.firstOrNull { it != com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid }) { ok ->
                                             enviandoAChat = false
                                             mensajeEnvio = if (ok) "${c.histInformeEnviado} $otroNombre" else c.histErrorEnviar
                                         }
@@ -430,6 +441,7 @@ private fun enviarInformeAChat(
     informe: InformeEnergetico,
     chatId: String,
     destinatario: String,
+    otroUid: String?,
     onResult: (Boolean) -> Unit
 ) {
     try {
@@ -438,7 +450,7 @@ private fun enviarInformeAChat(
         val nombre = "Informe_${informe.nombreVivienda.replace(" ", "_")}.pdf"
         val bytes = pdfFile.length()
         val repo = RepositorioChat()
-        repo.enviarArchivo(chatId, uri, nombre, bytes) { ok -> onResult(ok) }
+        repo.enviarArchivo(chatId, uri, nombre, bytes, otroUid = otroUid) { ok -> onResult(ok) }
     } catch (e: Exception) {
         onResult(false)
     }

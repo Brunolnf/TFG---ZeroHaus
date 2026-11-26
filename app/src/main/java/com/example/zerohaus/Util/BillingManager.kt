@@ -39,6 +39,29 @@ import java.security.MessageDigest
 /** Por qué no se pudo comprar (la UI lo muestra traducido). */
 enum class ErrorCompra { NO_DISPONIBLE, NO_INICIADA, NO_COMPLETADA }
 
+/** Resultado de «Restaurar compras». */
+sealed interface ResultadoRestauracion {
+    /** Google Play no está disponible. */
+    data object PlayNoDisponible : ResultadoRestauracion
+    /** No hay ninguna suscripción activa en la cuenta de Google. */
+    data object NadaQueRestaurar : ResultadoRestauracion
+    /** Hay suscripciones, pero todas pertenecen a otra cuenta de ZeroHaus. */
+    data object SoloDeOtraCuenta : ResultadoRestauracion
+    /** [n] compras de esta cuenta enviadas al servidor para reactivarlas. */
+    data class Enviadas(val n: Int) : ResultadoRestauracion
+}
+
+/** Una compra etiquetada con otra cuenta de ZeroHaus no es de esta; sin etiqueta se acepta. */
+fun esDeOtraCuenta(cuentaCompra: String?, cuentaActual: String?): Boolean =
+    cuentaCompra != null && cuentaCompra != cuentaActual
+
+/** [enviadas]: compras de esta cuenta enviadas; [deOtraCuenta]: compras activas descartadas por ser de otra. */
+fun clasificarRestauracion(enviadas: Int, deOtraCuenta: Int): ResultadoRestauracion = when {
+    enviadas > 0 -> ResultadoRestauracion.Enviadas(enviadas)
+    deOtraCuenta > 0 -> ResultadoRestauracion.SoloDeOtraCuenta
+    else -> ResultadoRestauracion.NadaQueRestaurar
+}
+
 /** Suscripción vigente que se sustituye al cambiar de plan. */
 data class PlanAnterior(val productoId: String, val purchaseToken: String)
 
@@ -137,23 +160,22 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
 
     /**
      * Restaura las suscripciones activas del usuario (reinstalación, cambio de
-     * dispositivo). Reenvía cada compra al servidor y reporta cuántas encontró.
-     *   n  > 0 → compras restauradas (se reactivan vía activar_suscripcion)
-     *   n == 0 → no hay ninguna suscripción activa
-     *   n <  0 → Google Play no está disponible
+     * dispositivo). Reenvía al servidor las compras de ESTA cuenta de ZeroHaus y
+     * reporta el resultado (ver [ResultadoRestauracion]). Las compras etiquetadas
+     * para otra cuenta de ZeroHaus no se envían ni cuentan como restauradas.
      */
-    fun restaurarCompras(onResultado: (Int) -> Unit) {
-        if (!conectado) { onResultado(-1); return }
+    fun restaurarCompras(onResultado: (ResultadoRestauracion) -> Unit) {
+        if (!conectado) { onResultado(ResultadoRestauracion.PlayNoDisponible); return }
         val params = QueryPurchasesParams.newBuilder()
             .setProductType(BillingClient.ProductType.SUBS)
             .build()
         client.queryPurchasesAsync(params) { result, compras ->
             if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-                onResultado(-1); return@queryPurchasesAsync
+                onResultado(ResultadoRestauracion.PlayNoDisponible); return@queryPurchasesAsync
             }
             val activas = compras.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-            activas.forEach { entregar(it) }
-            onResultado(activas.size)
+            val enviadas = activas.count { entregar(it) }
+            onResultado(clasificarRestauracion(enviadas, activas.size - enviadas))
         }
     }
 
@@ -216,13 +238,15 @@ class BillingManager(context: Context) : PurchasesUpdatedListener {
         }
     }
 
-    private fun entregar(compra: Purchase) {
-        val productoId = compra.products.firstOrNull() ?: return
+    /** Envía la compra al servidor. Devuelve false si no se envió (es de otra cuenta o no tiene producto). */
+    private fun entregar(compra: Purchase): Boolean {
+        val productoId = compra.products.firstOrNull() ?: return false
         // Misma cuenta de Google con varios usuarios de ZeroHaus: no reenviar
         // la suscripción de otro (el servidor la rechazaría igualmente).
         val cuentaCompra = compra.accountIdentifiers?.obfuscatedAccountId
-        if (cuentaCompra != null && cuentaCompra != cuentaOfuscada()) return
+        if (esDeOtraCuenta(cuentaCompra, cuentaOfuscada())) return false
         onSuscripcionPendiente?.invoke(productoId, compra.purchaseToken)
+        return true
     }
 
     fun acknowledge(purchaseToken: String) {

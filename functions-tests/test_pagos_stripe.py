@@ -1390,7 +1390,7 @@ class BorradoCuentaTest(_Base):
         self.delete_user = mock.Mock()
         self.play = mock.Mock(return_value=(0, 0))
         for parche in (mock.patch.object(main.auth, "delete_user", self.delete_user),
-                       mock.patch.object(main, "_borrar_storage", lambda prefijo: 0),
+                       mock.patch.object(main, "_borrar_storage", lambda ruta: (0, None)),
                        mock.patch.object(main, "_cancelar_suscripciones_play", self.play)):
             parche.start()
             self.addCleanup(parche.stop)

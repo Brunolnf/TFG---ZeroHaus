@@ -823,6 +823,16 @@ private val espanol: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "La transferencia ha sido revertida.",
     "pagoErrAdminEsParte" to "Un administrador no puede ser parte de un pago.",
     "pagoContracargoAviso" to "El banco ha abierto una reclamación sobre este pago.",
+    "subOtraCuentaZeroHaus" to "Esta suscripción pertenece a otra cuenta de ZeroHaus con la misma cuenta de Google.",
+    "subActivacionTarda" to "La activación está tardando más de lo normal. Comprueba tu conexión; si ya pagaste, se activará sola en cuanto llegue la confirmación.",
+    "preGuardadoPendiente" to "Guardado pendiente de confirmar: se confirmará en cuanto haya conexión con el servidor.",
+    "grafSinVivienda" to "Sin vivienda",
+    "grafVivienda" to "Vivienda",
+    "grafUnSoloInforme" to "Con un solo informe no hay evolución. Genera otro de esta vivienda para compararlos.",
+    "comDatosGuardados" to "Mostrando datos guardados en el móvil: pueden no estar al día.",
+    "comErrorCargaInformes" to "No se han podido cargar tus informes. Comprueba la conexión e inténtalo de nuevo.",
+    "preGuardadoFallo" to "El servidor no pudo guardar tu último informe y se ha descartado. Vuelve a generarlo.",
+    "errNombreViviendaLargo" to "El nombre de la vivienda no puede superar los 100 caracteres.",
 )) }
 
 private val english: AppCadenas by lazy { AppCadenas(mapOf(
@@ -1607,6 +1617,16 @@ private val english: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "The transfer has been reversed.",
     "pagoErrAdminEsParte" to "An administrator cannot be a party to a payment.",
     "pagoContracargoAviso" to "The bank has opened a claim on this payment.",
+    "subOtraCuentaZeroHaus" to "This subscription belongs to another ZeroHaus account that uses the same Google account.",
+    "subActivacionTarda" to "Activation is taking longer than usual. Check your connection; if you have already paid, it will activate on its own once confirmed.",
+    "preGuardadoPendiente" to "Save pending confirmation: it will be confirmed as soon as the server is reachable.",
+    "grafSinVivienda" to "No home",
+    "grafVivienda" to "Home",
+    "grafUnSoloInforme" to "With a single report there is no trend yet. Generate another one for this home to compare them.",
+    "comDatosGuardados" to "Showing data saved on your phone: it may be out of date.",
+    "comErrorCargaInformes" to "Your reports could not be loaded. Check your connection and try again.",
+    "preGuardadoFallo" to "The server could not save your last report and it was discarded. Please generate it again.",
+    "errNombreViviendaLargo" to "The home name cannot exceed 100 characters.",
 ), respaldo = espanol) }
 
 private val catala: AppCadenas by lazy { AppCadenas(mapOf(
@@ -2391,6 +2411,16 @@ private val catala: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "La transferència ha estat revertida.",
     "pagoErrAdminEsParte" to "Un administrador no pot ser part d'un pagament.",
     "pagoContracargoAviso" to "El banc ha obert una reclamació sobre aquest pagament.",
+    "subOtraCuentaZeroHaus" to "Aquesta subscripció pertany a un altre compte de ZeroHaus amb el mateix compte de Google.",
+    "subActivacionTarda" to "L'activació està tardant més del normal. Comprova la connexió; si ja has pagat, s'activarà sola quan arribi la confirmació.",
+    "preGuardadoPendiente" to "Desat pendent de confirmar: es confirmarà tan bon punt hi hagi connexió amb el servidor.",
+    "grafSinVivienda" to "Sense habitatge",
+    "grafVivienda" to "Habitatge",
+    "grafUnSoloInforme" to "Amb un sol informe no hi ha evolució. Genera'n un altre d'aquest habitatge per comparar-los.",
+    "comDatosGuardados" to "Es mostren dades desades al mòbil: poden no estar al dia.",
+    "comErrorCargaInformes" to "No s'han pogut carregar els teus informes. Comprova la connexió i torna-ho a provar.",
+    "preGuardadoFallo" to "El servidor no ha pogut desar el teu darrer informe i s'ha descartat. Torna a generar-lo.",
+    "errNombreViviendaLargo" to "El nom de l'habitatge no pot superar els 100 caràcters.",
 ), respaldo = espanol) }
 
 private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3175,6 +3205,16 @@ private val euskara: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Transferentzia atzera egin da.",
     "pagoErrAdminEsParte" to "Administratzaile bat ezin da ordainketa baten alderdi izan.",
     "pagoContracargoAviso" to "Bankuak erreklamazio bat ireki du ordainketa honen gainean.",
+    "subOtraCuentaZeroHaus" to "Harpidetza hau ZeroHaus-eko beste kontu batena da, Google kontu bera erabiltzen duena.",
+    "subActivacionTarda" to "Aktibazioa ohi baino gehiago ari da luzatzen. Egiaztatu konexioa; ordaindu baduzu, berez aktibatuko da berrespena iristean.",
+    "preGuardadoPendiente" to "Gordetzea berresteko dago: zerbitzariarekin konexioa dagoenean berretsiko da.",
+    "grafSinVivienda" to "Etxebizitzarik gabe",
+    "grafVivienda" to "Etxebizitza",
+    "grafUnSoloInforme" to "Txosten bakarrarekin ez dago eboluziorik. Sortu etxebizitza honetako beste bat konparatzeko.",
+    "comDatosGuardados" to "Telefonoan gordetako datuak erakusten dira: baliteke eguneratuta ez egotea.",
+    "comErrorCargaInformes" to "Ezin izan dira zure txostenak kargatu. Egiaztatu konexioa eta saiatu berriro.",
+    "preGuardadoFallo" to "Zerbitzariak ezin izan du zure azken txostena gorde eta baztertu egin da. Sortu berriro.",
+    "errNombreViviendaLargo" to "Etxebizitzaren izenak ezin ditu 100 karaktere gainditu.",
 ), respaldo = espanol) }
 
 private val galego: AppCadenas by lazy { AppCadenas(mapOf(
@@ -3959,6 +3999,16 @@ private val galego: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "A transferencia foi revertida.",
     "pagoErrAdminEsParte" to "Un administrador non pode ser parte dun pagamento.",
     "pagoContracargoAviso" to "O banco abriu unha reclamación sobre este pagamento.",
+    "subOtraCuentaZeroHaus" to "Esta subscrición pertence a outra conta de ZeroHaus coa mesma conta de Google.",
+    "subActivacionTarda" to "A activación está a tardar máis do normal. Comproba a conexión; se xa pagaches, activarase soa en canto chegue a confirmación.",
+    "preGuardadoPendiente" to "Gardado pendente de confirmar: confirmarase en canto haxa conexión co servidor.",
+    "grafSinVivienda" to "Sen vivenda",
+    "grafVivienda" to "Vivenda",
+    "grafUnSoloInforme" to "Cun só informe non hai evolución. Xera outro desta vivenda para comparalos.",
+    "comDatosGuardados" to "Mostrando datos gardados no móbil: poden non estar ao día.",
+    "comErrorCargaInformes" to "Non se puideron cargar os teus informes. Comproba a conexión e téntao de novo.",
+    "preGuardadoFallo" to "O servidor non puido gardar o teu último informe e descartouse. Xérao de novo.",
+    "errNombreViviendaLargo" to "O nome da vivenda non pode superar os 100 caracteres.",
 ), respaldo = espanol) }
 
 private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
@@ -4743,6 +4793,16 @@ private val portugues: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "A transferência foi revertida.",
     "pagoErrAdminEsParte" to "Um administrador não pode ser parte de um pagamento.",
     "pagoContracargoAviso" to "O banco abriu uma reclamação sobre este pagamento.",
+    "subOtraCuentaZeroHaus" to "Esta subscrição pertence a outra conta do ZeroHaus com a mesma conta Google.",
+    "subActivacionTarda" to "A ativação está a demorar mais do que o normal. Verifique a ligação; se já pagou, será ativada sozinha assim que chegar a confirmação.",
+    "preGuardadoPendiente" to "Guardado pendente de confirmação: será confirmado assim que houver ligação ao servidor.",
+    "grafSinVivienda" to "Sem habitação",
+    "grafVivienda" to "Habitação",
+    "grafUnSoloInforme" to "Com um só relatório não há evolução. Gere outro desta habitação para os comparar.",
+    "comDatosGuardados" to "A mostrar dados guardados no telemóvel: podem não estar atualizados.",
+    "comErrorCargaInformes" to "Não foi possível carregar os seus relatórios. Verifique a ligação e tente novamente.",
+    "preGuardadoFallo" to "O servidor não conseguiu guardar o seu último relatório e foi descartado. Gere-o novamente.",
+    "errNombreViviendaLargo" to "O nome da habitação não pode exceder os 100 caracteres.",
 ), respaldo = espanol) }
 
 private val francais: AppCadenas by lazy { AppCadenas(mapOf(
@@ -5527,6 +5587,16 @@ private val francais: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Le virement a été annulé.",
     "pagoErrAdminEsParte" to "Un administrateur ne peut pas être partie à un paiement.",
     "pagoContracargoAviso" to "La banque a ouvert une réclamation sur ce paiement.",
+    "subOtraCuentaZeroHaus" to "Cet abonnement appartient à un autre compte ZeroHaus utilisant le même compte Google.",
+    "subActivacionTarda" to "L'activation prend plus de temps que d'habitude. Vérifiez votre connexion ; si vous avez déjà payé, elle s'activera seule dès la confirmation.",
+    "preGuardadoPendiente" to "Enregistrement en attente de confirmation : il sera confirmé dès que le serveur sera joignable.",
+    "grafSinVivienda" to "Sans logement",
+    "grafVivienda" to "Logement",
+    "grafUnSoloInforme" to "Avec un seul rapport, il n'y a pas d'évolution. Générez-en un autre pour ce logement afin de les comparer.",
+    "comDatosGuardados" to "Affichage des données enregistrées sur le téléphone : elles peuvent ne pas être à jour.",
+    "comErrorCargaInformes" to "Impossible de charger vos rapports. Vérifiez votre connexion et réessayez.",
+    "preGuardadoFallo" to "Le serveur n'a pas pu enregistrer votre dernier rapport et il a été annulé. Générez-le à nouveau.",
+    "errNombreViviendaLargo" to "Le nom du logement ne peut pas dépasser 100 caractères.",
 ), respaldo = espanol) }
 
 private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
@@ -6311,6 +6381,16 @@ private val deutsch: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Die Überweisung wurde rückgängig gemacht.",
     "pagoErrAdminEsParte" to "Ein Administrator kann nicht Partei einer Zahlung sein.",
     "pagoContracargoAviso" to "Die Bank hat eine Reklamation zu dieser Zahlung eröffnet.",
+    "subOtraCuentaZeroHaus" to "Dieses Abo gehört zu einem anderen ZeroHaus-Konto mit demselben Google-Konto.",
+    "subActivacionTarda" to "Die Aktivierung dauert länger als üblich. Prüfe deine Verbindung; wenn du schon bezahlt hast, wird sie nach der Bestätigung automatisch aktiviert.",
+    "preGuardadoPendiente" to "Speichern wartet auf Bestätigung: Es wird bestätigt, sobald der Server erreichbar ist.",
+    "grafSinVivienda" to "Ohne Wohnung",
+    "grafVivienda" to "Wohnung",
+    "grafUnSoloInforme" to "Mit nur einem Bericht gibt es keine Entwicklung. Erstelle einen weiteren für diese Wohnung, um sie zu vergleichen.",
+    "comDatosGuardados" to "Auf dem Handy gespeicherte Daten werden angezeigt: sie sind evtl. nicht aktuell.",
+    "comErrorCargaInformes" to "Deine Berichte konnten nicht geladen werden. Prüfe die Verbindung und versuche es erneut.",
+    "preGuardadoFallo" to "Der Server konnte deinen letzten Bericht nicht speichern; er wurde verworfen. Bitte erstelle ihn erneut.",
+    "errNombreViviendaLargo" to "Der Name der Wohnung darf höchstens 100 Zeichen lang sein.",
 ), respaldo = espanol) }
 
 private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7095,6 +7175,16 @@ private val italiano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Il trasferimento è stato annullato.",
     "pagoErrAdminEsParte" to "Un amministratore non può essere parte di un pagamento.",
     "pagoContracargoAviso" to "La banca ha aperto un reclamo su questo pagamento.",
+    "subOtraCuentaZeroHaus" to "Questo abbonamento appartiene a un altro account ZeroHaus con lo stesso account Google.",
+    "subActivacionTarda" to "L'attivazione sta impiegando più del solito. Controlla la connessione; se hai già pagato, si attiverà da sola appena arriva la conferma.",
+    "preGuardadoPendiente" to "Salvataggio in attesa di conferma: sarà confermato appena il server sarà raggiungibile.",
+    "grafSinVivienda" to "Senza abitazione",
+    "grafVivienda" to "Abitazione",
+    "grafUnSoloInforme" to "Con un solo rapporto non c'è evoluzione. Generane un altro per questa abitazione per confrontarli.",
+    "comDatosGuardados" to "Dati salvati sul telefono: potrebbero non essere aggiornati.",
+    "comErrorCargaInformes" to "Impossibile caricare i tuoi rapporti. Controlla la connessione e riprova.",
+    "preGuardadoFallo" to "Il server non ha potuto salvare il tuo ultimo rapporto ed è stato scartato. Generalo di nuovo.",
+    "errNombreViviendaLargo" to "Il nome dell'abitazione non può superare i 100 caratteri.",
 ), respaldo = espanol) }
 
 private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
@@ -7879,6 +7969,16 @@ private val arabe: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "تم عكس التحويل.",
     "pagoErrAdminEsParte" to "لا يمكن للمشرف أن يكون طرفاً في دفعة.",
     "pagoContracargoAviso" to "فتح البنك مطالبة بشأن هذه الدفعة.",
+    "subOtraCuentaZeroHaus" to "هذا الاشتراك يخص حساب ZeroHaus آخر يستخدم حساب Google نفسه.",
+    "subActivacionTarda" to "التفعيل يستغرق وقتًا أطول من المعتاد. تحقق من اتصالك؛ إذا دفعت بالفعل فسيتم التفعيل تلقائيًا عند وصول التأكيد.",
+    "preGuardadoPendiente" to "الحفظ بانتظار التأكيد: سيتم تأكيده بمجرد توفر الاتصال بالخادم.",
+    "grafSinVivienda" to "بدون مسكن",
+    "grafVivienda" to "المسكن",
+    "grafUnSoloInforme" to "مع تقرير واحد فقط لا يوجد تطور. أنشئ تقريرًا آخر لهذا المسكن للمقارنة.",
+    "comDatosGuardados" to "يتم عرض بيانات محفوظة على الهاتف: قد لا تكون محدّثة.",
+    "comErrorCargaInformes" to "تعذّر تحميل تقاريرك. تحقق من الاتصال وحاول مرة أخرى.",
+    "preGuardadoFallo" to "تعذّر على الخادم حفظ آخر تقرير لك وتم تجاهله. أنشئه مرة أخرى.",
+    "errNombreViviendaLargo" to "لا يمكن أن يتجاوز اسم المسكن 100 حرف.",
 ), respaldo = espanol) }
 
 private val chino: AppCadenas by lazy { AppCadenas(mapOf(
@@ -8663,6 +8763,16 @@ private val chino: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "转账已被撤销。",
     "pagoErrAdminEsParte" to "管理员不能作为付款的当事方。",
     "pagoContracargoAviso" to "银行已就此付款发起争议。",
+    "subOtraCuentaZeroHaus" to "此订阅属于使用同一 Google 账号的另一个 ZeroHaus 账号。",
+    "subActivacionTarda" to "激活用时比平时更长。请检查网络连接；如果已付款，确认后将自动激活。",
+    "preGuardadoPendiente" to "保存等待确认：服务器可连接后将立即确认。",
+    "grafSinVivienda" to "无住房",
+    "grafVivienda" to "住房",
+    "grafUnSoloInforme" to "只有一份报告时没有变化趋势。请为该住房再生成一份以便比较。",
+    "comDatosGuardados" to "正在显示手机中保存的数据：可能不是最新的。",
+    "comErrorCargaInformes" to "无法加载您的报告。请检查网络连接后重试。",
+    "preGuardadoFallo" to "服务器无法保存您的上一份报告，该报告已被丢弃。请重新生成。",
+    "errNombreViviendaLargo" to "住房名称不能超过 100 个字符。",
 ), respaldo = espanol) }
 
 private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
@@ -9447,6 +9557,16 @@ private val rumano: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Transferul a fost anulat.",
     "pagoErrAdminEsParte" to "Un administrator nu poate fi parte într-o plată.",
     "pagoContracargoAviso" to "Banca a deschis o reclamație cu privire la această plată.",
+    "subOtraCuentaZeroHaus" to "Acest abonament aparține altui cont ZeroHaus care folosește același cont Google.",
+    "subActivacionTarda" to "Activarea durează mai mult decât de obicei. Verifică conexiunea; dacă ai plătit deja, se va activa singură când sosește confirmarea.",
+    "preGuardadoPendiente" to "Salvare în așteptarea confirmării: va fi confirmată imediat ce serverul este accesibil.",
+    "grafSinVivienda" to "Fără locuință",
+    "grafVivienda" to "Locuință",
+    "grafUnSoloInforme" to "Cu un singur raport nu există evoluție. Generează încă unul pentru această locuință pentru a le compara.",
+    "comDatosGuardados" to "Se afișează date salvate pe telefon: pot să nu fie la zi.",
+    "comErrorCargaInformes" to "Nu s-au putut încărca rapoartele tale. Verifică conexiunea și încearcă din nou.",
+    "preGuardadoFallo" to "Serverul nu a putut salva ultimul tău raport și acesta a fost eliminat. Generează-l din nou.",
+    "errNombreViviendaLargo" to "Numele locuinței nu poate depăși 100 de caractere.",
 ), respaldo = espanol) }
 
 private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
@@ -10231,6 +10351,16 @@ private val neerlandes: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "De overboeking is teruggedraaid.",
     "pagoErrAdminEsParte" to "Een beheerder kan geen partij zijn bij een betaling.",
     "pagoContracargoAviso" to "De bank heeft een claim ingediend over deze betaling.",
+    "subOtraCuentaZeroHaus" to "Dit abonnement hoort bij een ander ZeroHaus-account met hetzelfde Google-account.",
+    "subActivacionTarda" to "De activering duurt langer dan normaal. Controleer je verbinding; als je al hebt betaald, wordt het vanzelf geactiveerd zodra de bevestiging binnenkomt.",
+    "preGuardadoPendiente" to "Opslaan wacht op bevestiging: wordt bevestigd zodra de server bereikbaar is.",
+    "grafSinVivienda" to "Zonder woning",
+    "grafVivienda" to "Woning",
+    "grafUnSoloInforme" to "Met één rapport is er nog geen verloop. Maak nog een rapport voor deze woning om te vergelijken.",
+    "comDatosGuardados" to "Op de telefoon opgeslagen gegevens worden getoond: ze zijn mogelijk niet actueel.",
+    "comErrorCargaInformes" to "Je rapporten konden niet worden geladen. Controleer je verbinding en probeer het opnieuw.",
+    "preGuardadoFallo" to "De server kon je laatste rapport niet opslaan en het is verworpen. Maak het opnieuw aan.",
+    "errNombreViviendaLargo" to "De naam van de woning mag niet langer zijn dan 100 tekens.",
 ), respaldo = espanol) }
 
 private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
@@ -11015,4 +11145,14 @@ private val polaco: AppCadenas by lazy { AppCadenas(mapOf(
     "pagoErrTransferenciaRevertida" to "Przelew został cofnięty.",
     "pagoErrAdminEsParte" to "Administrator nie może być stroną płatności.",
     "pagoContracargoAviso" to "Bank otworzył reklamację dotyczącą tej płatności.",
+    "subOtraCuentaZeroHaus" to "Ta subskrypcja należy do innego konta ZeroHaus z tym samym kontem Google.",
+    "subActivacionTarda" to "Aktywacja trwa dłużej niż zwykle. Sprawdź połączenie; jeśli już zapłaciłeś, aktywuje się sama po otrzymaniu potwierdzenia.",
+    "preGuardadoPendiente" to "Zapis oczekuje na potwierdzenie: zostanie potwierdzony, gdy serwer będzie dostępny.",
+    "grafSinVivienda" to "Bez mieszkania",
+    "grafVivienda" to "Mieszkanie",
+    "grafUnSoloInforme" to "Przy jednym raporcie nie ma zmian w czasie. Wygeneruj kolejny dla tego mieszkania, aby je porównać.",
+    "comDatosGuardados" to "Wyświetlane są dane zapisane w telefonie: mogą być nieaktualne.",
+    "comErrorCargaInformes" to "Nie udało się wczytać Twoich raportów. Sprawdź połączenie i spróbuj ponownie.",
+    "preGuardadoFallo" to "Serwer nie zdołał zapisać Twojego ostatniego raportu i został on odrzucony. Wygeneruj go ponownie.",
+    "errNombreViviendaLargo" to "Nazwa mieszkania nie może przekraczać 100 znaków.",
 ), respaldo = espanol) }

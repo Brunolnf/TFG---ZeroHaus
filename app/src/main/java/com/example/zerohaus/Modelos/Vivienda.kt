@@ -31,4 +31,9 @@ data class Vivienda(
     val precioLuzFactura: Double = 0.0,       // €/kWh medio pagado, con potencia e impuestos
     val potenciaContratadaKw: Double = 0.0,
     val fechaFactura: Long = 0L               // cuándo se leyó
-)
+) {
+    companion object {
+        /** Longitud máxima del nombre que admiten las reglas de Firestore. */
+        const val MAX_NOMBRE = 100
+    }
+}

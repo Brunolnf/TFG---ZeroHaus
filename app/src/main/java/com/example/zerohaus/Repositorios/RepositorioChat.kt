@@ -6,12 +6,24 @@ import com.example.zerohaus.Modelos.MensajeChat
 import com.example.zerohaus.Modelos.Moderacion
 import com.example.zerohaus.Util.getOrTimeout
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Source
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
+
+/**
+ * Campos del chat que cambian al enviar un mensaje: último mensaje, su fecha y
+ * un no leído más para el receptor. Son los únicos que las reglas dejan tocar
+ * (`cambioDeChatValido`).
+ */
+internal fun cambiosDeChat(ultimoMensaje: String, receptorUid: String, ahora: Long): Map<String, Any> = mapOf(
+    "ultimoMensaje" to ultimoMensaje,
+    "fechaUltimoMensaje" to ahora,
+    "noLeidosPor.$receptorUid" to FieldValue.increment(1)
+)
 
 /**
  * Chat entre clientes y profesionales: crear o recuperar conversaciones,
@@ -54,33 +66,48 @@ class RepositorioChat {
             .addOnFailureListener { callback("Usuario") }
     }
 
-    /**
-     * Actualiza el doc del chat con el último mensaje y el contador de no leídos
-     * para cada receptor. NO crea la entrada en `/notificaciones` ni envía push:
-     * de eso se encarga la Cloud Function `on_message_created`, que se dispara
-     * al crearse el doc de mensaje. Hacerlo aquí también duplicaría la notif.
-     */
-    private fun actualizarChatYNotificar(
-        chatId: String,
-        ultimoMensaje: String,
-        miUid: String
-    ) {
+    /** El receptor es el otro participante: lo que ya sabe el ViewModel, o si no, una lectura del chat. */
+    private fun resolverReceptor(chatId: String, otroUid: String?, callback: (String?) -> Unit) {
+        if (!otroUid.isNullOrBlank()) { callback(otroUid); return }
+        val miUid = uid()
         db.collection("chats").document(chatId).get()
             .addOnSuccessListener { chatDoc ->
                 val participantes = (chatDoc.get("participantes") as? List<*>)
-                    ?.filterIsInstance<String>() ?: emptyList()
-
-                val updates = mutableMapOf<String, Any>(
-                    "ultimoMensaje" to ultimoMensaje,
-                    "fechaUltimoMensaje" to System.currentTimeMillis()
-                )
-
-                participantes.filter { it != miUid }.forEach { receptorUid ->
-                    updates["noLeidosPor.$receptorUid"] = FieldValue.increment(1)
-                }
-
-                db.collection("chats").document(chatId).update(updates)
+                    ?.filterIsInstance<String>().orEmpty()
+                callback(participantes.firstOrNull { it != miUid })
             }
+            .addOnFailureListener { callback(null) }
+    }
+
+    /**
+     * Escribe el mensaje y la actualización del chat (último mensaje y no leídos) en
+     * un mismo WriteBatch: o van los dos o ninguno (antes, si fallaba la segunda
+     * escritura, el mensaje existía pero el chat no lo mostraba ni avisaba al otro).
+     * Las reglas evalúan cada escritura por separado; con un bloqueo se rechaza el
+     * lote entero y [alDenegar] avisa al usuario. NO crea la notificación ni envía
+     * push: de eso se encarga la Cloud Function `on_message_created`.
+     */
+    private fun enviarEnLote(
+        chatId: String,
+        mensajeRef: DocumentReference,
+        mensaje: MensajeChat,
+        resumen: String,
+        otroUid: String?,
+        alDenegar: () -> Unit,
+        callback: (Boolean) -> Unit
+    ) {
+        resolverReceptor(chatId, otroUid) { receptor ->
+            if (receptor == null) { callback(false); return@resolverReceptor }
+            db.batch()
+                .set(mensajeRef, mensaje)
+                .update(db.collection("chats").document(chatId), cambiosDeChat(resumen, receptor, System.currentTimeMillis()))
+                .commit()
+                .addOnSuccessListener { callback(true) }
+                .addOnFailureListener { e ->
+                    if (Moderacion.esPermisoDenegado(e)) alDenegar()
+                    callback(false)
+                }
+        }
     }
 
     fun obtenerOCrearChat(
@@ -198,6 +225,7 @@ class RepositorioChat {
     fun enviarMensaje(
         chatId: String,
         texto: String,
+        otroUid: String? = null,
         alDenegar: () -> Unit = {},
         callback: (Boolean) -> Unit
     ) {
@@ -217,20 +245,12 @@ class RepositorioChat {
                 tipo = "texto"
             )
 
-            ref.set(mensaje)
-                .addOnSuccessListener {
-                    actualizarChatYNotificar(chatId, texto, miUid)
-                    callback(true)
-                }
-                .addOnFailureListener { e ->
-                    if (Moderacion.esPermisoDenegado(e)) alDenegar()
-                    callback(false)
-                }
+            enviarEnLote(chatId, ref, mensaje, texto, otroUid, alDenegar, callback)
         }
     }
 
     /** Envía una foto ya comprimida en JPEG ([com.example.zerohaus.Util.Imagenes]). */
-    fun enviarImagen(chatId: String, jpeg: ByteArray, caption: String = "", alDenegar: () -> Unit = {}, callback: (Boolean) -> Unit) {
+    fun enviarImagen(chatId: String, jpeg: ByteArray, caption: String = "", otroUid: String? = null, alDenegar: () -> Unit = {}, callback: (Boolean) -> Unit) {
         val miUid = uid()
         val ref = db.collection("chats").document(chatId).collection("mensajes").document()
         val storageRef = storage.reference.child("chats/$chatId/${ref.id}.jpg")
@@ -253,16 +273,8 @@ class RepositorioChat {
                         mediaUrl = url
                     )
 
-                    ref.set(mensaje)
-                        .addOnSuccessListener {
-                            val resumen = if (caption.isNotEmpty()) "📷 $caption" else "📷 Foto"
-                            actualizarChatYNotificar(chatId, resumen, miUid)
-                            callback(true)
-                        }
-                        .addOnFailureListener { e ->
-                            if (Moderacion.esPermisoDenegado(e)) alDenegar()
-                            callback(false)
-                        }
+                    val resumen = if (caption.isNotEmpty()) "📷 $caption" else "📷 Foto"
+                    enviarEnLote(chatId, ref, mensaje, resumen, otroUid, alDenegar, callback)
                 }
             }
             .addOnFailureListener { callback(false) }
@@ -273,6 +285,7 @@ class RepositorioChat {
         uri: Uri,
         nombre: String,
         bytes: Long,
+        otroUid: String? = null,
         alDenegar: () -> Unit = {},
         callback: (Boolean) -> Unit
     ) {
@@ -303,15 +316,7 @@ class RepositorioChat {
                         mediaBytes = bytes
                     )
 
-                    ref.set(mensaje)
-                        .addOnSuccessListener {
-                            actualizarChatYNotificar(chatId, "📎 $nombrePdf", miUid)
-                            callback(true)
-                        }
-                        .addOnFailureListener { e ->
-                            if (Moderacion.esPermisoDenegado(e)) alDenegar()
-                            callback(false)
-                        }
+                    enviarEnLote(chatId, ref, mensaje, "📎 $nombrePdf", otroUid, alDenegar, callback)
                 }
             }
             .addOnFailureListener { callback(false) }

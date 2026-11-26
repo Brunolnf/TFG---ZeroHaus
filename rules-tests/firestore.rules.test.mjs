@@ -9,7 +9,8 @@ import {
   initializeTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
-  collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where,
+  collection, deleteDoc, deleteField, doc, getDoc, getDocs, increment, query, setDoc, updateDoc, where,
+  writeBatch,
 } from "firebase/firestore";
 
 let env;
@@ -1160,6 +1161,266 @@ describe("cuentas de Stripe Connect y datos internos de los pagos", () => {
       await assertFails(setDoc(doc(db, "limpieza_stripe/l2"), { cobros: ["pi_ajeno"], customerId: "cus_ajeno" }),
         `${quien}: crear limpieza`);
       await assertFails(deleteDoc(doc(db, "limpieza_stripe/l1")), `${quien}: borrar limpieza`);
+    }
+  });
+});
+
+// Cola /limpieza_storage (T-I1): lo que Storage no dejó borrar al borrar una
+// cuenta o un mensaje. Solo la usan las Cloud Functions y cae en el deny-all:
+// si la app pudiera crear un encargo, haría borrar archivos de otros chats o
+// perfiles; si pudiera borrarlo, los archivos de una cuenta borrada se quedarían.
+describe("cola de limpieza de Storage", () => {
+  const encargo = { prefijo: "chats/ajeno/", creado: 1, fallos: 0, proximoIntento: 0, procesandoHasta: 0 };
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), "limpieza_storage/l1"), encargo);
+    });
+  });
+
+  it("nadie la lee, la lista ni la escribe desde la app, tampoco el administrador", async () => {
+    for (const [quien, db] of [["cliente", verificado("cliente")], ["pro", verificado("pro")],
+                               ["sin verificar", sinVerificar("cliente")], ["admin", comoAdmin()],
+                               ["sin sesión", env.unauthenticatedContext().firestore()]]) {
+      await assertFails(getDoc(doc(db, "limpieza_storage/l1")), `${quien}: leer`);
+      await assertFails(getDocs(collection(db, "limpieza_storage")), `${quien}: listar`);
+      await assertFails(setDoc(doc(db, "limpieza_storage/l2"), { ...encargo, prefijo: "perfiles/pro/" }),
+        `${quien}: crear`);
+      await assertFails(updateDoc(doc(db, "limpieza_storage/l1"), { prefijo: "perfiles/pro/" }), `${quien}: cambiar`);
+      await assertFails(updateDoc(doc(db, "limpieza_storage/l1"), { requiereAdmin: true }), `${quien}: parar`);
+      await assertFails(deleteDoc(doc(db, "limpieza_storage/l1")), `${quien}: borrar`);
+    }
+  });
+});
+
+// Escrituras en lote de la app (bloque I): las reglas evalúan cada escritura
+// y, si una no pasa, no se escribe ninguna. Datos tal como los escribe la app.
+describe("lotes de la app: mensaje con el chat, vivienda con su informe", () => {
+  const URL_STORAGE = "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/chats%2F";
+  const leer = async (ruta) => {
+    let snap;
+    await env.withSecurityRulesDisabled(async (ctx) => { snap = await getDoc(doc(ctx.firestore(), ruta)); });
+    return snap;
+  };
+  const sembrar = (ruta, datos) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), ruta), datos));
+
+  // RepositorioChat.enviarEnLote: set del MensajeChat y update de cambiosDeChat()
+  const loteMensaje = (db, { receptor = "pro", mensajeId = "mLote" } = {}) => {
+    const ahora = Date.now();
+    const lote = writeBatch(db);
+    lote.set(doc(db, `chats/con_mensajes/mensajes/${mensajeId}`), {
+      id: mensajeId, chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "",
+      fecha: ahora, leido: false, tipo: "imagen", mediaNombre: "", mediaBytes: 0,
+      mediaUrl: `${URL_STORAGE}con_mensajes%2F${mensajeId}.jpg?alt=media&token=abc`,
+    });
+    lote.update(doc(db, "chats/con_mensajes"), {
+      ultimoMensaje: "📷 Foto", fechaUltimoMensaje: ahora, [`noLeidosPor.${receptor}`]: increment(1),
+    });
+    return lote;
+  };
+  const nadaEscrito = async () => {
+    assert.equal((await leer("chats/con_mensajes/mensajes/mLote")).exists(), false, "el mensaje no se escribe");
+    assert.equal((await leer("chats/con_mensajes")).data().ultimoMensaje, undefined, "el chat no cambia");
+  };
+
+  it("el mensaje y el chat se escriben juntos sin bloqueo", async () => {
+    await assertSucceeds(loteMensaje(verificado("cliente")).commit());
+    assert.equal((await leer("chats/con_mensajes/mensajes/mLote")).exists(), true);
+    const chat = (await leer("chats/con_mensajes")).data();
+    assert.equal(chat.ultimoMensaje, "📷 Foto");
+    assert.deepEqual(chat.noLeidosPor, { pro: 1 });
+  });
+
+  it("con un bloqueo en cualquier sentido se rechaza el lote entero", async () => {
+    for (const [autor, bloqueado] of [["pro", "cliente"], ["cliente", "pro"]]) {
+      await sembrar(`bloqueos/${autor}_${bloqueado}`, { autor, bloqueado, fecha: 1 });
+      await assertFails(loteMensaje(verificado("cliente")).commit(), `${autor} bloqueó a ${bloqueado}`);
+      await nadaEscrito();
+      await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), `bloqueos/${autor}_${bloqueado}`)));
+    }
+  });
+
+  it("se rechaza entero si suma un no leído a quien no participa en el chat", async () => {
+    await assertFails(loteMensaje(verificado("cliente"), { receptor: "otro" }).commit());
+    await nadaEscrito();
+  });
+
+  // cambioDeChatValido: los no leídos propios solo se quedan igual o a 0
+  it("se rechaza entero si suma un no leído al propio emisor", async () => {
+    await assertFails(loteMensaje(verificado("cliente"), { receptor: "cliente" }).commit());
+    await nadaEscrito();
+  });
+
+  // RepositorioInformes.guardarViviendaEInforme: set de la Vivienda y del
+  // InformeEnergetico con ids reservados antes
+  const vivienda = (extra = {}) => ({
+    id: "v1", uid: "cliente", nombre: "Piso de Madrid", superficie: 90, anioConstruccion: 1990,
+    tipoVentanas: "Doble", aislamiento: "Bajo", calefaccion: "Gas natural", acs: "Gas natural",
+    direccion: "", provincia: "Madrid", orientacion: "Sur", iluminacion: "LED", tipoVivienda: "Piso",
+    refrigeracion: "No", fotovoltaica: "No", ocupantes: 3, electrodomesticos: "A", fechaCreacion: Date.now(),
+    consumoLuzFacturaKwh: 0, precioLuzFactura: 0, potenciaContratadaKw: 0, fechaFactura: 0, ...extra,
+  });
+  const informe = (extra = {}) => ({
+    id: "i1", viviendaId: "v1", uid: "cliente", nombreVivienda: "Piso de Madrid", etiqueta: "E",
+    estadoEficiencia: "Mejorable", consumoEstimado: 12000.5, consumoPorM2: 133.3, energiaPrimariaM2: 150.2,
+    emisiones: 2500.1, costeAnual: 1400.7,
+    recomendaciones: [{ titulo: "Aislar la fachada", ahorroEstimado: 15, ahorroKwh: 1800.5, ahorroEuros: 210.4 }],
+    fechaGeneracion: Date.now(), precioLuz: 0.235, consumoLuzEstimado: 3100.2, consumoLuzFactura: 0, ...extra,
+  });
+  const loteInforme = (db, datosVivienda = vivienda(), datosInforme = informe()) => {
+    const lote = writeBatch(db);
+    lote.set(doc(db, "viviendas/v1"), datosVivienda);
+    lote.set(doc(db, "informes/i1"), datosInforme);
+    return lote;
+  };
+
+  it("la vivienda y su informe se crean juntos, y el reintento con los mismos ids también pasa", async () => {
+    const db = verificado("cliente");
+    await assertSucceeds(loteInforme(db).commit());
+    assert.equal((await leer("viviendas/v1")).exists(), true);
+    assert.equal((await leer("informes/i1")).exists(), true);
+    await assertSucceeds(loteInforme(db).commit());            // reintento: los mismos documentos
+  });
+
+  it("un informe con el uid de otro rechaza también la vivienda", async () => {
+    await assertFails(loteInforme(verificado("cliente"), vivienda(), informe({ uid: "pro" })).commit());
+    assert.equal((await leer("viviendas/v1")).exists(), false);
+    assert.equal((await leer("informes/i1")).exists(), false);
+  });
+
+  it("una vivienda con el nombre por encima del límite rechaza también el informe", async () => {
+    const largo = "x".repeat(101);
+    await assertFails(loteInforme(verificado("cliente"), vivienda({ nombre: largo }),
+      informe({ nombreVivienda: largo })).commit());
+    assert.equal((await leer("viviendas/v1")).exists(), false);
+    assert.equal((await leer("informes/i1")).exists(), false);
+    // Con 100, el máximo de la app (Vivienda.MAX_NOMBRE), pasa
+    const justo = "x".repeat(100);
+    await assertSucceeds(loteInforme(verificado("cliente"), vivienda({ nombre: justo }),
+      informe({ nombreVivienda: justo })).commit());
+  });
+});
+
+// Revisión de 773f8d3: el adjunto de un mensaje es el de ESE mensaje (si no, al
+// borrarlo el servidor borraba el archivo de otro) y nadie se suma no leídos.
+describe("adjunto del propio mensaje y no leídos propios", () => {
+  const URL_STORAGE = "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/chats%2F";
+  const adjunto = (archivo) => `${URL_STORAGE}con_mensajes%2F${archivo}?alt=media&token=abc`;
+  // MensajeChat tal como lo escribe la app
+  const mensaje = (id, extra = {}) => ({
+    id, chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "",
+    fecha: Date.now(), leido: false, tipo: "imagen", mediaUrl: "", mediaNombre: "", mediaBytes: 0, ...extra,
+  });
+  const escribir = (id, datos) => setDoc(doc(verificado("cliente"), `chats/con_mensajes/mensajes/${id}`), datos);
+  const sembrarChat = (extra) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "chats/con_mensajes"), {
+    participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente", "pro"], ...extra,
+  }));
+  const cambiar = (quien, cambios) => updateDoc(doc(verificado(quien), "chats/con_mensajes"), cambios);
+  const envio = (extra = {}) => ({ ultimoMensaje: "hola", fechaUltimoMensaje: Date.now(), "noLeidosPor.pro": increment(1), ...extra });
+
+  it("los adjuntos que sube la app siguen pasando: {id}.jpg y {id}_{nombre}.pdf", async () => {
+    await assertSucceeds(escribir("m30", mensaje("m30", { mediaUrl: adjunto("m30.jpg") })));
+    await assertSucceeds(escribir("AbCdEfGhIj0123456789", mensaje("AbCdEfGhIj0123456789",
+      { mediaUrl: adjunto("AbCdEfGhIj0123456789.jpg") })));
+    await assertSucceeds(escribir("m31", mensaje("m31", { tipo: "archivo", mediaNombre: "Factura luz.pdf",
+      mediaUrl: adjunto("m31_Factura%20luz.pdf") })));
+  });
+
+  it("un mensaje no puede llevar el adjunto de otro mensaje del chat", async () => {
+    await assertFails(escribir("m32", mensaje("m32", { mediaUrl: adjunto("m30.jpg") })), "archivo de m30");
+    await assertFails(escribir("m32", mensaje("m32", { tipo: "archivo", mediaNombre: "presupuesto.pdf",
+      mediaUrl: adjunto("m31_presupuesto.pdf") })), "PDF de m31");
+    // «m3» es el principio de «m30»: detrás del id tiene que ir «.» o «_»
+    await assertFails(escribir("m3", mensaje("m3", { mediaUrl: adjunto("m30.jpg") })), "id que es prefijo de otro");
+  });
+
+  it("el id del mensaje es como los de la app: solo letras y números", async () => {
+    // Con «_» el id «m31_presupuesto» casaría con el PDF «m31_presupuesto.pdf» de m31
+    await assertFails(escribir("m31_presupuesto", mensaje("m31_presupuesto", { tipo: "archivo",
+      mediaNombre: "presupuesto.pdf", mediaUrl: adjunto("m31_presupuesto.pdf") })), "id con _");
+    await assertFails(escribir("m30.jpg", mensaje("m30.jpg", { mediaUrl: adjunto("m30.jpg.jpg") })), "id con .");
+    await assertFails(escribir("x|.*", mensaje("x|.*", { tipo: "texto", texto: "hola" })), "id con | y .*");
+    await assertFails(escribir("m-1", mensaje("m-1", { tipo: "texto", texto: "hola" })), "id con -");
+    await assertSucceeds(escribir("m33", mensaje("m33", { tipo: "texto", texto: "hola" })));
+  });
+
+  it("los no leídos propios solo se quedan igual o se ponen a 0; los del otro, sí suben", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 3, pro: 1 } });
+    await assertFails(cambiar("cliente", { "noLeidosPor.cliente": increment(1) }), "sumarse uno");
+    await assertFails(cambiar("cliente", { "noLeidosPor.cliente": 5 }), "ponerse otro número");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.cliente": increment(1) })), "en un envío");
+    // El envío de la app: los propios (3) se quedan igual y los del otro suben
+    await assertSucceeds(cambiar("cliente", envio()));
+    // marcarLeidos: los propios a 0
+    await assertSucceeds(cambiar("cliente", { "noLeidosPor.cliente": 0 }));
+  });
+
+  it("chats antiguos sin noLeidosPor o sin la clave propia cuentan como 0", async () => {
+    await sembrarChat({});                                 // sin noLeidosPor
+    await assertFails(cambiar("cliente", { "noLeidosPor.cliente": 1 }));
+    await assertSucceeds(cambiar("cliente", { "noLeidosPor.cliente": 0 }));
+    await sembrarChat({ noLeidosPor: { pro: 2 } });        // sin la clave propia
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.cliente": 1 })));
+    await assertSucceeds(cambiar("cliente", envio()));
+    await assertSucceeds(cambiar("cliente", { "noLeidosPor.cliente": 0 }));
+  });
+
+  it("con un bloqueo solo se marca como leído lo propio, sin sumarse nada", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 3, pro: 1 } });
+    await env.withSecurityRulesDisabled((ctx) =>
+      setDoc(doc(ctx.firestore(), "bloqueos/pro_cliente"), { autor: "pro", bloqueado: "cliente", fecha: 1 }));
+    await assertFails(cambiar("cliente", { "noLeidosPor.cliente": increment(1) }), "sumarse uno");
+    await assertFails(cambiar("cliente", { "noLeidosPor.pro": increment(1) }), "sumarle al otro");
+    await assertSucceeds(cambiar("cliente", { "noLeidosPor.cliente": 0 }));
+  });
+});
+
+// Revisión de 7c83868: los no leídos del otro solo suben de 1 en 1 (el envío),
+// y los adjuntos con los nombres que da la app de verdad siguen pasando
+describe("no leídos del otro y nombres reales de los adjuntos", () => {
+  const sembrarChat = (extra) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "chats/con_mensajes"), {
+    participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente", "pro"], ...extra,
+  }));
+  const cambiar = (quien, cambios) => updateDoc(doc(verificado(quien), "chats/con_mensajes"), cambios);
+  const envio = (extra = {}) => ({ ultimoMensaje: "hola", fechaUltimoMensaje: Date.now(), "noLeidosPor.pro": increment(1), ...extra });
+  // downloadUrl de la app: Uri.encode de Android, que codifica igual que encodeURIComponent
+  const urlReal = (archivo) => "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/"
+    + encodeURIComponent(`chats/con_mensajes/${archivo}`) + "?alt=media&token=8f1c2d3e-0a1b-4c5d-9e8f-0123456789ab";
+
+  it("los no leídos del otro solo se quedan igual o suben exactamente 1, como entero", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 0, pro: 2 } });
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": increment(2) })), "subir 2");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": 1 })), "bajarlo");
+    await assertFails(cambiar("cliente", { "noLeidosPor.pro": 0 }), "marcarle como leído");
+    await assertFails(cambiar("cliente", { "noLeidosPor.pro": deleteField() }), "quitarle el contador");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": 2.5 })), "decimal");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": "3" })), "texto");
+    await assertSucceeds(cambiar("cliente", envio({ "noLeidosPor.pro": 3 })));          // +1 escrito como número
+    await assertSucceeds(cambiar("cliente", envio()));                                   // increment(1) de la app
+    await assertSucceeds(cambiar("cliente", { ultimoMensaje: "x", fechaUltimoMensaje: Date.now() }));
+    await assertSucceeds(cambiar("pro", { "noLeidosPor.pro": 0 }));                      // marcarLeidos del otro
+  });
+
+  it("el envío de la 2.3.0 (el mensaje y después el chat, sin lote) sigue pasando", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 0, pro: 0 } });
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/m50"), {
+      id: "m50", chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "hola",
+      fecha: Date.now(), leido: false, tipo: "texto", mediaUrl: "", mediaNombre: "", mediaBytes: 0,
+    }));
+    await assertSucceeds(cambiar("cliente", envio()));
+    await assertSucceeds(cambiar("cliente", envio()));                                   // dos seguidos
+    await assertSucceeds(cambiar("pro", { "noLeidosPor.pro": 0 }));
+  });
+
+  it("PDF con tildes, paréntesis, varios puntos y %25 en la URL real", async () => {
+    for (const [id, archivo] of [["m60", "m60_Factura (enero) v1.2.final ñ 100%.pdf"],
+                                 ["m61", "m61_descuento%25 á.pdf"],
+                                 ["m62", "m62_presupuesto.v2.revisado.pdf"]]) {
+      await assertSucceeds(setDoc(doc(verificado("cliente"), `chats/con_mensajes/mensajes/${id}`), {
+        id, chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "",
+        fecha: Date.now(), leido: false, tipo: "archivo", mediaUrl: urlReal(archivo),
+        mediaNombre: archivo.slice(id.length + 1), mediaBytes: 1234,
+      }), archivo);
     }
   });
 });
