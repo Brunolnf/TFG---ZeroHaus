@@ -303,9 +303,12 @@ class ConfiguracionTest(unittest.TestCase):
         self.assertLess(funciones["on_denuncia_creada"].maxInstances, normal)
         # Limpieza de Storage: al purgar un chat llega un evento por mensaje,
         # y basta con pocas instancias (cada una atiende 80 a la vez)
-        for nombre in ("on_mensaje_borrado", "on_limpieza_storage_creada"):
+        for nombre in ("on_mensaje_borrado", "on_limpieza_storage_creada", "on_denuncia_resuelta"):
             with self.subTest(funcion=nombre):
                 self.assertLessEqual(funciones[nombre].maxInstances, 3)
+        resuelta = funciones["on_denuncia_resuelta"].eventTrigger
+        self.assertEqual(resuelta["eventType"], "google.cloud.firestore.document.v1.updated")
+        self.assertEqual(resuelta["eventFilterPathPatterns"], {"document": "denuncias/{denunciaId}"})
 
     def test_los_triggers_de_storage_escuchan_lo_que_toca(self):
         funciones = self.funciones_desplegables()
@@ -478,6 +481,7 @@ class _RefMem:
 
 _OPERADORES = {
     "==": lambda a, b: a == b, ">": lambda a, b: a > b, "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
+    ">=": lambda a, b: a >= b,
     "array_contains": lambda a, b: isinstance(a, list) and b in a,
 }
 
@@ -1720,8 +1724,15 @@ CAMPOS_LIMPIEZA = {"prefijo", "creado", "fallos", "proximoIntento", "procesandoH
 
 
 def url_adjunto(ruta, bucket=BUCKET, host="https://firebasestorage.googleapis.com"):
-    """mediaUrl tal como la guarda la app (downloadUrl de Firebase Storage)."""
+    """mediaUrl con el nombre codificado entero (también paréntesis)."""
     return f"{host}/v0/b/{bucket}/o/{urllib.parse.quote(ruta, safe='')}?alt=media&token=t0k3n-secreto"
+
+
+def url_android(ruta):
+    """downloadUrl tal como la da la app: Uri.encode de Android deja sin
+    codificar letras, números y -_.!~*'(), y codifica «/» como %2F."""
+    return (f"https://firebasestorage.googleapis.com/v0/b/{BUCKET}/o/{urllib.parse.quote(ruta, safe=chr(39) + '!~*()')}"
+            "?alt=media&token=8f1c2d3e-0a1b-4c5d-9e8f-0123456789ab")
 
 
 class _BlobFalso:
@@ -2157,6 +2168,35 @@ class AdjuntoBorradoTest(_ConStorage):
                 self.assertIn("chats/c1/mB_presupuesto.pdf", self.storage.objetos)
         self.assertEqual(self.storage.llamadas, [])
 
+    def test_pdf_con_tildes_parentesis_varios_puntos_y_porcentajes_con_la_url_real(self):
+        nombres = {
+            "m40": "m40_Factura (enero) v1.2.final ñ 100%.pdf",     # «%» → %25
+            "m41": "m41_descuento%25 á.pdf",                       # «%25» literal → %2525
+            "m42": "m42_presupuesto.v2.revisado.pdf",
+        }
+        for mensaje_id, archivo in nombres.items():
+            with self.subTest(archivo=archivo):
+                ruta = f"chats/c1/{archivo}"
+                self.storage.objetos.add(ruta)
+                datos = self.mensaje("c1", mensaje_id, tipo="archivo", mediaNombre=archivo.split("_", 1)[1],
+                                     mediaUrl=url_android(ruta))
+                self.assertIn("?alt=media&token=", datos["mediaUrl"])
+                self.borrar_mensaje("c1", mensaje_id, datos)
+                self.assertNotIn(ruta, self.storage.objetos)
+        # Ni un doble decodificado («%25» no se convierte en «%») ni otros archivos
+        self.assertEqual(self.storage.objetos, {"chats/c1/m9.jpg", "chats/c1/m1.jpg.bak", "chats/c2/m5.jpg",
+                                                "perfiles/otro/foto_perfil"})
+        self.assertEqual(self.limpiezas(), {})
+
+    def test_un_mensaje_antiguo_cuyo_archivo_no_empieza_por_su_id_no_se_borra(self):
+        self.storage.objetos.add("chats/c1/1699999999999_foto.jpg")
+        antiguo = self.mensaje("c1", "mAntiguo", tipo="imagen",
+                               mediaUrl=url_android("chats/c1/1699999999999_foto.jpg"))
+        self.borrar_mensaje("c1", "mAntiguo", antiguo)
+        self.assertIn("chats/c1/1699999999999_foto.jpg", self.storage.objetos)
+        self.assertEqual(self.storage.llamadas, [])
+        self.assertIn("no se borra nada", str(self.log.call_args_list))
+
     def test_si_el_chat_ya_no_existe_no_hace_nada(self):
         # Purga de una cuenta: la carpeta entera ya está borrada o encargada
         datos = self.mensaje("c1", "m1", archivo="m1.jpg")
@@ -2266,6 +2306,10 @@ class EvidenciaDenunciaTest(_ConStorage):
             "descartada": dict(estado="descartada"),
             "de otro chat": dict(referencia="c2"),
             "de un perfil con el mismo id": dict(contexto="perfil"),
+            # Las reglas no exigen que el autor esté en el chat
+            "de quien no participa": dict(autor="intruso"),
+            # Su autor pasó del tope diario de denuncias
+            "con exceso": dict(exceso=True),
         }
         for caso, cambios in casos.items():
             with self.subTest(caso=caso):
@@ -2274,6 +2318,65 @@ class EvidenciaDenunciaTest(_ConStorage):
                 self.borrar_mensaje("c1", "m1", datos)
                 self.assertNotIn("chats/c1/m1.jpg", self.storage.objetos)
                 self.assertEqual(self.limpiezas(), {})
+
+    def test_muchas_denuncias_de_otro_contexto_no_esconden_la_del_chat(self):
+        for i in range(25):
+            self.db.docs[f"denuncias/u{i}_x"] = {**self.DENUNCIA, "autor": f"u{i}",
+                                                 "contexto": "perfil" if i % 2 else "resena"}
+        self.denunciar()                                   # la de verdad, la última
+        self.borrar_mensaje("c1", "m1", self.datos)
+        self.assertIn("chats/c1/m1.jpg", self.storage.objetos)
+        self.assertEqual(len(self.limpiezas()), 1)
+
+    def resolver(self, estado, denuncia_id="otro_uid_borrado"):
+        """El administrador marca la denuncia y llega el evento de on_denuncia_resuelta."""
+        antes = dict(self.db.docs[f"denuncias/{denuncia_id}"])
+        despues = {**antes, "estado": estado}
+        self.db.docs[f"denuncias/{denuncia_id}"] = despues
+        snap = lambda d: SimpleNamespace(exists=True, to_dict=lambda: dict(d))  # noqa: E731
+        inspect.unwrap(main.on_denuncia_resuelta)(SimpleNamespace(
+            params={"denunciaId": denuncia_id}, data=SimpleNamespace(before=snap(antes), after=snap(despues))))
+
+    def test_al_resolver_la_denuncia_sus_adjuntos_se_borran_antes(self):
+        for estado in ("revisada", "descartada"):
+            with self.subTest(estado=estado):
+                self.setUp()
+                self.denunciar()
+                self.borrar_mensaje("c1", "m1", self.datos)
+                self.reloj[0] = AHORA_MS + main.DIA_MS
+                # Otro encargo del chat que espera por un fallo: sigue su curso
+                self.storage.objetos.add("chats/c1/m9.jpg")
+                fallido = main._encolar_limpieza_storage(self.db, "chats/c1/m9.jpg")
+                espera = self.reloj[0] + main.LIMPIEZA_STORAGE_ESPERA_MS
+                self.db.docs[f"limpieza_storage/{fallido}"].update(fallos=1, proximoIntento=espera)
+                self.resolver(estado)
+                evidencia = self.limpiezas()[main._id_limpieza_storage("chats/c1/m1.jpg")]
+                self.assertEqual(evidencia["proximoIntento"], self.reloj[0])
+                self.assertEqual(self.limpiezas()[fallido]["proximoIntento"], espera)
+                # La tarea diaria borra ya la evidencia, 29 días antes de lo previsto
+                self.assertEqual(main._procesar_limpiezas_storage(self.db), 1)
+                self.assertNotIn("chats/c1/m1.jpg", self.storage.objetos)
+                self.assertIn("chats/c1/m9.jpg", self.storage.objetos)
+
+    def test_si_queda_otra_denuncia_pendiente_del_chat_se_siguen_guardando(self):
+        self.denunciar()
+        self.db.docs["denuncias/uid_borrado_otro"] = {**self.DENUNCIA, "autor": "uid_borrado", "objetivo": "otro"}
+        self.borrar_mensaje("c1", "m1", self.datos)
+        self.resolver("revisada")
+        limpieza, = self.limpiezas().values()
+        self.assertEqual(limpieza["proximoIntento"], AHORA_MS + 30 * main.DIA_MS)
+        self.resolver("descartada", "uid_borrado_otro")
+        limpieza, = self.limpiezas().values()
+        self.assertEqual(limpieza["proximoIntento"], AHORA_MS)
+
+    def test_otros_cambios_de_la_denuncia_no_adelantan_nada(self):
+        self.denunciar(estado=None)
+        self.borrar_mensaje("c1", "m1", self.datos)
+        self.resolver("pendiente")                     # lo que hace on_denuncia_creada
+        self.denunciar(contexto="perfil")
+        self.resolver("revisada")                      # una de perfil
+        limpieza, = self.limpiezas().values()
+        self.assertEqual(limpieza["proximoIntento"], AHORA_MS + 30 * main.DIA_MS)
 
     def test_en_la_purga_de_una_cuenta_se_borra_todo_aunque_haya_denuncia(self):
         mensajes = {"m1": self.datos, "m2": self.mensaje("c1", "m2", archivo="m2_factura.pdf")}

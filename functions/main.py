@@ -20,6 +20,8 @@ Triggers de Firestore
   on_evento_perfil             Visita o contacto a un profesional → estadísticas.
   on_tecnico_creado            Perfil profesional nuevo → emailVerificado según Auth.
   on_denuncia_creada           Denuncia nueva → evidencia acotada y aviso al administrador.
+  on_denuncia_resuelta         Denuncia de chat revisada o descartada → sus adjuntos guardados
+                               se pueden borrar ya.
   on_mensaje_borrado           Mensaje borrado → borra su adjunto de Storage (con una denuncia
                                pendiente del chat, a los 30 días).
   on_limpieza_storage_creada   Encargo nuevo en /limpieza_storage → lo intenta enseguida.
@@ -1118,14 +1120,23 @@ def _carpeta_encargada(db, chat_id: str) -> bool:
     return db.collection("limpieza_storage").document(_id_limpieza_storage(f"chats/{chat_id}/")).get().exists
 
 
-def _hay_denuncia_pendiente(db, chat_id: str) -> bool:
+def _hay_denuncia_pendiente(db, chat_id: str, participantes) -> bool:
     """Alguna denuncia de este chat sin revisar: estado «pendiente» o aún sin
-    estado (on_denuncia_creada lo pone unos segundos después). Una consulta por
-    `referencia` (índice de un campo); contexto y estado se miran aquí."""
-    consulta = db.collection("denuncias").where(filter=FieldFilter("referencia", "==", chat_id)).limit(20)
+    estado (on_denuncia_creada lo pone unos segundos después), hecha por un
+    participante y que no sea un exceso. Las reglas no exigen que el autor esté
+    en el chat: sin esto, cualquiera que supiera el id retrasaría 30 días el
+    borrado de sus adjuntos. Se recorre entera y sin límite (con uno, otras
+    denuncias escondían la de verdad). Dos igualdades: Firestore mezcla los
+    índices de un campo, sin índice compuesto. «Sin estado» no se puede
+    consultar, así que el estado se mira aquí."""
+    participantes = participantes if isinstance(participantes, list) else []
+    consulta = (db.collection("denuncias")
+                .where(filter=FieldFilter("referencia", "==", chat_id))
+                .where(filter=FieldFilter("contexto", "==", "chat")))
     for snap in consulta.stream():
         d = snap.to_dict() or {}
-        if d.get("contexto") == "chat" and d.get("estado") in (None, "pendiente"):
+        if (d.get("estado") in (None, "pendiente") and d.get("exceso") is not True
+                and d.get("autor") in participantes):
             return True
     return False
 
@@ -1174,9 +1185,10 @@ def on_mensaje_borrado(event) -> None:
     db = firestore.client()
     # Sin el chat, es la purga de una cuenta: ya ha borrado (o encargado) la
     # carpeta entera antes que los mensajes, y aquí se ahorran miles de llamadas
-    if not db.collection("chats").document(chat_id).get().exists:
+    chat = db.collection("chats").document(chat_id).get()
+    if not chat.exists:
         return
-    if _hay_denuncia_pendiente(db, chat_id):
+    if _hay_denuncia_pendiente(db, chat_id, (chat.to_dict() or {}).get("participantes")):
         _guardar_evidencia(db, chat_id, mensaje_id, ruta)
         return
     _, error = _borrar_storage(ruta)
@@ -1503,6 +1515,62 @@ def on_denuncia_creada(event) -> None:
         _avisar_denuncia(db, denuncia_id, datos)
     elif exceso:
         print(f"[DENUNCIAS] {denuncia_id}: su autor pasa de {DENUNCIAS_MAX_DIA_AUTOR} hoy, sin correo")
+
+
+ESTADOS_DENUNCIA_RESUELTA = {"revisada", "descartada"}
+
+
+def _adelantar_evidencia(db, chat_id: str) -> int:
+    """Los adjuntos de `chat_id` que se guardaban como evidencia (encargados a
+    30 días, sin fallos) pasan a poder borrarse ya: proximoIntento = ahora, y
+    los borra la tarea diaria. Una consulta por rango de `prefijo` (índice de
+    un campo). Devuelve cuántos."""
+    carpeta, ahora, adelantados = f"chats/{chat_id}/", _ahora_ms(), 0
+    consulta = (db.collection("limpieza_storage")
+                .where(filter=FieldFilter("prefijo", ">=", carpeta))
+                .where(filter=FieldFilter("prefijo", "<", carpeta + "")))
+    for snap in consulta.stream():
+        d = snap.to_dict() or {}
+        # Los que esperan por un fallo (o al administrador) siguen su curso
+        if (d.get("requiereAdmin") is True or int(d.get("fallos") or 0) > 0
+                or int(d.get("proximoIntento") or 0) <= ahora):
+            continue
+        try:
+            snap.reference.update({"proximoIntento": ahora})
+            adelantados += 1
+        except Exception as e:
+            print(f"[DENUNCIAS] No se pudo adelantar la limpieza {snap.id}: {e}")
+    return adelantados
+
+
+@firestore_fn.on_document_updated(
+    document="denuncias/{denunciaId}",
+    region=REGION,
+    max_instances=MAX_INSTANCIAS_DENUNCIAS,
+)
+def on_denuncia_resuelta(event) -> None:
+    """Denuncia de un chat revisada o descartada: los adjuntos que se
+    guardaban para que el administrador los viera ya pueden borrarse, salvo
+    que quede otra denuncia pendiente de ese chat. Barato: cualquier otro
+    cambio (p. ej. el de on_denuncia_creada) sale sin leer nada."""
+    if event.data is None or event.data.before is None or event.data.after is None:
+        return
+    antes = event.data.before.to_dict() or {}
+    despues = event.data.after.to_dict() or {}
+    if (despues.get("contexto") != "chat" or despues.get("estado") not in ESTADOS_DENUNCIA_RESUELTA
+            or antes.get("estado") in ESTADOS_DENUNCIA_RESUELTA):
+        return
+    chat_id = despues.get("referencia")
+    if not isinstance(chat_id, str) or not _ID_CHAT.fullmatch(chat_id):
+        return
+    db = firestore.client()
+    chat = db.collection("chats").document(chat_id).get()
+    if chat.exists and _hay_denuncia_pendiente(db, chat_id, (chat.to_dict() or {}).get("participantes")):
+        return
+    adelantados = _adelantar_evidencia(db, chat_id)
+    if adelantados:
+        print(f"[DENUNCIAS] {event.params['denunciaId']} resuelta: {adelantados} adjuntos del chat {chat_id} "
+              "se borran en la próxima tarea diaria")
 
 
 # ════════════════════════════════════════════════════════════════════════

@@ -424,6 +424,17 @@ service cloud.firestore {
       return d.diff(resource.data).affectedKeys().hasOnly(['noLeidosPor'])
           && d.get('noLeidosPor', {}).diff(resource.data.get('noLeidosPor', {})).affectedKeys().hasOnly([uid()]);
     }
+    // Los no leídos del otro participante solo se quedan igual o suben 1 (el
+    // increment del envío) y son un entero. Antes se le podían poner a 0
+    // (marcarle como leído) o sumarle cientos. Sin noLeidosPor o sin su
+    // clave cuentan como 0.
+    function noLeidosDelOtroValidos() {
+      let p = resource.data.participantes;
+      let otro = p[0] == uid() ? p[1] : p[0];
+      let antes = resource.data.get('noLeidosPor', {}).get(otro, 0);
+      let despues = request.resource.data.get('noLeidosPor', {}).get(otro, 0);
+      return despues == antes || (despues is int && despues == antes + 1);
+    }
     // Al enviar o leer un mensaje solo cambian el último mensaje, su fecha y
     // los no leídos. Antes un participante podía cambiar cualquier campo,
     // por ejemplo el nombre con el que el otro le ve.
@@ -440,7 +451,8 @@ service cloud.firestore {
           // Antes uno podía sumarse no leídos a sí mismo. En los chats antiguos
           // sin noLeidosPor o sin la clave propia cuentan como 0.
           && (d.get('noLeidosPor', {}).get(uid(), 0) == 0
-              || d.get('noLeidosPor', {}).get(uid(), 0) == resource.data.get('noLeidosPor', {}).get(uid(), 0));
+              || d.get('noLeidosPor', {}).get(uid(), 0) == resource.data.get('noLeidosPor', {}).get(uid(), 0))
+          && noLeidosDelOtroValidos();
     }
     // Mensaje bien formado. Los adjuntos solo pueden apuntar al Storage de
     // este mismo chat: antes se podía mandar como «foto» o «archivo» un

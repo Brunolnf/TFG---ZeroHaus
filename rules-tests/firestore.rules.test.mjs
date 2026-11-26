@@ -1374,3 +1374,53 @@ describe("adjunto del propio mensaje y no leídos propios", () => {
     await assertSucceeds(cambiar("cliente", { "noLeidosPor.cliente": 0 }));
   });
 });
+
+// Revisión de 7c83868: los no leídos del otro solo suben de 1 en 1 (el envío),
+// y los adjuntos con los nombres que da la app de verdad siguen pasando
+describe("no leídos del otro y nombres reales de los adjuntos", () => {
+  const sembrarChat = (extra) => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "chats/con_mensajes"), {
+    participantes: ["cliente", "pro"], fechaUltimoMensaje: 1000, escribieron: ["cliente", "pro"], ...extra,
+  }));
+  const cambiar = (quien, cambios) => updateDoc(doc(verificado(quien), "chats/con_mensajes"), cambios);
+  const envio = (extra = {}) => ({ ultimoMensaje: "hola", fechaUltimoMensaje: Date.now(), "noLeidosPor.pro": increment(1), ...extra });
+  // downloadUrl de la app: Uri.encode de Android, que codifica igual que encodeURIComponent
+  const urlReal = (archivo) => "https://firebasestorage.googleapis.com/v0/b/zerohaus-2a865.firebasestorage.app/o/"
+    + encodeURIComponent(`chats/con_mensajes/${archivo}`) + "?alt=media&token=8f1c2d3e-0a1b-4c5d-9e8f-0123456789ab";
+
+  it("los no leídos del otro solo se quedan igual o suben exactamente 1, como entero", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 0, pro: 2 } });
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": increment(2) })), "subir 2");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": 1 })), "bajarlo");
+    await assertFails(cambiar("cliente", { "noLeidosPor.pro": 0 }), "marcarle como leído");
+    await assertFails(cambiar("cliente", { "noLeidosPor.pro": deleteField() }), "quitarle el contador");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": 2.5 })), "decimal");
+    await assertFails(cambiar("cliente", envio({ "noLeidosPor.pro": "3" })), "texto");
+    await assertSucceeds(cambiar("cliente", envio({ "noLeidosPor.pro": 3 })));          // +1 escrito como número
+    await assertSucceeds(cambiar("cliente", envio()));                                   // increment(1) de la app
+    await assertSucceeds(cambiar("cliente", { ultimoMensaje: "x", fechaUltimoMensaje: Date.now() }));
+    await assertSucceeds(cambiar("pro", { "noLeidosPor.pro": 0 }));                      // marcarLeidos del otro
+  });
+
+  it("el envío de la 2.3.0 (el mensaje y después el chat, sin lote) sigue pasando", async () => {
+    await sembrarChat({ noLeidosPor: { cliente: 0, pro: 0 } });
+    await assertSucceeds(setDoc(doc(verificado("cliente"), "chats/con_mensajes/mensajes/m50"), {
+      id: "m50", chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "hola",
+      fecha: Date.now(), leido: false, tipo: "texto", mediaUrl: "", mediaNombre: "", mediaBytes: 0,
+    }));
+    await assertSucceeds(cambiar("cliente", envio()));
+    await assertSucceeds(cambiar("cliente", envio()));                                   // dos seguidos
+    await assertSucceeds(cambiar("pro", { "noLeidosPor.pro": 0 }));
+  });
+
+  it("PDF con tildes, paréntesis, varios puntos y %25 en la URL real", async () => {
+    for (const [id, archivo] of [["m60", "m60_Factura (enero) v1.2.final ñ 100%.pdf"],
+                                 ["m61", "m61_descuento%25 á.pdf"],
+                                 ["m62", "m62_presupuesto.v2.revisado.pdf"]]) {
+      await assertSucceeds(setDoc(doc(verificado("cliente"), `chats/con_mensajes/mensajes/${id}`), {
+        id, chatId: "con_mensajes", emisorUid: "cliente", emisorNombre: "Cliente", texto: "",
+        fecha: Date.now(), leido: false, tipo: "archivo", mediaUrl: urlReal(archivo),
+        mediaNombre: archivo.slice(id.length + 1), mediaBytes: 1234,
+      }), archivo);
+    }
+  });
+});
