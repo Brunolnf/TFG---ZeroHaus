@@ -1,4 +1,4 @@
-# Estado — 2026-11-20
+# Estado — 2026-11-26
 
 ## Hecho
 - F1 y F2 cerrados. Plan aprobado (`docs/plan.md`). Auditoría en `docs/auditoria.md` (solo local).
@@ -17,6 +17,20 @@
   - Con `pagos_habilitados` apagado no se abre dinero nuevo, pero lo que está en curso se puede terminar.
   - El borrado de cuenta no depende de Stripe: si hay dinero retenido no se borra, y la limpieza en Stripe pasa por la cola `/limpieza_stripe`.
   - Los contracargos solo avisan al administrador; no se le revierte la transferencia al profesional.
+- Bloque I (revisión externa de ChatGPT, verificada: 8 hallazgos confirmados y 1 plausible) fusionado en #61 el 2026-11-26, **sin desplegar**.
+  - El borrado de cuenta ya no pierde archivos si falla Storage: cola `/limpieza_storage`, reintentada cada día.
+  - El servidor borra el adjunto de un mensaje eliminado, y lo conserva 30 días si el chat tiene una denuncia pendiente.
+  - En la app:
+    - «Restaurar compras» funciona con dos cuentas de ZeroHaus.
+    - Las gráficas van por vivienda.
+    - La vivienda y el informe se guardan en un lote atómico.
+    - El mensaje y el chat se escriben en un mismo lote.
+    - Las respuestas de IA no se cruzan entre informes.
+    - El historial distingue un error de «sin informes».
+  - En las reglas:
+    - `mediaUrl` tiene que llevar el id del propio mensaje.
+    - Los no leídos propios solo se quedan igual o vuelven a 0.
+    - Los del otro solo suben de 1 en 1.
 
 ## Pendiente del usuario
 - **Stripe (para desplegar el bloque E):**
@@ -35,6 +49,11 @@
 - Decisión A5 (revisor del código de Opus). Se usa Sonnet en esfuerzo alto.
 
 ## Siguiente paso
+0. Desplegar el bloque I, que no depende de Stripe:
+   - `firestore:rules`.
+   - Functions `on_mensaje_borrado`, `on_limpieza_storage_creada`, `on_denuncia_resuelta`, `revisar_suscripciones_diario`, `eliminar_mi_cuenta` y `eliminar_usuario_completo`.
+
+   Hace falta el permiso expreso del usuario para desplegar.
 1. Cuando estén los secretos de Stripe, desplegar en este orden:
    1. Índices.
    2. Reglas.
@@ -42,11 +61,10 @@
 
    Después, una prueba manual con una tarjeta de prueba.
 2. Página `https://zerohaus-2a865.web.app/stripe/retorno`, que solo dice «vuelve a la app», y T-E9: borrador de las condiciones de pago y de Stripe como encargado del tratamiento, que necesita revisión legal.
-3. Verificar los hallazgos de la revisión de ChatGPT del 2026-11-19 sobre `fc58110`:
-   - Borrado con Storage fallido.
-   - «Restaurar compras» con dos cuentas de ZeroHaus.
-   - Gráficas que mezclan viviendas.
-   - Vivienda e informe guardados por separado.
-   - Mejoras menores de chat, IA, historial y panel.
-4. Bloque F (certificados) y después H (publicación). T-C4 y los bloques D y E llegan a los usuarios con la próxima versión de la app. Antes, hay que probar en un dispositivo denunciar, bloquear, el panel de denuncias y los pagos.
-5. Worktrees que se pueden borrar: `%TEMP%\wt-observabilidad`, `%TEMP%\wt-endurecer-app` y `.claude/worktrees/agent-*` del checkout principal. `%TEMP%\wt-deploy` se usa para desplegar (tiene el venv de functions).
+3. Bloque F (certificados) y después H (publicación). T-C4 y los bloques D, E e I llegan a los usuarios con la próxima versión de la app. Antes, hay que probar en un dispositivo:
+   - Denunciar, bloquear y el panel de denuncias.
+   - Los pagos.
+   - Las gráficas con dos viviendas: dos informes del piso y uno del chalet.
+4. Worktrees que se pueden borrar: `%TEMP%\wt-observabilidad`, `%TEMP%\wt-endurecer-app` y `.claude/worktrees/agent-*` del checkout principal.
+
+   `%TEMP%\wt-deploy` se usa para desplegar. La limpieza de temporales de Windows le borró archivos y se restauró con `git restore .` y un venv nuevo (Python 3.11) el 2026-11-26. Mejor moverlo fuera de `%TEMP%`.
